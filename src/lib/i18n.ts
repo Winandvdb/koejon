@@ -1,5 +1,5 @@
 import { derived, writable } from 'svelte/store'
-import type { Card, LogEvent, Suit } from '../engine'
+import type { Card, Suit } from '../engine'
 
 export type Lang = 'nl' | 'en'
 
@@ -28,12 +28,6 @@ const dict = {
     empty: 'leeg',
     teamA: 'Team A',
     teamB: 'Team B',
-    drawForDealer: 'Trekken voor eerste deler',
-    draw: 'Trek',
-    drawsNow: 'trekt een pakje…',
-    chooseDealer: 'Kies de eerste deler',
-    deal: 'Deel',
-    dealWait: 'Deler deelt…',
     play: 'Ik ga',
     pass: 'Pas',
     dealerChoice: 'Deler kiest',
@@ -62,6 +56,29 @@ const dict = {
     scored: 'Uitslag',
     erased: 'weggestreept',
     connection: 'Verbinding…',
+    settings: 'Instellingen',
+    showInfo: 'Troef & inzet tonen',
+    showScore: 'Punten & slagen tonen',
+    showLastTricks: 'Slagen 1–2 bekijken',
+    invite: 'Uitnodigen',
+    inviteLink: 'Uitnodigingslink',
+    copy: 'Kopieer',
+    copied: 'Gekopieerd!',
+    lastTricks: 'Vorige slagen',
+    yourTurnHint: 'Aan jou',
+    dealerTag: 'Deler',
+    bidderTag: 'Speelt',
+    level1: '1e kaart',
+    level2: '2e kaart',
+    qrAlt: 'QR-code voor de uitnodigingslink',
+    wij: 'Wij',
+    zij: 'Zij',
+    host: 'Host',
+    tagline: 'Koejonnen met vrienden, in de browser',
+    or: 'of',
+    darkMode: 'Donker',
+    lightMode: 'Licht',
+    trickN: 'Slag',
   },
   en: {
     title: 'Koejonnen',
@@ -87,12 +104,6 @@ const dict = {
     empty: 'empty',
     teamA: 'Team A',
     teamB: 'Team B',
-    drawForDealer: 'Draw for first dealer',
-    draw: 'Draw',
-    drawsNow: 'draws a packet…',
-    chooseDealer: 'Choose the first dealer',
-    deal: 'Deal',
-    dealWait: 'Dealer is dealing…',
     play: 'Play',
     pass: 'Pass',
     dealerChoice: 'Dealer chooses',
@@ -121,6 +132,29 @@ const dict = {
     scored: 'Result',
     erased: 'erased',
     connection: 'Connecting…',
+    settings: 'Settings',
+    showInfo: 'Show trump & stake',
+    showScore: 'Show points & tricks',
+    showLastTricks: 'Review tricks 1–2',
+    invite: 'Invite',
+    inviteLink: 'Invite link',
+    copy: 'Copy',
+    copied: 'Copied!',
+    lastTricks: 'Last tricks',
+    yourTurnHint: 'Your turn',
+    dealerTag: 'Dealer',
+    bidderTag: 'Playing',
+    level1: '1st card',
+    level2: '2nd card',
+    qrAlt: 'QR code for the invite link',
+    wij: 'Us',
+    zij: 'Them',
+    host: 'Host',
+    tagline: 'Koejonnen with friends, in the browser',
+    or: 'or',
+    darkMode: 'Dark',
+    lightMode: 'Light',
+    trickN: 'Trick',
   },
 } as const
 
@@ -141,48 +175,4 @@ export function suitName(s: Suit, l: Lang): string {
 
 export function cardText(c: Card): string {
   return `${SUIT_GLYPH[c.s]}${c.r}`
-}
-
-/** Render a log event to a line of text. */
-export function logText(ev: LogEvent, l: Lang, name: (seat: number) => string): string {
-  const seat = ev.seat !== undefined ? name(ev.seat) : ''
-  const card = ev.card ? cardText(ev.card) : ''
-  const team = ev.team !== undefined ? (ev.team === 0 ? 'A' : 'B') : ''
-  const nl = l === 'nl'
-  switch (ev.t) {
-    case 'start':
-      return nl ? 'Spel gestart' : 'Game started'
-    case 'draw':
-      return nl ? `${seat} trekt ${card}` : `${seat} draws ${card}`
-    case 'draw-tie':
-      return nl ? 'Gelijk — opnieuw trekken' : 'Tie — draw again'
-    case 'draw-win':
-      return nl ? `${seat} wint de trekking` : `${seat} wins the draw`
-    case 'first-dealer':
-      return nl ? `${seat} is de eerste deler` : `${seat} is the first dealer`
-    case 'deal':
-      return nl ? `${seat} deelt — ${card} omgedraaid` : `${seat} deals — ${card} turned`
-    case 'pass':
-      return nl ? `${seat} past` : `${seat} passes`
-    case 'play-call':
-      return nl
-        ? `${seat} gaat — troef: ${SUIT_GLYPH[ev.suit!]}`
-        : `${seat} plays — trump: ${SUIT_GLYPH[ev.suit!]}`
-    case 'dealer-pass':
-      return nl ? 'Deler past' : 'Dealer passes'
-    case 'all-pass':
-      return nl ? `Alles gepast — inzet ×${ev.n}` : `All passed — stake ×${ev.n}`
-    case 'second-card':
-      return nl ? `Tweede kaart omgedraaid: ${card}` : `Second card turned: ${card}`
-    case 'card':
-      return nl ? `${seat} speelt ${card}` : `${seat} plays ${card}`
-    case 'trick':
-      return nl ? `${seat} wint de slag` : `${seat} wins the trick`
-    case 'score':
-      return nl ? `Team ${team} streept ${ev.n} weg` : `Team ${team} erases ${ev.n}`
-    case 'game-over':
-      return nl ? `Team ${team} wint het spel` : `Team ${team} wins the game`
-    default:
-      return ev.t
-  }
 }

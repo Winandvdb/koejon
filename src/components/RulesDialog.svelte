@@ -10,13 +10,16 @@
 </script>
 
 <div
-  class="backdrop"
+  class="modal-backdrop"
   role="presentation"
   onclick={(e) => e.target === e.currentTarget && onclose()}
   onkeydown={(e) => e.key === 'Escape' && onclose()}
 >
-  <div class="dialog" role="dialog" aria-modal="true" tabindex="-1">
-    <div class="content">{@html html}</div>
-    <button class="btn" onclick={onclose}>{$t.close}</button>
+  <div class="modal" role="dialog" aria-modal="true" aria-label={$t.rules} tabindex="-1">
+    <div class="modal-header">
+      <h2>{$t.rules}</h2>
+      <button class="icon-btn" onclick={onclose} aria-label={$t.close}>✕</button>
+    </div>
+    <div class="modal-body">{@html html}</div>
   </div>
 </div>

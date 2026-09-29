@@ -1,5 +1,6 @@
 import { pendingSeats } from './engine'
 import type {
+  BoomkeMark,
   Card,
   DealerDraw,
   HandResult,
@@ -26,11 +27,13 @@ export interface PublicState {
   leader: number
   trick: TrickCard[]
   lastTrick: TrickCard[] | null
+  prevTrick: TrickCard[] | null
   tricksPlayed: number
   tricksWon: [number, number]
   points: [number, number]
   handCounts: [number, number, number, number]
   lines: [number, number]
+  marks: BoomkeMark[]
   koeien: [number, number]
   lastResult: HandResult | null
   winner: number | null
@@ -60,11 +63,13 @@ export function toPublic(s: State): PublicState {
     leader: s.leader,
     trick: s.trick,
     lastTrick: s.lastTrick,
+    prevTrick: s.prevTrick,
     tricksPlayed: s.tricksPlayed,
     tricksWon: s.tricksWon,
     points: s.points,
     handCounts: [0, 1, 2, 3].map((i) => s.hands[i].length) as PublicState['handCounts'],
     lines: s.lines,
+    marks: s.marks,
     koeien: s.koeien,
     lastResult: s.lastResult,
     winner: s.winner,
@@ -113,10 +118,12 @@ export function clientState(
     leader: pub.leader,
     trick: pub.trick,
     lastTrick: pub.lastTrick,
+    prevTrick: pub.prevTrick,
     tricksPlayed: pub.tricksPlayed,
     tricksWon: pub.tricksWon,
     points: pub.points,
     lines: pub.lines,
+    marks: pub.marks,
     koeien: pub.koeien,
     lastResult: pub.lastResult,
     winner: pub.winner,

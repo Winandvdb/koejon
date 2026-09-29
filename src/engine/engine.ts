@@ -1,7 +1,12 @@
 import { fullDeck, RANK_ORDER, RANK_POINTS, sameCard, trickPoints, trickWinnerIndex } from './cards'
 import { rngRange, rngShuffle } from './rng'
-import type { Action, Card, DealerDraw, State, Suit, TrickCard } from './types'
+import type { Action, BoomkeMark, Card, DealerDraw, State, Suit, TrickCard } from './types'
 import { START_LINES } from './types'
+
+const freshMarks = (): BoomkeMark[] =>
+  [0, 1].flatMap((team) =>
+    Array.from({ length: START_LINES }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
+  )
 
 export class IllegalActionError extends Error {
   constructor(msg: string) {
@@ -43,10 +48,12 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     leader: 0,
     trick: [],
     lastTrick: null,
+    prevTrick: null,
     tricksPlayed: 0,
     tricksWon: [0, 0],
     points: [0, 0],
     lines: [START_LINES, START_LINES],
+    marks: freshMarks(),
     koeien: [0, 0],
     lastResult: null,
     winner: null,
@@ -69,8 +76,6 @@ export function pendingSeats(s: State): number[] {
       if (dd.pending === 2) return [dd.winnerSeat!]
       return [dd.drawer[dd.pending]]
     }
-    case 'DEALING':
-      return [s.dealer]
     case 'BIDDING_R1':
     case 'BIDDING_R2':
       return [(s.dealer + 1 + s.bidIndex) % 4]
@@ -134,9 +139,6 @@ export function legalActions(s: State, seat: number): Action[] {
       }
       break
     }
-    case 'DEALING':
-      if (seat === s.dealer) out.push({ type: 'deal', seat })
-      break
     case 'BIDDING_R1':
     case 'BIDDING_R2':
       if (seat === (s.dealer + 1 + s.bidIndex) % 4) {
@@ -195,6 +197,7 @@ function doDeal(s: State): void {
   s.leader = s.turn
   s.trick = []
   s.lastTrick = null
+  s.prevTrick = null
   s.tricksPlayed = 0
   s.tricksWon = [0, 0]
   s.points = [0, 0]
@@ -217,15 +220,7 @@ function allPassed(s: State): void {
   pushLog(s, { t: 'all-pass', n: s.multiplier * 2 })
   s.multiplier *= 2
   s.dealer = leftOf(s.dealer)
-  s.hands = [[], [], [], []]
-  s.turned = null
-  s.trump = null
-  s.level = 0
-  s.bidder = null
-  s.bidIndex = 0
-  s.trick = []
-  s.lastTrick = null
-  s.phase = 'DEALING'
+  doDeal(s)
 }
 
 function resolveTrick(s: State): void {
@@ -235,6 +230,7 @@ function resolveTrick(s: State): void {
   s.tricksWon[team]++
   s.points[team] += trickPoints(s.trick)
   s.tricksPlayed++
+  s.prevTrick = s.lastTrick
   s.lastTrick = s.trick
   s.trick = []
   s.leader = winner
@@ -252,9 +248,20 @@ function scoreHand(s: State): void {
   const erased = base + (kapot ? 1 : 0)
   const koei = winner === defending
   s.lines[winner] = Math.max(0, s.lines[winner] - erased)
+  // Cross the `erased` topmost uncrossed marks; same batch keeps one scratch gesture.
+  let toCross = erased
+  for (let i = s.marks.length - 1; i >= 0 && toCross > 0; i--) {
+    const m = s.marks[i]
+    if (m.team === winner && !m.crossed) {
+      m.crossed = true
+      m.batch = s.handNumber
+      toCross--
+    }
+  }
   if (koei) {
     s.koeien[playing]++
     s.lines[playing]++
+    s.marks.push({ team: playing, t: 'koei', crossed: false, batch: 0 })
   }
   s.lastResult = {
     playingTeam: playing,
@@ -279,7 +286,7 @@ function nextHand(s: State): void {
     return
   }
   s.dealer = leftOf(s.dealer)
-  s.phase = 'DEALING'
+  doDeal(s)
 }
 
 /** Apply a validated action; returns a new state. Throws IllegalActionError. */
@@ -333,10 +340,7 @@ export function apply(state: State, action: Action): State {
     case 'chooseDealer':
       s.dealer = action.dealer
       s.dealerDraw = null
-      s.phase = 'DEALING'
       pushLog(s, { t: 'first-dealer', seat: action.dealer })
-      break
-    case 'deal':
       doDeal(s)
       break
     case 'bid': {

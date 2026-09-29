@@ -4,7 +4,7 @@
 
 - Koejonnen wordt gespeeld met 4 spelers in 2 teams van 2. Je speelt altijd samen met de
   speler tegenover je.
-- Doel: als eerste team alle lijnen van je "boomke" wegstrepen.
+- Doel: als eerste team alle meetjes van je "boomke" wegstrepen.
 
 ## Kaarten
 
@@ -14,10 +14,10 @@
 
 ## Het boomke
 
-- Elk team start met 13 lijnen. Het team dat als eerste op 0 lijnen staat, wint het spel.
-- Een "Koei" voegt een lijn toe aan je boomke. Een Koei wordt traditioneel wat scheef getekend
+- Elk team start met 13 meetjes. Het team dat als eerste op 0 meetjes staat, wint het spel.
+- Een "Koei" voegt een meetje toe aan je boomke. Een Koei wordt traditioneel wat scheef getekend
   met een paar haartjes aan het uiteinde, als een koestaart.
-- Het aantal lijnen kan door Koeien boven de 13 uitkomen.
+- Het aantal meetjes kan door Koeien boven de 13 uitkomen.
 
 ## Eerste deler bepalen
 
@@ -73,11 +73,11 @@
 - Het spelende team is het team van de speler die "spelen" zei (of van de deler als de deler
   koos). Het spelende team wint de hand bij meer dan 20 punten. Bij 20 of minder wint de
   verdediging — een 20-20 is dus verlies voor het spelende team.
-- Het winnende team streept lijnen weg:
-  - Hand gespeeld op de eerste gedraaide kaart: 1 lijn × de inzet.
-  - Hand gespeeld op de tweede gedraaide kaart: 2 lijnen (nooit vermenigvuldigd).
-- Kapot: wint een team alle 6 slagen, dan komt er altijd 1 extra lijn bij voor dat team —
-  dus 2 lijnen op de eerste kaart, 3 lijnen op de tweede kaart. Beide teams kunnen kapot
+- Het winnende team streept meetjes weg:
+  - Hand gespeeld op de eerste gedraaide kaart: 1 meetje × de inzet.
+  - Hand gespeeld op de tweede gedraaide kaart: 2 meetjes (nooit vermenigvuldigd).
+- Kapot: wint een team alle 6 slagen, dan komt er altijd 1 extra meetje bij voor dat team —
+  dus 2 meetjes op de eerste kaart, 3 meetjes op de tweede kaart. Beide teams kunnen kapot
   spelen. De kapot-bonus wordt nooit vermenigvuldigd.
 - Wint de verdediging, dan krijgt het spelende team er ook 1 Koei bij — ook als de
   verdediging kapot wint.
@@ -86,4 +86,4 @@
 
 ## Einde van het spel
 
-- Het team dat als eerste al zijn lijnen heeft weggestreept, wint het spel.
+- Het team dat als eerste al zijn meetjes heeft weggestreept, wint het spel.

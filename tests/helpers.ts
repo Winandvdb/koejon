@@ -17,6 +17,17 @@ export function mulberry(seed: number): () => number {
 
 /** A minimal but complete PLAYING state; override fields as needed. */
 export function playingState(over: Partial<State> = {}): State {
+  const lines = over.lines ?? [13, 13]
+  const marks =
+    over.marks ??
+    [0, 1].flatMap((team) =>
+      Array.from({ length: lines[team as 0 | 1] }, () => ({
+        team,
+        t: 'line' as const,
+        crossed: false,
+        batch: 0,
+      })),
+    )
   return {
     phase: 'PLAYING',
     rng: 1,
@@ -35,10 +46,12 @@ export function playingState(over: Partial<State> = {}): State {
     leader: 1,
     trick: [],
     lastTrick: null,
+    prevTrick: null,
     tricksPlayed: 0,
     tricksWon: [0, 0],
     points: [0, 0],
-    lines: [13, 13],
+    lines,
+    marks,
     koeien: [0, 0],
     lastResult: null,
     winner: null,
@@ -97,7 +110,6 @@ export function dealtState(seed: number, dealer = 0): State {
   }
   if (!s.dealerDraw || s.dealerDraw.pending !== 2) throw new Error('draw did not finish')
   s = apply(s, { type: 'chooseDealer', seat: s.dealerDraw.winnerSeat!, dealer })
-  s = apply(s, { type: 'deal', seat: dealer })
   return s
 }
 

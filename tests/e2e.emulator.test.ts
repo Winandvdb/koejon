@@ -45,7 +45,11 @@ describe('emulator e2e', () => {
 
     const uid = await signIn()
     const session = await createRoom(uid, 'Host')
-    const host = await HostGame.attach(session.code, uid, () => 5, 60_000)
+    const host = await HostGame.attach(session.code, uid, {
+      botDelay: () => 5,
+      heartbeatMs: 60_000,
+      trickLingerMs: 20,
+    })
 
     let latest: SessionView | null = null
     let sentFor = -1
@@ -83,9 +87,9 @@ describe('emulator e2e', () => {
     }, 5000)
 
     try {
-      host.addBot()
-      host.addBot()
-      host.addBot()
+      host.addBot(1)
+      host.addBot(2)
+      host.addBot(3)
       await until(() => !!latest?.room && latest.room.seats.every((s) => s !== null), 10_000)
 
       host.startGame()

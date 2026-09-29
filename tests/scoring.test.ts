@@ -158,6 +158,30 @@ describe('scoring', () => {
     expect(s3.phase).toBe('GAME_OVER')
   })
 
+  it('boomke marks: crossed in one batch per hand, koei appended uncrossed', () => {
+    // Defender kapot at level 2: erase 3 in one batch + Koei on playing team.
+    const s = lastTrickState({
+      bidder: 1,
+      level: 2,
+      points: [40, 0],
+      tricksWon: [5, 0],
+      trick: [
+        { seat: 1, card: C('S', '10') },
+        { seat: 2, card: C('S', 'A') },
+        { seat: 3, card: C('S', '9') },
+      ],
+      turn: 0,
+      card: C('S', 'Q'),
+    })
+    const s2 = apply(s, { type: 'play', seat: 0, card: C('S', 'Q') })
+    const crossed = s2.marks.filter((m) => m.team === 0 && m.crossed)
+    expect(crossed).toHaveLength(3)
+    expect(new Set(crossed.map((m) => m.batch)).size).toBe(1) // one scratch gesture
+    const zij = s2.marks.filter((m) => m.team === 1)
+    expect(zij.at(-1)).toEqual({ team: 1, t: 'koei', crossed: false, batch: 0 })
+    expect(zij).toHaveLength(14) // 13 lines + 1 koei
+  })
+
   it('lines never go below 0', () => {
     const s = lastTrickState({
       bidder: 1,

@@ -9,7 +9,6 @@ export interface Card {
 export type Phase =
   | 'LOBBY'
   | 'DEALER_DRAW'
-  | 'DEALING'
   | 'BIDDING_R1'
   | 'BIDDING_R2'
   | 'DEALER_CHOICE'
@@ -40,6 +39,16 @@ export interface Turned {
   /** Face-down card = dealer's 5th card. Proposes trump for round 2. */
   second: Card
   secondUp: boolean
+}
+
+/** One mark on the boomke trunk. `batch` groups marks crossed in the same scoring. */
+export interface BoomkeMark {
+  /** 0 or 1 — flat list because Firestore does not support nested arrays. */
+  team: number
+  t: 'line' | 'koei'
+  crossed: boolean
+  /** handNumber of the hand that crossed it; 0 = not crossed */
+  batch: number
 }
 
 export interface HandResult {
@@ -88,10 +97,14 @@ export interface State {
   leader: number
   trick: TrickCard[]
   lastTrick: TrickCard[] | null
+  /** The trick before lastTrick — kept so the last two tricks stay reviewable. */
+  prevTrick: TrickCard[] | null
   tricksPlayed: number
   tricksWon: [number, number]
   points: [number, number]
   lines: [number, number]
+  /** All marks on the boomke (crossed ones included), team 0 marks first, oldest first. */
+  marks: BoomkeMark[]
   koeien: [number, number]
   lastResult: HandResult | null
   /** Match winner team (0/1) once a team reached 0 lines. */
@@ -103,7 +116,6 @@ export type Action =
   | { type: 'start'; seat: number }
   | { type: 'draw'; seat: number }
   | { type: 'chooseDealer'; seat: number; dealer: number }
-  | { type: 'deal'; seat: number }
   | { type: 'bid'; seat: number; play: boolean }
   | { type: 'choose'; seat: number; suit: Suit | null }
   | { type: 'play'; seat: number; card: Card }

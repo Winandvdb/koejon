@@ -19,6 +19,15 @@ const BOT_NAMES = ['Klaas', 'Grietje', 'Piet', 'Truus', 'Henk', 'Ans']
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+export interface HostOptions {
+  /** Delay before a bot acts. Default ~0.5–1 s. */
+  botDelay?: () => number
+  heartbeatMs?: number
+  /** Min. pause before a bot leads the trick after one just completed,
+   *  so the finished trick stays visible. Default 3 s. */
+  trickLingerMs?: number
+}
+
 /**
  * The room creator's client runs this. It owns the engine state,
  * executes bot turns, applies player intents, and writes all state.
@@ -31,22 +40,23 @@ export class HostGame {
   private unsubs: Unsubscribe[] = []
   private botTimer: ReturnType<typeof setTimeout> | null = null
   private hbTimer: ReturnType<typeof setInterval> | null = null
+  private botDelay: () => number
+  private heartbeatMs: number
+  private trickLingerMs: number
 
   private constructor(
     private code: string,
     private uid: string,
-    private botDelay: () => number = () => 500 + Math.random() * 500,
-    private heartbeatMs = 5000,
-  ) {}
+    opts: HostOptions = {},
+  ) {
+    this.botDelay = opts.botDelay ?? (() => 500 + Math.random() * 500)
+    this.heartbeatMs = opts.heartbeatMs ?? 5000
+    this.trickLingerMs = opts.trickLingerMs ?? 3000
+  }
 
   /** Load persisted engine state and room seats, then start listening. */
-  static async attach(
-    code: string,
-    uid: string,
-    botDelay?: () => number,
-    heartbeatMs = 5000,
-  ): Promise<HostGame> {
-    const h = new HostGame(code, uid, botDelay, heartbeatMs)
+  static async attach(code: string, uid: string, opts?: HostOptions): Promise<HostGame> {
+    const h = new HostGame(code, uid, opts)
     const roomSnap = await getDoc(roomRef(code))
     if (!roomSnap.exists()) throw new Error('room-not-found')
     const room = roomSnap.data() as RoomDoc
@@ -75,7 +85,7 @@ export class HostGame {
     )
     h.hbTimer = setInterval(() => {
       updateDoc(roomRef(code), { heartbeat: Date.now() }).catch(() => {})
-    }, heartbeatMs)
+    }, h.heartbeatMs)
     h.scheduleBots()
     return h
   }
@@ -98,13 +108,12 @@ export class HostGame {
 
   // ---- lobby operations (host UI calls these directly) ----
 
-  addBot(): void {
+  addBot(seat: number): void {
     this.enqueue(async () => {
-      const i = this.seats.findIndex((s) => s === null)
-      if (i < 0 || this.state.phase !== 'LOBBY') return
+      if (this.state.phase !== 'LOBBY' || this.seats[seat] !== null) return
       const taken = new Set(this.seats.map((s) => s?.name))
-      const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `Bot ${i + 1}`
-      this.seats[i] = { uid: `${BOT_UID_PREFIX}${i}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true }
+      const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `Bot ${seat + 1}`
+      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true }
       await this.commit()
     })
   }
@@ -250,21 +259,35 @@ export class HostGame {
 
   // ---- bots ----
 
+  /** Seat the host should act for: any bot, or anyone during the automatic dealer draw. */
+  private autoSeat(): number | undefined {
+    const pend = pendingSeats(this.state)
+    const bot = pend.find((i) => this.seats[i]?.bot)
+    if (bot !== undefined) return bot
+    return this.state.phase === 'DEALER_DRAW' ? pend[0] : undefined
+  }
+
   private scheduleBots(): void {
     if (this.botTimer) return
     if (this.state.phase === 'LOBBY' || this.state.phase === 'GAME_OVER') return
-    const botSeat = pendingSeats(this.state).find((i) => this.seats[i]?.bot)
-    if (botSeat === undefined) return
-    this.botTimer = setTimeout(() => {
-      this.botTimer = null
-      this.enqueue(async () => {
-        const seat = pendingSeats(this.state).find((i) => this.seats[i]?.bot)
-        if (seat === undefined) return
-        const a = botAction(this.state, seat)
-        this.tryApply(a)
-        await this.commit()
-      })
-    }, this.botDelay())
+    if (this.autoSeat() === undefined) return
+    // A bot leading right after a completed trick pauses so the finished
+    // trick stays on the table (a human leader just takes their time).
+    const linger =
+      this.state.phase === 'PLAYING' && this.state.trick.length === 0 && this.state.lastTrick
+    this.botTimer = setTimeout(
+      () => {
+        this.botTimer = null
+        this.enqueue(async () => {
+          const seat = this.autoSeat()
+          if (seat === undefined) return
+          const a = botAction(this.state, seat)
+          this.tryApply(a)
+          await this.commit()
+        })
+      },
+      linger ? Math.max(this.botDelay(), this.trickLingerMs) : this.botDelay(),
+    )
   }
 }
 

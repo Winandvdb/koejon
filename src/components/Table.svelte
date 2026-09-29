@@ -1,23 +1,23 @@
 <script lang="ts">
+  import { fly, scale } from 'svelte/transition'
   import type { Action, Card, Suit } from '../engine'
   import type { SessionView } from '../lib/room'
-  import { SUIT_GLYPH, t, suitName, lang } from '../lib/i18n'
+  import { SUIT_GLYPH, t } from '../lib/i18n'
+  import { settings } from '../lib/settings'
   import type { SeatInfo } from '../lib/net-types'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
-  import LogPanel from './LogPanel.svelte'
+  import InfoPanel from './InfoPanel.svelte'
 
   let {
     view,
     send,
     isHost,
-    onleave,
     onnewmatch,
   }: {
     view: SessionView
     send: (a: Action) => void
     isHost: boolean
-    onleave: () => void
     onnewmatch: () => void
   } = $props()
 
@@ -25,15 +25,28 @@
   const pub = $derived(room.pub!)
   const seats = $derived(room.seats)
   const my = $derived(view.mySeat)
+  const myTeam = $derived(my % 2)
+  const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
+  const playingTeam = $derived(pub.bidder === null ? null : pub.bidder % 2)
 
   const name = (i: number) => seats[i]?.name ?? `#${i}`
   /** Relative position: 0 bottom (me), 1 left, 2 top, 3 right. */
   const rel = (seat: number) => (seat - my + 4) % 4
+  /** Fly direction from each screen position toward the centre. */
+  const DIR = [
+    { x: 0, y: 160 },
+    { x: -180, y: 0 },
+    { x: 0, y: -160 },
+    { x: 180, y: 0 },
+  ]
+  const TILT = [-4, 3, -2, 5]
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
     new Set(
-      view.legal.filter((a) => a.type === 'play').map((a) => (a as { card: Card }).card.s + (a as { card: Card }).card.r),
+      view.legal
+        .filter((a) => a.type === 'play')
+        .map((a) => (a as { card: Card }).card.s + (a as { card: Card }).card.r),
     ),
   )
   const has = (type: Action['type']) => view.legal.some((a) => a.type === type)
@@ -46,190 +59,210 @@
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
   )
   const dealerBlind = $derived(biddingPhase && my === pub.dealer)
+  /** The turned cards sit at the dealer's seat while bidding runs. */
+  const showTurned = $derived(biddingPhase && pub.turned !== null)
 
-  const backs = (seat: number) => {
-    let n = pub.handCounts[seat]
-    if (biddingPhase && seat === pub.dealer && n > 0) n -= 1 // upturned card lies on the table
-    return n
-  }
+  const playing = $derived(
+    pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER',
+  )
+  /** A completed trick lingers on the felt until the winner leads again. */
+  const lingerTrick = $derived(
+    playing && pub.trick.length === 0 && pub.lastTrick !== null ? pub.lastTrick : null,
+  )
+  /** Lingered cards fly out towards the seat that won the trick. */
+  const lingerExit = $derived(DIR[rel(pub.leader)])
 
-  const bidderSeat = (i: number) => pub.bidder === i
+  /** Last bid ("Ik ga"/"Pas") each seat announced this bidding round. */
+  const lastBid = $derived.by(() => {
+    const map = new Map<number, string>()
+    if (!biddingPhase) return map
+    for (const ev of pub.log) {
+      if (ev.t === 'pass' && ev.seat !== undefined) map.set(ev.seat, $t.pass)
+      if (ev.t === 'play-call' && ev.seat !== undefined) map.set(ev.seat, $t.play)
+    }
+    return map
+  })
+
   const acting = (i: number) => pub.actionSeats.includes(i)
 
-  const teamTag = (i: number) => (i % 2 === 0 ? 'A' : 'B')
+  $effect(() => {
+    document.title = myTurn ? `● ${$t.yourTurn} — ${$t.title}` : $t.title
+    return () => {
+      document.title = $t.title
+    }
+  })
 </script>
 
-{#snippet seatBox(seat: number)}
+{#snippet nameplate(seat: number)}
   {@const s: SeatInfo | null = seats[seat]}
-  <div class="seatbox" class:acting={acting(seat)} class:me={seat === my}>
-    <div class="sname">
-      {name(seat)}
-      {#if s?.bot}<em class="tag">{$t.bot}</em>{/if}
-      {#if seat === my}<em class="tag">{$t.you}</em>{/if}
-      {#if seat === pub.dealer}<span class="chip dealer">D</span>{/if}
-      {#if bidderSeat(seat)}<span class="chip bidder">★</span>{/if}
+  {@const side = playingTeam !== null && playing ? (seat % 2 === playingTeam ? 'decl' : 'def') : null}
+  <div class="nameplate" class:active={acting(seat)} class:decl={side === 'decl'} class:def={side === 'def'}>
+    <span class="avatar">{s?.bot ? '🤖' : name(seat).slice(0, 1).toUpperCase()}</span>
+    <span class="np-name">
+      {name(seat)}{#if seat === my}<span class="np-muted"> ({$t.you})</span>{/if}
+    </span>
+    {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
+    {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
+    {#if $settings.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
+    {#if lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+  </div>
+{/snippet}
+
+{#snippet turnedAt(seat: number)}
+  {#if showTurned && seat === pub.dealer && pub.turned}
+    <div class="turned-at" title={$t.turnedCard}>
+      <span class="mini-card"><CardView card={pub.turned.first} /></span>
+      <span class="mini-card" in:scale={{ duration: 250 }}>
+        <CardView card={pub.turned.secondUp ? pub.turned.second : null} />
+      </span>
     </div>
-    <div class="steam">{$t[`team${teamTag(seat)}` as 'teamA' | 'teamB']}</div>
-    {#if seat !== my}
-      <div class="backs">
-        {#each Array(Math.max(0, backs(seat))) as _, k (k)}
-          <div class="mini-back"></div>
-        {/each}
-      </div>
-    {/if}
+  {/if}
+{/snippet}
+
+{#snippet opponent(seat: number, pos: number)}
+  <div class="seat seat-p{pos}">
+    {@render nameplate(seat)}
+    <div class="opp-hand" class:vertical={pos !== 2} class:horizontal={pos === 2}>
+      {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
+        <div class="opp-card"><div class="card-back"></div></div>
+      {/each}
+    </div>
+    {@render turnedAt(seat)}
   </div>
 {/snippet}
 
 <div class="table-wrap">
   {#if view.hostStale}<div class="hostleft">{$t.hostLeft}</div>{/if}
-
   <div class="table">
-    <!-- top: partner -->
-    <div class="pos top">{@render seatBox((my + 2) % 4)}</div>
-    <!-- left / right opponents -->
-    <div class="pos left">{@render seatBox((my + 1) % 4)}</div>
-    <div class="pos right">{@render seatBox((my + 3) % 4)}</div>
+    <div class="felt">
+      {#if $settings.info}<InfoPanel {pub} {seats} {myTeam} />{/if}
+      <Boomke marks={pub.marks} {myTeam} />
 
-    <!-- center -->
-    <div class="center">
-      {#if pub.phase === 'DEALER_DRAW' && pub.dealerDraw}
-        {@const dd = pub.dealerDraw}
-        <div class="drawpanel">
-          <h3>{$t.drawForDealer}</h3>
-          <div class="draws">
-            {#each dd.draws as d (d.seat)}
-              <div class="drawn">
-                <CardView card={d.card} small />
-                <span>{name(d.seat)}</span>
+      {@render opponent((my + 2) % 4, 2)}
+      {@render opponent((my + 1) % 4, 1)}
+      {@render opponent((my + 3) % 4, 3)}
+
+      <div class="area-center">
+        <div class="trick-area">
+          {#if pub.phase === 'PLAYING'}
+            {#each pub.trick as tc, i (tc.seat)}
+              <div
+                class="trick-card tp{rel(tc.seat)}"
+                style="rotate: {TILT[(i + (pub.trick[0]?.seat ?? 0)) % 4]}deg; z-index: {i + 1}"
+                in:fly={{
+                  x: DIR[rel(tc.seat)].x * 0.8,
+                  y: DIR[rel(tc.seat)].y * 0.8,
+                  duration: 240,
+                }}
+              >
+                <CardView card={tc.card} />
               </div>
             {/each}
-          </div>
-          {#if dd.pending === 2}
-            {#if has('chooseDealer')}
-              <div>{$t.chooseDealer}:</div>
-              <div class="btnrow">
-                {#each [0, 1, 2, 3] as d (d)}
-                  <button class="btn" onclick={() => send({ type: 'chooseDealer', seat: my, dealer: d })}>
-                    {name(d)}
+          {/if}
+          {#if lingerTrick}
+            {#each lingerTrick as tc, i (tc.seat)}
+              <div
+                class="trick-card tp{rel(tc.seat)} done"
+                class:won={tc.seat === pub.leader}
+                style="rotate: {TILT[(i + lingerTrick[0].seat) % 4]}deg; z-index: {i + 1}"
+                out:fly={{ x: lingerExit.x * 1.6, y: lingerExit.y * 1.6, duration: 420 }}
+              >
+                <CardView card={tc.card} />
+              </div>
+            {/each}
+          {/if}
+        </div>
+      </div>
+
+      <div class="felt-overlay">
+        {#if has('bid') || has('choose')}
+          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+            {#if has('bid')}
+              <div class="bid-row">
+                <button class="btn primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>
+                  {$t.play}
+                </button>
+                <button class="btn" onclick={() => send({ type: 'bid', seat: my, play: false })}>
+                  {$t.pass}
+                </button>
+              </div>
+            {:else if has('choose')}
+              <div class="small">{$t.dealerChoice}</div>
+              <div class="bid-row">
+                {#each chooseSuits as s (s)}
+                  <button class="btn suit-btn" onclick={() => send({ type: 'choose', seat: my, suit: s })}>
+                    {SUIT_GLYPH[s]}
                   </button>
                 {/each}
+                {#if choosePass}
+                  <button class="btn" onclick={() => send({ type: 'choose', seat: my, suit: null })}>
+                    {$t.pass}
+                  </button>
+                {/if}
               </div>
-            {:else}
-              <div>{$t.chooseDealer}: {name(dd.winnerSeat!)}</div>
-            {/if}
-          {:else if has('draw')}
-            <button class="btn primary" onclick={() => send({ type: 'draw', seat: my })}>{$t.draw}</button>
-          {:else}
-            <div>{name(dd.drawer[dd.pending])} {$t.drawsNow}</div>
-          {/if}
-        </div>
-      {:else if pub.phase === 'DEALING'}
-        <div class="drawpanel">
-          {#if has('deal')}
-            <button class="btn primary" onclick={() => send({ type: 'deal', seat: my })}>{$t.deal}</button>
-          {:else}
-            <div>{$t.dealWait} ({name(pub.dealer)})</div>
-          {/if}
-        </div>
-      {:else}
-        <!-- turned cards -->
-        {#if pub.turned}
-          <div class="turned">
-            <div class="tcard">
-              <CardView card={pub.turned.first} small />
-              <span class="cap">{$t.turnedCard}</span>
-            </div>
-            <div class="tcard">
-              <CardView card={pub.turned.secondUp ? pub.turned.second : null} small />
-              <span class="cap">{$t.secondCard}</span>
-            </div>
-          </div>
-        {/if}
-
-        {#if pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER'}
-          <div class="trick">
-            {#each pub.trick as tc (tc.seat)}
-              <div class="tpos p{rel(tc.seat)}"><CardView card={tc.card} /></div>
-            {/each}
-            {#if pub.trick.length === 0 && pub.lastTrick}
-              {#each pub.lastTrick as tc (tc.seat)}
-                <div class="tpos p{rel(tc.seat)} dim"><CardView card={tc.card} small /></div>
-              {/each}
             {/if}
           </div>
         {/if}
-      {/if}
-    </div>
 
-    <!-- side info -->
-    <div class="side">
-      <Boomke lines={pub.lines} koeien={pub.koeien} />
-      <div class="scoreinfo">
-        {#if pub.trump}<div>{$t.trump}: {SUIT_GLYPH[pub.trump]} {suitName(pub.trump, $lang)}</div>{/if}
-        {#if pub.multiplier > 1}<div>{$t.stake}: ×{pub.multiplier}</div>{/if}
-        <div>{$t.tricks}: {pub.tricksWon[0]}–{pub.tricksWon[1]}</div>
-        <div>{$t.points}: {pub.points[0]}–{pub.points[1]}</div>
-        {#if pub.bidder !== null}<div>{$t.playingTeam}: {name(pub.bidder)} ({teamTag(pub.bidder)})</div>{/if}
-      </div>
-      <LogPanel log={pub.log} {seats} />
-    </div>
-
-    <!-- bottom: me -->
-    <div class="pos bottom">
-      {@render seatBox(my)}
-
-      {#if pub.phase === 'SCORED' && pub.lastResult}
-        {@const r = pub.lastResult}
-        <div class="result">
-          <strong>{$t.scored}:</strong>
-          {r.points[0]}–{r.points[1]} →
-          {r.winnerTeam === 0 ? $t.teamA : $t.teamB}
-          {r.erased} {$t.erased}{r.kapot ? ` (${$t.kapot})` : ''}{r.koei ? ` +${$t.koei}` : ''}
-        </div>
-      {/if}
-      {#if pub.phase === 'GAME_OVER'}
-        <div class="result over">
-          {$t.gameOver}: {pub.winner === 0 ? $t.teamA : $t.teamB} {$t.wins}!
-          {#if isHost}<button class="btn" onclick={onnewmatch}>{$t.newMatch}</button>{/if}
-        </div>
-      {/if}
-
-      <!-- action controls -->
-      <div class="controls">
-        {#if has('bid')}
-          <button class="btn primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>{$t.play}</button>
-          <button class="btn" onclick={() => send({ type: 'bid', seat: my, play: false })}>{$t.pass}</button>
-        {:else if has('choose')}
-          <span>{$t.dealerChoice}:</span>
-          {#each chooseSuits as s (s)}
-            <button class="btn primary" onclick={() => send({ type: 'choose', seat: my, suit: s })}>
-              {SUIT_GLYPH[s]}
-            </button>
-          {/each}
-          {#if choosePass}<button class="btn" onclick={() => send({ type: 'choose', seat: my, suit: null })}>{$t.pass}</button>{/if}
-        {:else if has('next')}
-          <button class="btn primary" onclick={() => send({ type: 'next', seat: my })}>{$t.nextHand}</button>
+        {#if pub.phase === 'SCORED' && pub.lastResult}
+          {@const r = pub.lastResult}
+          <div class="panel overlay-panel result" in:scale={{ duration: 220 }}>
+            <strong>{$t.scored}</strong>
+            <span>
+              {$t.wij} {r.points[myTeam]}–{r.points[1 - myTeam]} {$t.zij} → {teamName(r.winnerTeam)}
+              {r.erased} {$t.erased}{r.kapot ? ` (${$t.kapot})` : ''}{r.koei ? ` +${$t.koei}` : ''}
+            </span>
+            {#if has('next')}
+              <button class="btn primary" onclick={() => send({ type: 'next', seat: my })}>
+                {$t.nextHand}
+              </button>
+            {/if}
+          </div>
         {/if}
-        {#if biddingPhase && my === pub.dealer}<span class="hint">{$t.handHidden}</span>{/if}
+        {#if pub.phase === 'GAME_OVER'}
+          <div class="panel overlay-panel result over" in:scale={{ duration: 260 }}>
+            <strong>{$t.gameOver}</strong>
+            <span>{teamName(pub.winner!)} {$t.wins}!</span>
+            {#if isHost}
+              <button class="btn primary" onclick={onnewmatch}>{$t.newMatch}</button>
+            {/if}
+          </div>
+        {/if}
       </div>
 
-      <!-- own hand -->
-      <div class="hand">
+      <div class="area-me">
+        <div class="me-anchor">
+          {@render nameplate(my)}
+          {@render turnedAt(my)}
+          {#if myTurn}
+            <span class="turn-hint" in:fly={{ x: -8, duration: 200 }}>{$t.yourTurnHint}</span>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
+      {#if dealerBlind}<div class="blind-hint">{$t.handHidden}</div>{/if}
+      <div class="my-hand">
         {#if view.hand === null}
-          {#each Array(Math.max(0, pub.handCounts[my] - (pub.turned ? 1 : 0))) as _, k (k)}
-            <CardView card={null} />
+          {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
+            <div class="hand-card"><div class="card-back"></div></div>
           {/each}
         {:else}
-          {#each view.hand ?? [] as c (c.s + c.r)}
-            <CardView
-              card={c}
+          {#each view.hand ?? [] as c, i (`${pub.handNumber}-${c.s}${c.r}`)}
+            <button
+              class="hand-card"
+              class:playable={pub.phase === 'PLAYING' && legalPlays.has(c.s + c.r)}
+              class:dim={pub.phase === 'PLAYING' && myTurn && !legalPlays.has(c.s + c.r)}
               disabled={pub.phase !== 'PLAYING' || !legalPlays.has(c.s + c.r)}
-              onclick={legalPlays.has(c.s + c.r) ? () => send({ type: 'play', seat: my, card: c }) : undefined}
-            />
+              in:fly={{ y: -160, duration: 320, delay: 120 + i * 45 }}
+              onclick={() => send({ type: 'play', seat: my, card: c })}
+            >
+              <CardView card={c} />
+            </button>
           {/each}
         {/if}
       </div>
     </div>
   </div>
-  <div class="leavebar"><button class="btn tiny" onclick={onleave}>{$t.leave}</button></div>
 </div>

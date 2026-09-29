@@ -14,9 +14,9 @@ environment deviations. Each entry lists the chosen behavior.
 - **Dealer-draw packets** — team B draws from the same shuffled deck minus team A's
   packet ("the remaining deck"). Tie on rank → both players redraw on a fresh shuffle.
   Packet sizes are picked by the engine: A ∈ [4, 16], B ∈ [4, remaining − 4].
-- **Bot dealer choice after winning the draw** — the spec says bots "choose a random
-  teammate"; implemented as a uniform pick between the winner's own seat and their
-  partner (both are members of the winning team).
+- **Dealer draw is fully automatic** — the draw/choose steps need no input, so the
+  host resolves them for humans too; the draw winner picks a random teammate as
+  first dealer (same rule the bots use). No dealer-draw UI is shown.
 - **Dealer's hidden cards** — the engine always tracks the dealer's full 6-card hand;
   masking is a view concern. During bidding the dealer's hand doc contains
   `cards: null` and the UI renders card backs (4 hand cards + the face-down set-aside
@@ -32,6 +32,28 @@ environment deviations. Each entry lists the chosen behavior.
 - **Seating** — the room creator is always seat 0 and host; joining players take the
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
 - **20–20** — implemented as a defending-team win per spec (playing team needs >20).
+- **Dealing is automatic** — there is no `DEALING` phase or deal prompt: choosing the
+  first dealer, an all-passed hand and `next` after scoring all deal immediately
+  (owner decision; the spec's interactive deal step was removed).
+- **Trick linger** — a completed trick stays on the table until the winner leads the next
+  trick. The host delays a bot's next lead by at least 3 s; a human winner simply leads
+  when ready (no timer).
+- **Trick review window** — only the first two completed tricks of a hand may be
+  looked back at, and only until the first card of the third trick is played
+  (owner's literal reading of the rule). The info panel shows them during that
+  window; afterwards no played trick is visible again.
+- **Boomke drawing** — one shared trunk: the viewer's team ("Wij") on the left,
+  the opponents ("Zij") on the right. Crossed-out marks stay visible; marks erased
+  by the same hand share one continuous diagonal scratch so multi-line erasures
+  are recognizable (the engine tags each mark with the hand number that crossed
+  it). A Koei is drawn as a curved tail with hairs in red.
+- **Optional info** — trump/stake display, points & trick counts and the
+  first-tricks review are per-browser display settings (gear icon), persisted in
+  `localStorage`. They are view-only and do not affect the game.
+- **No log panel** — the event log stays in the state (used for bid bubbles) but
+  is not rendered, per owner request.
+- **Invite links** — `?room=CODE` prefills the join field; the lobby shows a QR code and
+  a copyable link.
 
 ## Implementation / environment
 
