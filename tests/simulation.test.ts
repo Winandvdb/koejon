@@ -1,0 +1,61 @@
+import { describe, expect, it } from 'vitest'
+import {
+  apply,
+  createMatch,
+  pendingSeats,
+  trickWinnerIndex,
+} from '../src/engine'
+import type { State } from '../src/engine'
+import { botAction } from '../src/bots/bot'
+import { mulberry } from './helpers'
+
+const MATCHES = 60
+const STEP_CAP = 20000
+
+function runMatch(seed: number): { state: State; steps: number; hands: number } {
+  let s = createMatch(seed)
+  const rand = mulberry(seed * 7919 + 13)
+  let steps = 0
+  let lastTrickSeen = 0
+
+  while (s.phase !== 'GAME_OVER') {
+    if (steps++ > STEP_CAP) throw new Error(`match ${seed} did not terminate`)
+    const seats = pendingSeats(s)
+    if (seats.length === 0) throw new Error(`match ${seed} stalled in ${s.phase}`)
+    // Act with the first pending seat (others wait for the next step).
+    s = apply(s, botAction(s, seats[0], rand))
+
+    // Per-trick invariant: the recorded winner really won the trick.
+    if (s.lastTrick && s.lastTrick.length === 4 && s.tricksPlayed !== lastTrickSeen) {
+      lastTrickSeen = s.tricksPlayed
+      const w = s.lastTrick[trickWinnerIndex(s.lastTrick, s.trump!)].seat
+      expect(w, `trick winner mismatch in match ${seed}`).toBe(s.turn)
+    }
+    // Hand invariant at scoring: all 6 tricks played, 40 points total.
+    if (s.phase === 'SCORED') {
+      expect(s.tricksPlayed).toBe(6)
+      expect(s.tricksWon[0] + s.tricksWon[1]).toBe(6)
+      expect(s.points[0] + s.points[1]).toBe(40)
+      expect(s.lines[0]).toBeGreaterThanOrEqual(0)
+      expect(s.lines[1]).toBeGreaterThanOrEqual(0)
+    }
+  }
+  return { state: s, steps, hands: s.handNumber }
+}
+
+describe('bot-vs-bot simulation', () => {
+  it(`terminates ${MATCHES} complete matches with all invariants`, () => {
+    let totalHands = 0
+    const wins = [0, 0]
+    for (let seed = 1; seed <= MATCHES; seed++) {
+      const { state, hands } = runMatch(seed)
+      totalHands += hands
+      expect(state.winner).not.toBeNull()
+      wins[state.winner!]++
+    }
+    expect(totalHands).toBeGreaterThan(MATCHES) // every match played hands
+    // sanity: both teams won some matches (bots are roughly symmetric)
+    expect(wins[0]).toBeGreaterThan(0)
+    expect(wins[1]).toBeGreaterThan(0)
+  }, 120_000)
+})

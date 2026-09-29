@@ -1,0 +1,28 @@
+{
+  "name": "koejon",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "svelte-check --tsconfig ./tsconfig.app.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "vitest run tests/e2e.emulator.test.ts"
+  },
+  "dependencies": {
+    "firebase": "11.10.0",
+    "marked": "18.0.13"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "7.3.0",
+    "@tsconfig/svelte": "5.0.8",
+    "@types/node": "24.13.6",
+    "svelte": "5.57.1",
+    "svelte-check": "4.7.6",
+    "typescript": "6.0.3",
+    "vite": "8.3.0",
+    "vitest": "4.1.11"
+  }
+}

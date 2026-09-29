@@ -1,0 +1,84 @@
+Koejonnen - De regels van het spel
+
+Koejonnen wordt gespeeld met 4, in teams van 2 spelers die tegen elkaar strijden. Het doel van dit
+spel is om zoveel mogelijk punten te verzamelen door middel van de slagen die elk team verzamelt.
+Dit spel wordt gespeeld met 24-kaarten. We gebruiken alleen:
+• Aas
+• Koning
+• Koningin
+• Boer
+• de 10
+• de 9
+Deze kaarten komen overeen met de kaarten sterkste in het spel. U kunt daarom alle kaarten kleiner
+dan of gelijk aan 8 verwijderen.
+Kaarten hebben puntwaarden:
+• Aas: 4 punten
+• Koning: 3 punten
+• Koningin: 2 punten
+• Boer: 1 punt
+• Andere kaarten: 0 punten
+Het totaal aantal kaartpunten in het spel is dus 40.
+Er wordt een verticale lijn getrokken, gesneden door 13 horizontale lijnen (een boomke)
+De deler geeft het kaartspel dat moet worden gedeeld aan zijn buurman aan de rechterkant. Deze
+laatste moet de kaarten afpakken. De verdeling van de kaarten is met de klok mee. De deler geeft
+elke speler kaarten, in batches van elk 2 kaarten. Hij houdt zijn 2 laatste kaarten apart en draait de
+laatste kaart van de twee om. Deze kaarten zullen de troef bepalen.
+Daarna gaat men naar de aankondigingen. De linkerbuurman van de dealer spreekt als eerste. Hij zal
+de keuze hebben om te "spelen" of "passen".
+Optie 1: Als hij ervoor kiest om te spelen!
+Hij kiest de getoonde kaart als die van de troef. De speler links van de deler begint het spel en speelt
+een kaart naar keuze. Hij zal proberen het maximale aantal punten te behalen en verbindt zo zijn
+team, rekening houdend met de waarde van zijn kaarten.
+Als de gespeelde kaart een eenvoudig symbool is, moeten de andere spelers een kaart in dit symbool
+spelen of kunnen ze troef spelen. Als een speler niet het gevraagde symbool heeft, kan hij ook elke
+kaart van zijn keuze afleggen. Troef spelen is niet verplicht, maar troef spelen mag altijd (zelfs als je
+kan volgen).
+Als de gespeelde kaart een troef is, moeten de andere spelers dus wel troef spelen. Als hun troef
+lager in waarde is, moeten ze deze toch spelen.
+De speler die de hoogste kaart in de gevraagde kleur of in de troef heeft gespeeld, wint de slag. Hij
+begint dan de volgende beurt. We spelen op dezelfde manier totdat de hand is gespeeld. De spelers
+van hetzelfde team combineren dan de slagen die ze allebei hebben gemaakt en de punten worden
+geteld.
+Optie 2: Als hij ervoor kiest om te passen!
+Het is dan aan zijn buurman links om te spreken, met dezelfde keuze als voorheen. Enzovoort.
+Als alle 3 de spelers passen, draait de deler de voorlaatste kaart om. Het symbool van de voorlaatste
+wordt op zijn beurt aan de spelers voorgesteld. Als deze kaart nog steeds niet door de spelers is
+gekozen, krijgt de deler de keuze om te spelen met keuze voor troef uit beide getoonde kaarten.
+Maar als deze kaart hetzelfde symbool heeft als de laatste kaart dan krijgt de deler direct de keuze en
+worden er geen aankondigingen gedaan.
+Als iedereen past, worden de kaarten doorgegeven aan de volgende deler en wordt de inzet
+verdubbeld op de eerste gedraaide kaart. De inzet op de 2de gedraaide kaart is ongewijzigd.
+
+Punten tellen
+Aas: 4 punten / Koning: 3 punten / Koningin: 2 punten / Boer: 1 punt. Totaal 40.
+Als het team dat heeft gespeeld meer dan 20 punten scoort, wissen ze een regel van hun scoreblad.
+De tegenpartij doet niets.
+Als het andere team meer punten wint, voegt het team van de leider een "Koei" toe, dit is een extra
+lijn in de kolom van hun team. Aan de andere kant verwijdert het andere team een rij uit zijn kolom.
+Als er wordt gespeeld op de 2de gedraaide kaart is de inzet hoger. Namelijk 2 lijnen te schrappen
+winst spelende team, en 3 lijnen bij winst bij niet-spelende team + 1 Koei voor spelende team.
+Als een team alle slagen haalt (kapot speelt) worden ook 2 lijnen geschrapt op de eerste kaart of 3
+lijnen op de tweede kaart.
+Zodra de punten zijn gescoord, gaan we over tot een nieuwe deler. De deler is dan de linkerbuur van
+de vorige deler.
+Spel is over: het team dat al haar lijnen heeft gewist is de winnaar.
+
+--- Corrections and clarifications (verbal, game owner) ---
+1. Teams are fixed by seating: you play with the person opposite you. No random team formation.
+2. First dealer is decided by a draw: a player of team A picks up a packet of cards (must take at
+   least 4, must leave at least 4) and shows the bottom card of the packet. A player of team B does
+   the same on the remaining deck. Highest card wins; the winner chooses who deals first (usually
+   a teammate - the dealing team's opponents get the advantage of the shown trump cards).
+3. The dealer cannot look at their own cards ONLY during the bidding. Once trump is decided, the
+   dealer picks up and sees all their cards.
+4. Kapot (winning all 6 tricks): the winning team erases 1 EXTRA line on top of the base value —
+   so 2 lines on the first card, 3 on the second card. Either team can play kapot; it has nothing
+   to do with playing or defending. A Koei is added only when the DEFENDING team wins the hand
+   (including a defending kapot win). Base values are just 1 line (first card, times stake) or
+   2 lines (second card); the kapot bonus is never multiplied.
+5. No "underbuy": if you hold cards of the led suit, you may not play a trump LOWER than a trump
+   already in the trick. You may still play a higher trump (overtrumping while able to follow is
+   legal). If you are void in the led suit, any card is legal.
+6. Stake doubling on all-pass: applies to first-turned-card stakes only, and resets to 1 once a hand
+   is played and scored.
+7. The Koei line is traditionally drawn crooked with a few hairs at the end, like a cow's tail.
