@@ -1,18 +1,44 @@
-rules_version='2'
+rules_version='2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2026, 10, 29);
+    function signedIn() {
+      return request.auth != null;
+    }
+    function roomHost(code) {
+      return get(/databases/$(database)/documents/rooms/$(code)).data.hostUid;
+    }
+    function isHost(code) {
+      return signedIn() && roomHost(code) == request.auth.uid;
+    }
+
+    match /rooms/{code} {
+      // Any signed-in user may read a room (needed to join by code).
+      allow read: if signedIn();
+      // The creator becomes the host.
+      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      // Only the host mutates the room (host-authoritative design).
+      allow update, delete: if isHost(code);
+
+      // Per-player hand documents. 'host' is a reserved doc id holding bot hands.
+      // The host must be able to write every hand doc to deal the cards.
+      match /hands/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || (uid == 'host' && isHost(code)));
+        allow write: if signedIn() && (request.auth.uid == uid || isHost(code));
+      }
+
+      // A player may create/overwrite only their own intent doc.
+      // The host reads and deletes intents after processing them.
+      match /actions/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || isHost(code));
+        allow create, update: if signedIn() && request.auth.uid == uid;
+        allow delete: if signedIn() && (request.auth.uid == uid || isHost(code));
+      }
+
+      // Full serialized engine state, host only (crash/reload recovery).
+      match /engine/{doc} {
+        allow read, write: if isHost(code);
+      }
     }
   }
 }
