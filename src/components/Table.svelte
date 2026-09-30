@@ -97,7 +97,15 @@
     const map = new Map<number, string>()
     for (let i = pub.log.length - 1; i >= 0; i--) {
       const ev = pub.log[i]
-      if (ev.t === 'deal' || ev.t === 'first-dealer' || ev.t === 'all-pass') break
+      if (
+        ev.t === 'deal' ||
+        ev.t === 'first-dealer' ||
+        ev.t === 'all-pass' ||
+        ev.t === 'second-card' ||
+        ev.t === 'score' ||
+        ev.t === 'tied'
+      )
+        break
       if (ev.seat === undefined || map.has(ev.seat)) continue
       if (ev.t === 'pass' || ev.t === 'dealer-pass') map.set(ev.seat, $t.pass)
       else if (ev.t === 'play-call') map.set(ev.seat, $t.play)
