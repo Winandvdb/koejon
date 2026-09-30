@@ -144,9 +144,10 @@
 
   async function onSolo(name: string, level: BotLevel) {
     err = ''
-    soloStarting = true
     try {
+      // attach() runs teardown() which resets soloStarting — set it after.
       attach(await createRoom(uid, name))
+      soloStarting = true
       const h = await ensureHost()
       h.addBot(1, level)
       h.addBot(2, level)
