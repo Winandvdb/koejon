@@ -242,10 +242,14 @@
               <span class="rs-name">{$t.zij}</span>
             </div>
             <div class="result-flags">
-              <span class="chip flag-win">{teamName(r.winnerTeam)} {$t.wins}</span>
-              <span class="chip">{r.erased} {$t.erased}</span>
-              {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
-              {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
+              {#if r.draw}
+                <span class="chip">{$t.draw}</span>
+              {:else}
+                <span class="chip flag-win">{teamName(r.winnerTeam)} {$t.wins}</span>
+                <span class="chip">{r.erased} {$t.erased}</span>
+                {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
+                {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
+              {/if}
             </div>
           </div>
         {:else if pub.phase === 'GAME_OVER'}

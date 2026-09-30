@@ -82,8 +82,8 @@ the spec below — it already includes all corrections).
 ### Scoring a hand
 - Sum card points won per team (total is always 40). "Playing team" = team of the player who
   announced "play" (or of the dealer when the dealer chose).
-- Winning team = playing team iff it scored > 20; otherwise (including 20–20) the defending
-  team wins.
+- Winning team = playing team iff it scored > 20; at ≤ 19 the defending team wins;
+  an exact 20–20 is a draw — nothing is scored and the next level-1 stake doubles.
 - Lines erased by the WINNING team — playing or defending, same rule:
   - Level 1 (played on first turned card): 1 line × multiplier.
   - Level 2 (played on second turned card): 2 lines, never multiplied.
@@ -178,7 +178,8 @@ the spec below — it already includes all corrections).
    - full bidding flow: round 1 play, all-pass → round 2, same-suit shortcut to dealer choice,
      dealer play-or-pass, all-pass → multiplier doubles and deal passes left;
    - every scoring case from the scoring table incl. multiplier, kapot +1 extra line for both
-     playing and defending sweeps, 20–20 loss, Koei only on defender win;
+     playing and defending sweeps, 20–20 draw (next level-1 stake doubles), Koei only on
+     defender win;
    - match end at 0 lines; dealer rotation;
    - dealer-draw constraints (packet ≥4, remaining ≥4, tie redraw, winner picks dealer).
 3. Simulation test: run >= 50 complete bot-vs-bot matches through the engine only; assert

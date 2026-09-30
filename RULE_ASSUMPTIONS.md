@@ -32,7 +32,8 @@ environment deviations. Each entry lists the chosen behavior.
   defined for exactly 4 players). Any extra `start` intents are rejected.
 - **Seating** — the room creator is always seat 0 and host; joining players take the
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
-- **20–20** — implemented as a defending-team win per spec (playing team needs >20).
+- **20–20** — a draw: no lines erased, no Koei, and the next deal's level-1 stake
+  doubles (playing team needs >20; defenders win at ≤19).
 - **Dealing is automatic** — no deal prompt: the `DEALING` phase announces the dealer
   for ~3 s, then the host issues the deal itself (after the draw, after scoring and
   after all-passed hands).

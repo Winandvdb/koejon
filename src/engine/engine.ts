@@ -280,11 +280,14 @@ function resolveTrick(s: State): void {
 function scoreHand(s: State): void {
   const playing = teamOf(s.bidder!)
   const defending = 1 - playing
-  const winner = s.points[playing] > 20 ? playing : defending
-  const kapot = s.tricksWon[winner] === 6
+  // Exactly 20-20 is a draw: nobody erases lines, no Koei is added, and the
+  // stake on the next deal's first turned card doubles.
+  const draw = s.points[playing] === 20
+  const winner = draw ? defending : s.points[playing] > 20 ? playing : defending
+  const kapot = !draw && s.tricksWon[winner] === 6
   const base = s.level === 1 ? s.multiplier : 2
-  const erased = base + (kapot ? 1 : 0)
-  const koei = winner === defending
+  const erased = draw ? 0 : base + (kapot ? 1 : 0)
+  const koei = !draw && winner === defending
   s.lines[winner] = Math.max(0, s.lines[winner] - erased)
   // Cross the `erased` marks, top ladder lines first; Koeis are crossed last.
   // Same batch keeps one scratch gesture.
@@ -314,15 +317,16 @@ function scoreHand(s: State): void {
     playingTeam: playing,
     points: [...s.points],
     winnerTeam: winner,
+    draw,
     erased,
     kapot,
     koei,
     level: s.level,
     multiplier: s.multiplier,
   }
-  pushLog(s, { t: 'score', team: winner, n: erased })
-  if (s.lines[winner] === 0) s.winner = winner
-  s.multiplier = 1
+  pushLog(s, draw ? { t: 'tied' } : { t: 'score', team: winner, n: erased })
+  if (!draw && s.lines[winner] === 0) s.winner = winner
+  s.multiplier = draw ? s.multiplier * 2 : 1
   s.phase = 'SCORED'
 }
 

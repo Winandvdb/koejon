@@ -74,8 +74,9 @@
 
 - Only Ace, King, Queen and Jack count (4, 3, 2, 1). There are 40 points per deal.
 - The playing team is the team of the player who said "play" (or of the dealer if the dealer
-  chose). The playing team wins the deal with more than 20 points. With 20 or fewer the
-  defenders win — a 20-20 is a loss for the playing team.
+  chose). The playing team wins the deal with more than 20 points. With 19 or fewer the
+  defenders win. An exact 20-20 is a draw: nobody erases lines and no Koei is added, but
+  the stake on the next deal's first turned card doubles (as after an all-passed deal).
 - The winning team erases lines:
   - Deal played on the first turned card: 1 line × the stake.
   - Deal played on the second turned card: 2 lines (never multiplied).

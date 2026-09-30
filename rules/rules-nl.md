@@ -74,8 +74,9 @@
 
 - Alleen Aas, Koning, Vrouw en Boer tellen punten (4, 3, 2, 1). Per hand zijn er 40 punten.
 - Het spelende team is het team van de speler die "spelen" zei (of van de deler als de deler
-  koos). Het spelende team wint de hand bij meer dan 20 punten. Bij 20 of minder wint de
-  verdediging — een 20-20 is dus verlies voor het spelende team.
+  koos). Het spelende team wint de hand bij meer dan 20 punten. Bij 19 of minder wint de
+  verdediging. Een exacte 20-20 is gelijkspel: niemand streept meetjes weg en er komt geen
+  Koei bij, maar de inzet op de eerste gedraaide kaart van de volgende hand verdubbelt.
 - Het winnende team streept meetjes weg:
   - Hand gespeeld op de eerste gedraaide kaart: 1 meetje × de inzet.
   - Hand gespeeld op de tweede gedraaide kaart: 2 meetjes (nooit vermenigvuldigd).

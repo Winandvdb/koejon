@@ -34,7 +34,7 @@ describe('scoring', () => {
     expect(s2.multiplier).toBe(1) // reset after a played hand
   })
 
-  it('20-20 is a loss for the playing team (defenders win + Koei)', () => {
+  it('20-20 is a draw: nothing scored, next level-1 stake doubles', () => {
     const s = lastTrickState({
       bidder: 1,
       points: [20, 20],
@@ -44,10 +44,14 @@ describe('scoring', () => {
       card: C('S', 'K'),
     })
     const s2 = finish(s, 0)
-    expect(s2.lastResult!.winnerTeam).toBe(0)
-    expect(s2.koeien).toEqual([0, 1]) // playing team gets a Koei
-    // defenders erase 1 (13->12); playing team +1 koei line (13->14)
-    expect(s2.lines).toEqual([12, 14])
+    expect(s2.lastResult!.draw).toBe(true)
+    expect(s2.lastResult!.erased).toBe(0)
+    expect(s2.lines).toEqual([13, 13])
+    expect(s2.koeien).toEqual([0, 0])
+    expect(s2.multiplier).toBe(2) // carried into the next hand
+    const s3 = apply(s2, { type: 'next', seat: 0 })
+    expect(s3.phase).toBe('DEALING')
+    expect(s3.multiplier).toBe(2)
   })
 
   it('level 1 multiplier applies: x4 erases 4', () => {
