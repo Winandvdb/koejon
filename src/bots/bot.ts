@@ -121,6 +121,16 @@ function readHand(s: State, seat: number, memory: BotProfile['memory']): HandRea
       }
     }
     for (const tc of played) if (tc.card.s === trump) trumpsGone.add(tc.card.r)
+    if (memory === 'trumps') {
+      // Trump voids only: a non-trump under a trump lead means trump was missing.
+      for (let t = 0; t + 1 < played.length; t += 4) {
+        const w = played.slice(t, t + 4)
+        if (w[0].card.s !== trump) continue
+        for (let i = 1; i < w.length; i++) {
+          if (w[i].card.s !== trump) voids.add(`${w[i].seat}:${trump}`)
+        }
+      }
+    }
     if (memory === 'full') {
       // A sluff of a third suit, a trump under an existing trump, or any
       // non-trump under a trump lead means the led suit was missing.
@@ -218,11 +228,15 @@ function leadCard(s: State, seat: number, legal: Card[], read: HandRead): Card {
   }
   const playing = teamOf(s.bidder!) === myTeam
   const boss = bossTrump(trumps, read)
+  // Both opponents showed out of trump: whatever trumps are left belong to the
+  // partner, and pulling only strips our own side.
+  const oppMayTrump = oppSeatsOf(seat).some((o) => !read.voids.has(`${o}:${trump}`))
   // Pull trumps when we hold the boss and others still hold trumps. Defenders
   // pull only when they hold the majority of what is left.
-  if (boss && read.trumpsOut > 0 && (playing || trumps.length > read.trumpsOut)) return boss
+  if (boss && read.trumpsOut > 0 && oppMayTrump && (playing || trumps.length > read.trumpsOut))
+    return boss
   // Length pull: with enough trumps a low one still draws enemy trumps.
-  if (playing && trumps.length >= 3 && read.trumpsOut >= 2) return lowest(trumps)
+  if (playing && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2) return lowest(trumps)
   // Cash a safe ace — skip suits where an opponent has shown out.
   const aces = legal.filter((c) => c.r === 'A' && c.s !== trump && !oppVoid(c.s))
   if (aces.length) return highest(aces)

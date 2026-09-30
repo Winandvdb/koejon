@@ -130,6 +130,38 @@ describe('bot card play', () => {
     expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
   })
 
+  it('does not pull trumps when only the partner can still hold them', () => {
+    // Trick 1: partner's trump lead — both opponents showed out of trump.
+    // Trick 2: a plain trick the opponents won, so no sweep is live.
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = [C('H', 'A'), C('H', 'K'), C('D', '9'), C('D', '10'), C('C', '9'), C('C', '10')]
+    const s = playingState({
+      bidder: 1,
+      turn: 1,
+      tricksPlayed: 2,
+      tricksWon: [1, 1],
+      hands,
+      log: [
+        { t: 'card', seat: 3, card: C('H', 'J') },
+        { t: 'card', seat: 0, card: C('S', '9') },
+        { t: 'card', seat: 1, card: C('H', '9') },
+        { t: 'card', seat: 2, card: C('S', '10') },
+        { t: 'trick', seat: 3 },
+        { t: 'card', seat: 3, card: C('S', 'Q') },
+        { t: 'card', seat: 0, card: C('S', 'A') },
+        { t: 'card', seat: 1, card: C('S', 'J') },
+        { t: 'card', seat: 2, card: C('S', 'K') },
+        { t: 'trick', seat: 0 },
+      ],
+    })
+    // HA is boss, but pulling only draws partner's trumps → lead a plain card.
+    for (const level of ['normal', 'hard'] as const) {
+      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
+    }
+    // Easy keeps no memory — it still leads the boss trump.
+    expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+  })
+
   it('fights to stop the opponents crossing 21', () => {
     // Team0 at 19 — letting this 2-pt trick go gives them the hand.
     const s = followState(
