@@ -1049,7 +1049,7 @@ button.tag {
 
 .fab.primary {
   background: var(--accent);
-  color: #08210f;
+  color: var(--accent-contrast);
   border-color: rgba(255, 255, 255, 0.4);
 }
 
