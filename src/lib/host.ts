@@ -16,7 +16,20 @@ import { actionsCol, engineRef, handRef, roomRef } from './room'
 import type { HostHandsDoc, IntentDoc, RoomDoc, RoomOpts, SeatInfo } from './net-types'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 
-const BOT_NAMES = ['Klaas', 'Grietje', 'Piet', 'Truus', 'Henk', 'Ans']
+const BOT_NAMES = [
+  'Klaas',
+  'Grietje',
+  'Piet',
+  'Truus',
+  'Henk',
+  'Ans',
+  'Jef',
+  'Jos',
+  'Julia',
+  'Marie',
+  'Gust',
+  'Lea',
+]
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -131,7 +144,8 @@ export class HostGame {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY' || this.seats[seat] !== null) return
       const taken = new Set(this.seats.map((s) => s?.name))
-      const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `Bot ${seat + 1}`
+      const free = BOT_NAMES.filter((n) => !taken.has(n))
+      const name = free[Math.floor(Math.random() * free.length)] ?? `Bot ${seat + 1}`
       this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
       await this.commit()
     })
