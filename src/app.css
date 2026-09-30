@@ -9,7 +9,6 @@
   --accent-contrast: #ffffff;
   --gold: #e0ac2e;
   --danger: #c0392b;
-  --ok: #1e8a4c;
   --suit-red: #c62828;
   --felt-1: #2b8c5a;
   --felt-2: #1d6b45;
@@ -43,7 +42,6 @@
   --accent-contrast: #04130b;
   --gold: #e8b53a;
   --danger: #e25c4d;
-  --ok: #4cc47f;
   --suit-red: #ff6b6b;
   --felt-1: #185238;
   --felt-2: #10392a;
@@ -859,6 +857,13 @@ input[type='checkbox'] {
   padding-bottom: calc(var(--card) * 1.62 + 56px);
 }
 
+/* While a hand is scored the boomke is open in the right corner:
+   dock the result panel to the left and reserve space for the boomke. */
+.felt-overlay.scored {
+  align-items: flex-start;
+  padding-right: 172px;
+}
+
 .overlay-panel {
   flex: none;
   width: fit-content;
@@ -1436,7 +1441,7 @@ input[type='checkbox'] {
   position: absolute;
   bottom: 14px;
   right: 14px;
-  z-index: 9;
+  z-index: 11; /* above the felt overlay: action buttons never cover the boomke */
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1648,6 +1653,10 @@ input[type='checkbox'] {
   /* The nameplate is lifted ~44px on small screens; keep buttons above it. */
   .felt-overlay {
     padding-bottom: calc(var(--card) * 0.5 + 50px);
+  }
+
+  .felt-overlay.scored {
+    padding-right: 126px;
   }
 
   .felt {

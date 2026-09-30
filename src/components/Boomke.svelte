@@ -20,9 +20,9 @@
   const TOP = 30
   const CX = 70
   const ARM = 30
-  /** Bottom band for hanging koei tails; each koei gets a horizontal slot. */
-  const KOEI_ZONE = 40
-  const KOEI_DX = 16
+  /** Bottom band for hanging koei tails; extra tails stack a bit lower. */
+  const KOEI_ZONE = 34
+  const KOEI_ROW = 9
 
   /** My team on the left of the trunk, the others on the right. */
   const sides = $derived([
@@ -34,11 +34,10 @@
   const koeis = $derived(sides.map((ms) => ms.filter((m) => m.t === 'koei')))
   const n = $derived(Math.max(lines[0].length, lines[1].length, 13))
   const kmax = $derived(Math.max(koeis[0].length, koeis[1].length))
-  const H = $derived(TOP + n * STEP + 14 + (kmax > 0 ? KOEI_ZONE : 0))
+  const H = $derived(TOP + n * STEP + 14 + (kmax > 0 ? KOEI_ZONE + (kmax - 1) * KOEI_ROW : 0))
   const y = (i: number) => TOP + (n - 1 - i) * STEP + 8
-  /** Tail root: just below the trunk foot, each extra koei a bit further out. */
-  const kx = (dir: number, k: number) => CX + dir * (10 + k * KOEI_DX)
-  const ky = () => TOP + n * STEP + 8
+  /** Tail root on the trunk, at the foot of the line ladder. */
+  const kry = (k: number) => TOP + n * STEP + 8 + k * KOEI_ROW
 
   /** A pen-scribble stroke from (x1,y1) to (x2,y2): a fast zigzag wave. */
   const scribble = (x1: number, y1: number, x2: number, y2: number): string => {
@@ -94,19 +93,20 @@
         <line x1={CX} y1={yy} x2={CX + dir * ARM} y2={yy} class="mark" class:crossed={m.crossed} />
       {/each}
       {#each koeis[side] as m, k (k)}
-        {@const rx = kx(dir, k)}
-        {@const ry = ky()}
-        <!-- a cow's tail hanging down from the boom, hair tuft at the tip -->
+        {@const rootY = kry(k)}
+        {@const tx = CX + dir * (18 + k * 8)}
+        {@const ty = rootY + 22}
+        <!-- a cow's tail: starts on the trunk, sags halfway into a 45° droop -->
         <path
-          d="M{rx} {ry} C{rx} {ry + 12} {rx + dir * 3} {ry + 18} {rx} {ry + 26}"
+          d="M{CX} {rootY} C{CX + dir * 20} {rootY} {tx - dir * 7} {ty - 7} {tx} {ty}"
           class="koei-tail"
         />
         <path
-          d="M{rx} {ry + 26} l-4 4 M{rx} {ry + 26} l0 5 M{rx} {ry + 26} l4 4"
+          d="M{tx} {ty} l{dir * 5} 5 M{tx} {ty} l{dir * 2} 6 M{tx} {ty} l{dir * 6} 2"
           class="koei-hair"
         />
         {#if m.crossed}
-          <path d={scribble(rx - 8, ry + 23, rx + 8, ry + 3)} class="scratch" />
+          <path d={scribble(tx + dir * 4, rootY + 2, tx - dir * 10, ty + 3)} class="scratch" />
         {/if}
       {/each}
     {/each}

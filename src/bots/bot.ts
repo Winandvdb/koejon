@@ -115,16 +115,13 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
       return { type: 'bid', seat, play }
     }
     case 'choose': {
-      let best: Suit | null = null
-      let bestScore = -1
-      for (const suit of choiceSuits(s)) {
-        const score = rateHand(s.hands[seat], suit)
-        if (score > bestScore) {
-          bestScore = score
-          best = suit
-        }
+      // The dealer must not look at their hand while bidding, so the choice
+      // is made blind — like a human dealer. Play a shown suit most of the
+      // time to keep all-passed redeals rare.
+      if (rand() < 0.7) {
+        const suits = choiceSuits(s)
+        return { type: 'choose', seat, suit: suits[Math.floor(rand() * suits.length)] }
       }
-      if (best !== null && bestScore >= BID_THRESHOLD) return { type: 'choose', seat, suit: best }
       return { type: 'choose', seat, suit: null }
     }
     case 'play':

@@ -55,6 +55,9 @@
 ## Playing
 
 - The player left of the dealer leads the first trick. There are 6 tricks per deal.
+- If the partner of the player who called "play" leads the first trick, that player may
+  ask for "Troefke": a request to open with a trump card. The partner is free to ignore
+  the request.
 - If a plain suit is led:
   - You must follow suit, or you may play a trump. Trump is never required but always
     allowed.

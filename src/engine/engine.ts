@@ -286,11 +286,20 @@ function scoreHand(s: State): void {
   const erased = base + (kapot ? 1 : 0)
   const koei = winner === defending
   s.lines[winner] = Math.max(0, s.lines[winner] - erased)
-  // Cross the `erased` topmost uncrossed marks; same batch keeps one scratch gesture.
+  // Cross the `erased` marks, top ladder lines first; Koeis are crossed last.
+  // Same batch keeps one scratch gesture.
   let toCross = erased
   for (let i = s.marks.length - 1; i >= 0 && toCross > 0; i--) {
     const m = s.marks[i]
-    if (m.team === winner && !m.crossed) {
+    if (m.team === winner && m.t === 'line' && !m.crossed) {
+      m.crossed = true
+      m.batch = s.handNumber
+      toCross--
+    }
+  }
+  for (const m of s.marks) {
+    if (toCross === 0) break
+    if (m.team === winner && m.t === 'koei' && !m.crossed) {
       m.crossed = true
       m.batch = s.handNumber
       toCross--
@@ -434,6 +443,8 @@ export function apply(state: State, action: Action): State {
       break
     case 'troefke':
       s.troefkeAsked = true
+      // Asking implies the bidder saw the dealer's cards.
+      if (!s.trickAcks.includes(action.seat)) s.trickAcks.push(action.seat)
       pushLog(s, { t: 'troefke', seat: action.seat })
       break
     case 'next':

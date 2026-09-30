@@ -14,11 +14,13 @@
     send,
     isHost,
     onnewmatch,
+    onkick,
   }: {
     view: SessionView
     send: (a: Action) => void
     isHost: boolean
     onnewmatch: () => void
+    onkick: (seat: number) => void
   } = $props()
 
   const room = $derived(view.room!)
@@ -122,6 +124,13 @@
     {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
       <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
     {/if}
+    {#if isHost && s && !s.bot && seat !== my}
+      <button
+        class="icon-btn tiny kick"
+        title={$t.remove}
+        aria-label={$t.remove}
+        onclick={() => onkick(seat)}>✕</button>
+    {/if}
   </div>
 {/snippet}
 
@@ -191,7 +200,11 @@
         </div>
       </div>
 
-      <div class="felt-overlay" class:lifted={showTurned && my === pub.dealer}>
+      <div
+        class="felt-overlay"
+        class:lifted={showTurned && my === pub.dealer}
+        class:scored={pub.phase === 'SCORED' || pub.phase === 'GAME_OVER'}
+      >
         {#if pub.phase === 'DEALER_DRAW' && pub.dealerDraw}
           {@const dd = pub.dealerDraw}
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>

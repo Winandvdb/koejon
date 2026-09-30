@@ -185,6 +185,8 @@ describe('trick resolution', () => {
     expect(legal).toContainEqual({ type: 'troefke', seat: 1 })
     const s2 = apply(s, { type: 'troefke', seat: 1 })
     expect(s2.troefkeAsked).toBe(true)
+    // Asking implies the bidder saw the cards — no separate ack needed.
+    expect(s2.trickAcks).toContain(1)
     // Once asked, the offer is gone; the lead itself is unaffected.
     expect(legalActions(s2, 1).some((a) => a.type === 'troefke')).toBe(false)
   })

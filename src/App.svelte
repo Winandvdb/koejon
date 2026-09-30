@@ -1,7 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { getDoc } from 'firebase/firestore'
   import { signIn } from './lib/firebase'
-  import { createRoom, joinRoom, RoomSession, type SessionView } from './lib/room'
+  import {
+    createRoom,
+    joinRoom,
+    roomRef,
+    seatOf,
+    RoomSession,
+    type SessionView,
+  } from './lib/room'
+  import type { RoomDoc } from './lib/net-types'
   import { HostGame } from './lib/host'
   import { lang, t } from './lib/i18n'
   import { settings } from './lib/settings'
@@ -22,30 +31,76 @@
 
   onMount(async () => {
     uid = await signIn()
+    const urlCode = new URLSearchParams(location.search).get('room')
+    const storedCode = localStorage.getItem('koejon-room')
+    const name = localStorage.getItem('koejon-name') ?? ''
+    try {
+      if (storedCode) {
+        // Return to a room in progress only when our seat is still ours.
+        const snap = await getDoc(roomRef(storedCode))
+        const room = snap.exists() ? (snap.data() as RoomDoc) : null
+        if (room && seatOf(room, uid) >= 0) attach(await joinRoom(storedCode, uid, name))
+        else localStorage.removeItem('koejon-room')
+      } else if (urlCode && name) {
+        // Invite link + stored nickname: join straight into the lobby.
+        attach(await joinRoom(urlCode, uid, name))
+      }
+    } catch {
+      localStorage.removeItem('koejon-room')
+    }
   })
+
+  let unsubView: (() => void) | null = null
 
   function attach(s: RoomSession) {
     teardown()
     session = s
-    s.view.subscribe((v) => (view = v))
+    unsubView = s.view.subscribe((v) => (view = v))
+    localStorage.setItem('koejon-room', s.code)
+    history.replaceState(null, '', `${location.pathname}?room=${s.code}`)
   }
 
   function teardown() {
+    unsubView?.()
+    unsubView = null
     session?.dispose()
     host?.dispose()
     session = null
     host = null
     hostPromise = null
     view = null
+    localStorage.removeItem('koejon-room')
+    history.replaceState(null, '', location.pathname)
   }
 
   let hostPromise: Promise<HostGame> | null = null
 
   function ensureHost(): Promise<HostGame> {
     if (!hostPromise) {
-      hostPromise = HostGame.attach(session!.code, uid).then((h) => (host = h))
+      hostPromise = HostGame.attach(session!.code, uid)
+        .then((h) => (host = h))
+        .catch((e) => {
+          // A failed attach must not block retries.
+          hostPromise = null
+          throw e
+        })
     }
     return hostPromise
+  }
+
+  // Transient Firestore failures (offline reconnects, timeouts): on a
+  // user-initiated click show a friendly offline hint; in-game sends are
+  // logged only since the SDK retries them itself.
+  const TRANSIENT = new Set(['unavailable', 'cancelled', 'deadline-exceeded'])
+
+  function showErr(e: unknown, friendly = '', interactive = false): void {
+    const code = (e as { code?: string })?.code ?? ''
+    if (TRANSIENT.has(code)) {
+      console.warn('[transient]', e)
+      if (interactive) err = $t.offline
+      return
+    }
+    err = friendly || (e instanceof Error ? e.message : String(e))
   }
 
   async function onCreate(name: string) {
@@ -53,7 +108,7 @@
     try {
       attach(await createRoom(uid, name))
     } catch (e) {
-      err = String(e)
+      showErr(e, '', true)
     }
   }
 
@@ -68,7 +123,7 @@
       h.addBot(3)
       h.startGame()
     } catch (e) {
-      err = String(e)
+      showErr(e, '', true)
     }
   }
 
@@ -78,7 +133,15 @@
       attach(await joinRoom(code, uid, name))
     } catch (e) {
       const m = (e as Error).message
-      err = m === 'room-not-found' ? $t.roomNotFound : m === 'room-full' ? $t.roomFull : m === 'room-started' ? $t.roomStarted : String(e)
+      const friendly =
+        m === 'room-not-found'
+          ? $t.roomNotFound
+          : m === 'room-full'
+            ? $t.roomFull
+            : m === 'room-started'
+              ? $t.roomStarted
+              : ''
+      showErr(e, friendly, true)
     }
   }
 
@@ -86,15 +149,30 @@
   $effect(() => {
     const r = view?.room
     if (session && r && !host && r.hostUid === uid) {
-      ensureHost().catch((e) => (err = String(e)))
+      ensureHost().catch(showErr)
     }
   })
 
-  const send = (a: Action) => void session?.act(a)
+  const send = (a: Action) => {
+    session?.act(a).catch((e) => {
+      console.error('[act]', e)
+      showErr(e)
+    })
+  }
 
   async function onLeave() {
     try {
-      await session?.leave()
+      if (host) {
+        // The host's room dies with the host: delete it instead of
+        // leaving a zombie room the others cannot continue.
+        await host.destroyRoom().catch(() => {})
+      } else {
+        // Never let a dead Firestore path trap the user in the room.
+        await Promise.race([
+          session?.leave(),
+          new Promise((r) => setTimeout(r, 2500)),
+        ])
+      }
     } finally {
       teardown()
     }
@@ -150,11 +228,15 @@
       mySeat={view.mySeat}
       onaddbot={(i) => host?.addBot(i)}
       onremovebot={(i) => host?.removeBot(i)}
+      onkick={(i) => host?.kickSeat(i)}
       onshuffle={() => host?.shuffleSeats()}
       onstart={() => host?.startGame()}
     />
+  {:else if view.mySeat < 0}
+    <div class="alert">{$t.kicked}</div>
   {:else}
-    <Table {view} {send} isHost={view.room.hostUid === uid} onnewmatch={onNewMatch} />
+    {#if err}<div class="alert">{err}</div>{/if}
+    <Table {view} {send} isHost={view.room.hostUid === uid} onnewmatch={onNewMatch} onkick={(i) => host?.kickSeat(i)} />
   {/if}
 </main>
 

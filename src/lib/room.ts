@@ -50,6 +50,13 @@ export class RoomSession {
   readonly view: Readable<SessionView>
   private unsubs: Unsubscribe[] = []
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  /** Intents queue behind the action doc: the next one is only written after
+   *  the host has processed (deleted) the previous one, so rapid actions can
+   *  never overwrite or be deleted unseen. */
+  private outbox: { intent: Intent; resolve: () => void; reject: (e: unknown) => void }[] = []
+  private sending = false
+  private actionDocGone = false
+  private disposed = false
 
   constructor(
     readonly code: string,
@@ -62,6 +69,14 @@ export class RoomSession {
       onSnapshot(handRef(code, uid), (snap) => {
         this.handDoc.set(snap.exists() ? (snap.data() as HandDoc) : null)
       }),
+      onSnapshot(
+        actionRef(code, uid),
+        (snap) => {
+          this.actionDocGone = !snap.exists()
+          void this.flush()
+        },
+        (err) => console.error('[room] action-doc listener error', err),
+      ),
     )
     this.heartbeatTimer = setInterval(() => this.checkHeartbeat(), 5000)
     this.view = derived([this.room, this.handDoc, this.hostStale], ([room, hd, hostStale]) => {
@@ -79,9 +94,32 @@ export class RoomSession {
     this.hostStale.set(Date.now() - room.heartbeat > 15000)
   }
 
-  async send(intent: Intent): Promise<void> {
-    const payload: IntentDoc = { intent, ts: Date.now() }
-    await setDoc(actionRef(this.code, this.uid), payload)
+  send(intent: Intent): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (this.disposed) return reject(new Error('session-disposed'))
+      this.outbox.push({ intent, resolve, reject })
+      void this.flush()
+    })
+  }
+
+  private async flush(): Promise<void> {
+    if (this.sending) return
+    while (!this.disposed && this.outbox.length > 0 && this.actionDocGone) {
+      this.sending = true
+      const item = this.outbox.shift()!
+      try {
+        await setDoc(actionRef(this.code, this.uid), {
+          intent: item.intent,
+          ts: Date.now(),
+        } satisfies IntentDoc)
+        // The doc now exists; wait for the host to delete it before the next send.
+        this.actionDocGone = false
+        item.resolve()
+      } catch (e) {
+        item.reject(e)
+      }
+      this.sending = false
+    }
   }
 
   act(action: Action): Promise<void> {
@@ -93,6 +131,9 @@ export class RoomSession {
   }
 
   dispose(): void {
+    this.disposed = true
+    for (const it of this.outbox) it.reject(new Error('session-disposed'))
+    this.outbox = []
     for (const u of this.unsubs) u()
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
   }

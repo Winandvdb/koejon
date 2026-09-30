@@ -11,7 +11,7 @@ import { apply, createMatch, pendingSeats, toPublic, visibleHand } from '../engi
 import type { Action, Card, State } from '../engine'
 import { botAction } from '../bots/bot'
 import { db } from './firebase'
-import { actionRef, actionsCol, engineRef, handRef, roomRef } from './room'
+import { actionsCol, engineRef, handRef, roomRef } from './room'
 import type { HostHandsDoc, IntentDoc, RoomDoc, SeatInfo } from './net-types'
 import { BOT_UID_PREFIX } from './net-types'
 
@@ -185,14 +185,33 @@ export class HostGame {
     })
   }
 
-  /** Host's own game action (host is also a seated player). */
-  act(action: Action): void {
+  /** Drop a stuck human seat: cleared in the lobby, a bot takes over mid-game. */
+  kickSeat(seat: number): void {
     this.enqueue(async () => {
-      const seat = this.seats[action.seat]
-      if (!seat || seat.uid !== this.uid) return
-      this.tryApply(action)
+      const s = this.seats[seat]
+      if (!s || s.bot || s.uid === this.uid) return
+      if (this.state.phase === 'LOBBY') {
+        this.seats[seat] = null
+      } else {
+        this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}`, name: s.name, bot: true }
+        await deleteDoc(handRef(this.code, s.uid)).catch(() => {})
+      }
       await this.commit()
     })
+  }
+
+  /** Delete the room tree and stop. Called when the host leaves for good. */
+  async destroyRoom(): Promise<void> {
+    this.dispose()
+    await this.busy.catch(() => {})
+    const batch = writeBatch(db)
+    for (const s of this.seats) {
+      if (s && !s.bot) batch.delete(handRef(this.code, s.uid))
+    }
+    batch.delete(handRef(this.code, 'host'))
+    batch.delete(engineRef(this.code))
+    batch.delete(roomRef(this.code))
+    await batch.commit()
   }
 
   // ---- intents from players ----
@@ -204,7 +223,11 @@ export class HostGame {
         if (this.state.phase === 'LOBBY' && !this.seats.some((s) => s?.uid === uid)) {
           const i = this.seats.findIndex((s) => s === null)
           if (i >= 0) {
-            this.seats[i] = { uid, name: intent.name.slice(0, 20) || 'Speler', bot: false }
+            this.seats[i] = {
+              uid,
+              name: String(intent.name ?? '').slice(0, 20) || 'Speler',
+              bot: false,
+            }
             await this.commit()
           }
         }
@@ -226,8 +249,9 @@ export class HostGame {
         const startOk =
           a.type !== 'start' ||
           (uid === this.uid && this.state.phase === 'LOBBY' && this.seats.every(Boolean))
-        if (seat && seat.uid === uid && startOk) {
-          this.tryApply(a)
+        // No commit when the action was dropped: a spammed or stale intent
+        // must not turn into a full batch write.
+        if (seat && seat.uid === uid && startOk && this.tryApply(a)) {
           await this.commit()
         }
       }
@@ -236,24 +260,25 @@ export class HostGame {
     }
   }
 
-  private tryApply(a: Action): void {
+  private tryApply(a: Action): boolean {
     try {
       this.state = apply(this.state, a)
+      return true
     } catch (e) {
       // Illegal or stale intent: dropped.
       console.warn('[host] dropped action', a.type, 'seat', a.seat, (e as Error).message)
+      return false
     }
   }
 
   // ---- persistence ----
 
   private async commit(): Promise<void> {
-    this.version++
     const batch = writeBatch(db)
     const room: Partial<RoomDoc> = {
       seats: this.seats,
       pub: toPublic(this.state),
-      version: this.version,
+      version: this.version + 1,
       heartbeat: Date.now(),
     }
     batch.update(roomRef(this.code), room)
@@ -269,7 +294,11 @@ export class HostGame {
     }
     batch.set(handRef(this.code, 'host'), { botHands } satisfies HostHandsDoc)
     batch.set(engineRef(this.code), { json: JSON.stringify(this.state) })
+    // The version only moves forward when the write lands: the rules reject a
+    // version that is not exactly +1, so a failed commit stays retryable and a
+    // second host instance stays fenced out instead of corrupting the room.
     await withTimeout(batch.commit())
+    this.version++
     this.scheduleBots()
   }
 
@@ -313,12 +342,8 @@ export class HostGame {
         const seat = this.autoSeat()
         if (seat === undefined) return
         const a = botAction(this.state, seat)
-        this.tryApply(a)
-        await this.commit()
+        if (this.tryApply(a)) await this.commit()
       })
     }, wait)
   }
 }
-
-/** Small helper for the e2e script: run a hosted match until done. */
-export { delay }

@@ -10,6 +10,7 @@
     mySeat,
     onaddbot,
     onremovebot,
+    onkick,
     onshuffle,
     onstart,
   }: {
@@ -18,6 +19,7 @@
     mySeat: number
     onaddbot: (seat: number) => void
     onremovebot: (seat: number) => void
+    onkick: (seat: number) => void
     onshuffle: () => void
     onstart: () => void
   } = $props()
@@ -72,15 +74,19 @@
               <span class="avatar">{seat.bot ? '🤖' : seat.name.slice(0, 1).toUpperCase()}</span>
               {seat.name}
               {#if i === mySeat}<span class="tag">{$t.you}</span>{/if}
-              {#if i === 0}<span class="tag">{$t.host}</span>{/if}
+              {#if seat.uid === room.hostUid}<span class="tag">{$t.host}</span>{/if}
               {#if seat.bot}<span class="tag muted">{$t.bot}</span>{/if}
             {:else}
               <span class="avatar empty-avatar"></span>
               <em>{$t.empty}</em>
             {/if}
           </span>
-          {#if seat && isHost && seat.bot}
-            <button class="icon-btn tiny" title={$t.remove} aria-label={$t.remove} onclick={() => onremovebot(i)}>✕</button>
+          {#if seat && isHost && (seat.bot || i !== mySeat)}
+            <button
+              class="icon-btn tiny"
+              title={$t.remove}
+              aria-label={$t.remove}
+              onclick={() => (seat.bot ? onremovebot(i) : onkick(i))}>✕</button>
           {/if}
           {#if !seat && isHost}
             <button class="btn tiny" onclick={() => onaddbot(i)}>+ {$t.bot}</button>

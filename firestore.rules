@@ -13,18 +13,31 @@ service cloud.firestore {
     }
 
     match /rooms/{code} {
-      // Any signed-in user may read a room (needed to join by code).
-      allow read: if signedIn();
-      // The creator becomes the host.
-      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      // Join-by-code needs a single-doc read. Listing room codes stays closed
+      // so nobody can enumerate and squat open lobbies.
+      allow get: if signedIn();
+      allow list: if false;
+      // The creator becomes the host; fresh rooms start at version 1.
+      allow create: if signedIn()
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.code == code
+        && request.resource.data.version == 1;
       // Only the host mutates the room (host-authoritative design).
-      allow update, delete: if isHost(code);
+      // Every state change must bump the version by exactly one: a second host
+      // instance on the same uid is fenced out instead of corrupting the room.
+      // Heartbeat-only writes are exempt so stale detection keeps working.
+      allow update: if isHost(code) && (
+        request.resource.data.version == resource.data.version + 1 ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['heartbeat']));
+      allow delete: if isHost(code);
 
       // Per-player hand documents. 'host' is a reserved doc id holding bot hands.
-      // The host must be able to write every hand doc to deal the cards.
+      // Only the host writes hand docs — it deals the cards and must mask the
+      // dealer's hand during bidding. Players may read only their own doc;
+      // the host may read all (it dealt them and cleans them up on teardown).
       match /hands/{uid} {
-        allow read: if signedIn() && (request.auth.uid == uid || (uid == 'host' && isHost(code)));
-        allow write: if signedIn() && (request.auth.uid == uid || isHost(code));
+        allow read: if signedIn() && (request.auth.uid == uid || isHost(code));
+        allow write: if isHost(code);
       }
 
       // A player may create/overwrite only their own intent doc.

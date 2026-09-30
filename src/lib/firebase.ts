@@ -1,6 +1,6 @@
 import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
 import { connectAuthEmulator, getAuth, signInAnonymously, type Auth } from 'firebase/auth'
-import { connectFirestoreEmulator, getFirestore, type Firestore } from 'firebase/firestore'
+import { connectFirestoreEmulator, initializeFirestore, type Firestore } from 'firebase/firestore'
 
 // Works both under Vite (import.meta.env) and plain Node (process.env).
 const viteEnv: Record<string, string | undefined> =
@@ -37,7 +37,11 @@ if (!USE_EMULATOR && !env('VITE_FIREBASE_API_KEY')) {
 
 export const app: FirebaseApp = initializeApp(config)
 export const auth: Auth = getAuth(app)
-export const db: Firestore = getFirestore(app)
+// Force long polling: ad blockers/proxies kill the WebChannel transport
+// (ERR_BLOCKED_BY_CLIENT on Listen/channel); plain XHR polling is reliable.
+export const db: Firestore = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+})
 
 // Emulator ports match firebase.json; override via env if needed.
 const FS_PORT = Number(env('VITE_EMULATOR_FIRESTORE_PORT') || 8180)

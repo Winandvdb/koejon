@@ -203,4 +203,31 @@ describe('scoring', () => {
     expect(s2.winner).toBe(1)
   })
 
+  it('erases top ladder lines first and Koeis only after all lines', () => {
+    // Team 1: two line marks + one Koei tail.
+    const marks = [
+      ...Array.from({ length: 13 }, () => ({ team: 0, t: 'line' as const, crossed: false, batch: 0 })),
+      ...Array.from({ length: 2 }, () => ({ team: 1, t: 'line' as const, crossed: false, batch: 0 })),
+      { team: 1, t: 'koei' as const, crossed: false, batch: 0 },
+    ]
+    const s = {
+      ...lastTrickState({
+        bidder: 1,
+        points: [19, 21],
+        tricksWon: [3, 2],
+        lines: [13, 3],
+        trick: TRICK(),
+        turn: 0,
+        card: C('S', 'K'),
+      }),
+      marks,
+    }
+    const s2 = finish(s, 0)
+    // team1 erases 1 (level 1): the top line is crossed, the Koei stays.
+    const t1 = s2.marks.filter((m) => m.team === 1)
+    expect(t1[1].crossed).toBe(true) // last line mark = top of the ladder
+    expect(t1[0].crossed).toBe(false)
+    expect(t1.find((m) => m.t === 'koei')!.crossed).toBe(false)
+  })
+
 })

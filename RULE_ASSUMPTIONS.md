@@ -46,8 +46,9 @@ environment deviations. Each entry lists the chosen behavior.
   them (the first leader auto-confirms), then the first lead is allowed.
 - **Troefke** — when the bidder's partner leads the first trick, the bidder may
   ask for "Troefke" (please open with trump) during the dealer-card confirm
-  window, next to "Gezien". The request shows as a "Troef?" bubble on the
-  leader; it is advisory only and may be ignored (no engine enforcement).
+  window, next to "Gezien". Asking counts as the bidder's confirmation — no
+  separate "Gezien" click is needed. The request shows as a "Troef?" bubble on
+  the leader; it is advisory only and may be ignored (no engine enforcement).
 - **Trick review window** — only the first two completed tricks of a hand may be
   looked back at, and only until the first card of the third trick is played
   (owner's literal reading of the rule). The info panel shows them during that
@@ -56,7 +57,8 @@ environment deviations. Each entry lists the chosen behavior.
   the opponents ("Zij") on the right. Crossed-out marks stay visible; marks erased
   by the same hand share one continuous diagonal scratch so multi-line erasures
   are recognizable (the engine tags each mark with the hand number that crossed
-  it). A Koei is drawn as a curved tail with hairs in red.
+  it). Erasures cross the top ladder lines first; Koei tails hang at the bottom
+  and are crossed only once all lines are gone.
 - **Optional info** — trump/stake display, points & trick counts and the
   first-tricks review are per-browser display settings (gear icon), persisted in
   `localStorage`. They are view-only and do not affect the game.
@@ -81,3 +83,24 @@ environment deviations. Each entry lists the chosen behavior.
 - **Engine recovery** — the full engine state is persisted host-only under
   `rooms/{code}/engine/state` so a host reload can resume a match; other clients cannot
   read it (it contains all hands and the RNG state).
+- **Bot dealer chooses blind** — a human dealer's hand doc is masked during bidding,
+  so a bot dealer may not rate its hand for the dealer choice either. The bot picks a
+  shown suit at random (≈70% play) instead of evaluating its cards.
+- **Room update fencing** — every host commit must set `version` to exactly
+  `version + 1` (enforced in `firestore.rules`); heartbeat-only writes are exempt.
+  A second host instance on the same uid is fenced out instead of corrupting the
+  room with diverging writes.
+- **Host leave deletes the room** — when the host clicks "Leave", the whole room tree
+  (room doc, hand docs, engine state) is deleted instead of leaving a zombie room
+  the other players cannot continue.
+- **Kicking a stuck player** — the host can remove a human seat (lobby: seat cleared;
+  mid-game: a bot takes over, same as a voluntary leave). This covers players who
+  close their tab without sending a leave intent.
+- **Intent outbox** — clients queue intents and write the next `actions/{uid}` doc
+  only after the host deleted the previous one, so rapid actions cannot overwrite
+  each other or be deleted unseen.
+- **Hand docs are host-written only** — a player reads their own `hands/{uid}` doc
+  but cannot write it (deviation from the original spec text: self-write had no use
+  and could only corrupt the player's own view).
+- **Rooms are get-only** — `list` on `rooms` is denied: join-by-code needs only
+  `get`, and denying `list` stops enumeration of open lobbies.

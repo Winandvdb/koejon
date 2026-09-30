@@ -55,6 +55,9 @@
 ## Spelen
 
 - De linkerbuur van de deler komt uit voor de eerste slag. Er zijn 6 slagen per hand.
+- Komt de teamgenoot van de speler die "gaan" zei uit voor de eerste slag? Dan mag die
+  speler "Troefke" vragen: een verzoek aan de teamgenoot om met troef uit te komen. De
+  teamgenoot mag dit verzoek negeren.
 - Wordt een gewone kleur uitgespeeld:
   - Je moet de kleur bekennen, of je mag troeven. Troeven is nooit verplicht maar altijd
     toegestaan.
