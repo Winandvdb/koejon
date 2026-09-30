@@ -97,7 +97,7 @@ const dict = {
     darkMode: 'Donker',
     lightMode: 'Licht',
     trickN: 'Slag',
-    sortHand: 'Sorteer op kleur',
+    sortHand: 'Sorteer kaarten op kleur',
   },
   en: {
     title: 'Koejonnen',
@@ -192,7 +192,7 @@ const dict = {
     darkMode: 'Dark',
     lightMode: 'Light',
     trickN: 'Trick',
-    sortHand: 'Sort by suit',
+    sortHand: 'Sort cards by suit',
   },
 } as const
 

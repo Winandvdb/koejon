@@ -1440,29 +1440,6 @@ button.tag {
   flex: none;
 }
 
-.sort-btn {
-  position: absolute;
-  top: -30px;
-  left: 10px;
-  z-index: 6;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  font-size: 0.95rem;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-  color: var(--muted);
-  cursor: pointer;
-  box-shadow: var(--shadow);
-}
-
-.sort-btn.on {
-  color: var(--text);
-  border-color: var(--gold);
-}
-
 .blind-hint {
   position: absolute;
   top: -34px;

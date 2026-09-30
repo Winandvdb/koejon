@@ -4,6 +4,7 @@
   import type { Action, Card, Suit } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
+  import { sortHand } from '../lib/prefs'
   import { activeQuotes } from '../lib/quotes'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
@@ -124,19 +125,14 @@
   const acting = (i: number) => pub.actionSeats.includes(i)
 
   /** Optional display sort: grouped by suit, high to low inside a suit. */
-  let sortHand = $state(localStorage.getItem('koejon-sort') === '1')
   const suitIdx = (c: Card) => SUITS.indexOf(c.s)
   const displayHand = $derived(
-    view.hand && sortHand
+    view.hand && $sortHand
       ? [...view.hand].sort(
           (a, b) => suitIdx(a) - suitIdx(b) || RANK_ORDER[b.r] - RANK_ORDER[a.r],
         )
       : view.hand,
   )
-  const toggleSort = () => {
-    sortHand = !sortHand
-    localStorage.setItem('koejon-sort', sortHand ? '1' : '0')
-  }
 
   /** One-shot confetti burst when the match ends. */
   const CONFETTI_COLORS = ['var(--gold)', 'var(--team-decl)', 'var(--team-def)', 'var(--accent)', '#fff']
@@ -400,14 +396,6 @@
 
     <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
       {#if dealerBlind}<div class="blind-hint">{$t.handHidden}</div>{/if}
-      {#if view.hand !== null}
-        <button
-          class="sort-btn"
-          class:on={sortHand}
-          aria-pressed={sortHand}
-          title={$t.sortHand}
-          onclick={toggleSort}>⇅</button>
-      {/if}
       <div class="my-hand">
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
