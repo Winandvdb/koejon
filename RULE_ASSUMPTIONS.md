@@ -44,6 +44,10 @@ environment deviations. Each entry lists the chosen behavior.
 - **Dealer's cards confirmation** — the same `ack` gate applies at the start of
   PLAYING: the turned cards stay at the dealer's seat until all seats confirmed
   them (the first leader auto-confirms), then the first lead is allowed.
+- **Troefke** — when the bidder's partner leads the first trick, the bidder may
+  ask for "Troefke" (please open with trump) during the dealer-card confirm
+  window, next to "Gezien". The request shows as a "Troef?" bubble on the
+  leader; it is advisory only and may be ignored (no engine enforcement).
 - **Trick review window** — only the first two completed tricks of a hand may be
   looked back at, and only until the first card of the third trick is played
   (owner's literal reading of the rule). The info panel shows them during that

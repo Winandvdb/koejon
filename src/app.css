@@ -26,8 +26,7 @@
   --team-def: #1f6fc4;
   --koei: #a93226;
   --trunk: #7b4a1f;
-  --fab-1: #fdfaf3;
-  --fab-2: #e4dcc8;
+  --fab: #f5efe0;
   --radius: 14px;
   --card: clamp(54px, 7vw, 94px);
   color-scheme: light;
@@ -57,8 +56,7 @@
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   --koei: #e0705f;
   --trunk: #b08a5e;
-  --fab-1: #38503f;
-  --fab-2: #223329;
+  --fab: #38503f;
   color-scheme: dark;
 }
 
@@ -926,7 +924,7 @@ input[type='checkbox'] {
   font-weight: 800;
   font-size: 1rem;
   color: var(--text);
-  background: linear-gradient(180deg, var(--fab-1), var(--fab-2));
+  background: var(--fab);
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
   transition:
@@ -947,8 +945,14 @@ input[type='checkbox'] {
 }
 
 .fab.primary {
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  background: var(--accent);
   color: #08210f;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.fab.troef {
+  background: var(--gold);
+  color: #2a1d00;
   border-color: rgba(255, 255, 255, 0.4);
 }
 
@@ -1093,6 +1097,15 @@ input[type='checkbox'] {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   z-index: 8;
   white-space: nowrap;
+}
+
+.bubble.troef {
+  background: var(--gold);
+  color: #2a1d00;
+}
+
+.bubble.troef::after {
+  border-top-color: var(--gold);
 }
 
 .bubble::after {
@@ -1473,12 +1486,14 @@ input[type='checkbox'] {
   opacity: 0.55;
 }
 
-/* The pen scratch: one continuous stroke per scoring batch. */
+/* The pen scratch: one continuous scribbled stroke per scoring batch. */
 .boomke .scratch {
+  fill: none;
   stroke: var(--suit-red);
-  stroke-width: 2.6;
+  stroke-width: 2.2;
   stroke-linecap: round;
-  opacity: 0.9;
+  stroke-linejoin: round;
+  opacity: 0.85;
 }
 
 .boomke .koei-tail {
@@ -1630,8 +1645,9 @@ input[type='checkbox'] {
 
 /* Phones in either orientation: narrow side seats and a compact info box. */
 @media (max-width: 700px), (max-height: 560px) and (orientation: landscape) {
+  /* The nameplate is lifted ~44px on small screens; keep buttons above it. */
   .felt-overlay {
-    padding-bottom: calc(var(--card) * 0.5 + 32px);
+    padding-bottom: calc(var(--card) * 0.5 + 50px);
   }
 
   .felt {
@@ -1639,6 +1655,17 @@ input[type='checkbox'] {
     margin: 6px 6px 0;
     padding: 8px 6px calc(var(--card) * 0.5);
     border-radius: 20px;
+  }
+
+  /* Lift my nameplate/status into the table so the collapsed boomke chip
+     in the bottom-right corner can never overlap it. */
+  .me-anchor {
+    translate: 0 -44px;
+  }
+
+  /* Long info lines (e.g. the playing team) must wrap, not clip. */
+  .iline {
+    white-space: normal;
   }
 
   .nameplate {

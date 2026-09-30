@@ -119,6 +119,9 @@
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
     {#if $settings.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
     {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+    {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
+      <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
+    {/if}
   </div>
 {/snippet}
 
@@ -237,9 +240,14 @@
               </button>
             {/each}
           </div>
-        {:else if has('ack')}
+        {:else if has('ack') || has('troefke')}
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
-            <button class="fab primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+            {#if has('troefke')}
+              <button class="fab troef" onclick={() => send({ type: 'troefke', seat: my })}>{$t.troefkeAsk}</button>
+            {/if}
+            {#if has('ack')}
+              <button class="fab primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+            {/if}
           </div>
         {:else if has('bid')}
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>

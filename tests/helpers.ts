@@ -49,6 +49,7 @@ export function playingState(over: Partial<State> = {}): State {
     prevTrick: null,
     // Default: everyone already confirmed, so plays are legal immediately.
     trickAcks: [0, 1, 2, 3],
+    troefkeAsked: false,
     tricksPlayed: 0,
     tricksWon: [0, 0],
     points: [0, 0],

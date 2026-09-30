@@ -40,6 +40,21 @@
   const kx = (dir: number, k: number) => CX + dir * (10 + k * KOEI_DX)
   const ky = () => TOP + n * STEP + 8
 
+  /** A pen-scribble stroke from (x1,y1) to (x2,y2): a fast zigzag wave. */
+  const scribble = (x1: number, y1: number, x2: number, y2: number): string => {
+    const len = Math.hypot(x2 - x1, y2 - y1) || 1
+    const ux = (x2 - x1) / len
+    const uy = (y2 - y1) / len
+    const n = Math.max(4, Math.round(len / 5.5))
+    let d = `M${x1.toFixed(1)} ${y1.toFixed(1)}`
+    for (let i = 1; i <= n; i++) {
+      const t = i / n
+      const off = i === n ? 0 : (i % 2 ? 1 : -1) * (2.4 + (i % 3) * 0.9)
+      d += ` L${(x1 + ux * len * t - uy * off).toFixed(1)} ${(y1 + uy * len * t + ux * off).toFixed(1)}`
+    }
+    return d
+  }
+
   /** Scratch groups: consecutive marks crossed in the same hand share one stroke. */
   const scratches = $derived.by(() => {
     const out: { side: 0 | 1; lo: number; hi: number }[] = []
@@ -91,18 +106,15 @@
           class="koei-hair"
         />
         {#if m.crossed}
-          <line x1={rx - 7} y1={ry + 22} x2={rx + 7} y2={ry + 4} class="scratch" />
+          <path d={scribble(rx - 8, ry + 23, rx + 8, ry + 3)} class="scratch" />
         {/if}
       {/each}
     {/each}
     <!-- one diagonal scratch per scoring batch -->
     {#each scratches as sc (sc.side + '-' + sc.lo)}
       {@const dir = sc.side === 0 ? -1 : 1}
-      <line
-        x1={CX + dir * (ARM + 5)}
-        y1={y(sc.lo) + 6}
-        x2={CX + dir * -3}
-        y2={y(sc.hi) - 6}
+      <path
+        d={scribble(CX + dir * (ARM + 5), y(sc.lo) + 6, CX + dir * -3, y(sc.hi) - 6)}
         class="scratch"
       />
     {/each}

@@ -50,6 +50,7 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     lastTrick: null,
     prevTrick: null,
     trickAcks: [],
+    troefkeAsked: false,
     tricksPlayed: 0,
     tricksWon: [0, 0],
     points: [0, 0],
@@ -167,6 +168,17 @@ export function legalActions(s: State, seat: number): Action[] {
       } else if (seat === s.turn) {
         for (const card of legalCards(s, seat)) out.push({ type: 'play', seat, card })
       }
+      // "Troefke": the bidder may ask their partner to open with trump while
+      // the partner's first lead is still pending — it may be ignored.
+      if (
+        s.bidder === seat &&
+        s.turn === (s.bidder + 2) % 4 &&
+        s.tricksPlayed === 0 &&
+        s.trick.length === 0 &&
+        !s.troefkeAsked
+      ) {
+        out.push({ type: 'troefke', seat })
+      }
       break
     case 'SCORED':
       out.push({ type: 'next', seat })
@@ -212,6 +224,7 @@ function doDeal(s: State): void {
   s.prevTrick = null
   // The first leader has "seen" the dealer's cards implicitly.
   s.trickAcks = [s.turn]
+  s.troefkeAsked = false
   s.tricksPlayed = 0
   s.tricksWon = [0, 0]
   s.points = [0, 0]
@@ -418,6 +431,10 @@ export function apply(state: State, action: Action): State {
     }
     case 'ack':
       s.trickAcks.push(action.seat)
+      break
+    case 'troefke':
+      s.troefkeAsked = true
+      pushLog(s, { t: 'troefke', seat: action.seat })
       break
     case 'next':
       nextHand(s)

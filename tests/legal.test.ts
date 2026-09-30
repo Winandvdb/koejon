@@ -176,4 +176,23 @@ describe('trick resolution', () => {
     for (const seat of [0, 2, 3]) s2 = apply(s2, { type: 'ack', seat })
     expect(legalActions(s2, 1).some((a) => a.type === 'play')).toBe(true)
   })
+
+  it('lets the bidder ask for troefke when their partner leads first', () => {
+    // Bidder 1, partner 3 leads: 1 may ack AND ask during the confirm window.
+    const s = playingState({ bidder: 1, turn: 3, trickAcks: [3] })
+    const legal = legalActions(s, 1)
+    expect(legal).toContainEqual({ type: 'ack', seat: 1 })
+    expect(legal).toContainEqual({ type: 'troefke', seat: 1 })
+    const s2 = apply(s, { type: 'troefke', seat: 1 })
+    expect(s2.troefkeAsked).toBe(true)
+    // Once asked, the offer is gone; the lead itself is unaffected.
+    expect(legalActions(s2, 1).some((a) => a.type === 'troefke')).toBe(false)
+  })
+
+  it('does not offer troefke when the bidder or an opponent leads', () => {
+    const ownLead = playingState({ bidder: 1, turn: 1 })
+    expect(legalActions(ownLead, 1).some((a) => a.type === 'troefke')).toBe(false)
+    const oppLead = playingState({ bidder: 1, turn: 0 })
+    expect(legalActions(oppLead, 1).some((a) => a.type === 'troefke')).toBe(false)
+  })
 })

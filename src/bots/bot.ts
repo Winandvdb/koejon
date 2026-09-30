@@ -101,6 +101,7 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
     case 'draw':
     case 'deal':
     case 'ack':
+    case 'troefke':
     case 'next':
       return first
     case 'chooseDealer': {
