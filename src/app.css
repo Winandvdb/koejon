@@ -909,12 +909,17 @@ input[type='checkbox'] {
   padding-bottom: calc(var(--card) * 1.62 + 30px);
 }
 
-/* While a hand is scored the boomke is open in the right corner:
-   dock the result panel to the left and reserve space for the boomke. */
-.felt-overlay.scored {
-  align-items: flex-start;
-  padding-right: 172px;
+/* Only on phones: during scoring the boomke floats centered just above the
+   result card, then glides back to its corner chip when play continues. */
+@media (max-width: 700px) {
+  .boomke-wrap.scored {
+    right: 50%;
+    bottom: min(305px, 62%);
+    transform: translateX(50%);
+  }
 }
+
+
 
 .overlay-panel {
   flex: none;
@@ -1023,8 +1028,59 @@ input[type='checkbox'] {
 }
 
 .result {
-  background: color-mix(in srgb, var(--gold) 16%, var(--panel));
-  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+  min-width: 240px;
+  gap: 8px;
+}
+
+.result-head {
+  font-weight: 800;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.result-score {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.result-score .rs-name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.result-score .rs-num {
+  font-size: 1.7rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.result-flags .chip {
+  background: var(--panel-2);
+}
+
+.result-flags .flag-win {
+  background: var(--gold);
+  color: #241b02;
+}
+
+.result-flags .flag-bad {
+  background: var(--danger);
+  color: #fff;
+}
+
+.result-flags .flag-koei {
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .result.over {
@@ -1511,6 +1567,11 @@ input[type='checkbox'] {
   position: absolute;
   bottom: 14px;
   right: 14px;
+  /* Glides between its corner and the scored position on small screens. */
+  transition:
+    right 0.35s ease,
+    bottom 0.35s ease,
+    transform 0.35s ease;
   z-index: 11; /* above the felt overlay: action buttons never cover the boomke */
   display: flex;
   flex-direction: column;
@@ -1739,10 +1800,6 @@ input[type='checkbox'] {
 @media (max-width: 700px), (max-height: 560px) and (orientation: landscape) {
   .felt-overlay {
     padding-bottom: calc(var(--card) * 0.5 + 60px);
-  }
-
-  .felt-overlay.scored {
-    padding-right: 126px;
   }
 
   .felt {

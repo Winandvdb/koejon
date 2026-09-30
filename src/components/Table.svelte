@@ -84,6 +84,10 @@
   const lingerTrick = $derived(
     playing && pub.trick.length === 0 && pub.lastTrick !== null ? pub.lastTrick : null,
   )
+  /** Trick cards to render: the trick in progress, or the lingering last one. */
+  const showCards = $derived(
+    pub.phase === 'PLAYING' && pub.trick.length > 0 ? pub.trick : lingerTrick,
+  )
   /** Lingered cards fly out towards the seat that won the trick. */
   const lingerExit = $derived(DIR[rel(pub.leader)])
 
@@ -178,27 +182,20 @@
 
       <div class="area-center">
         <div class="trick-area">
-          {#if pub.phase === 'PLAYING'}
-            {#each pub.trick as tc, i (tc.seat)}
+          <!-- One keyed list across trick → linger: cards already on the felt
+               stay put, only the newly played card flies in. -->
+          {#if showCards}
+            {#each showCards as tc, i ((lingerTrick ? pub.tricksPlayed - 1 : pub.tricksPlayed) + '-' + tc.seat)}
               <div
                 class="trick-card tp{rel(tc.seat)}"
-                style="rotate: {TILT[(i + (pub.trick[0]?.seat ?? 0)) % 4]}deg; z-index: {i + 1}"
+                class:done={lingerTrick !== null}
+                class:won={lingerTrick !== null && tc.seat === pub.leader}
+                style="rotate: {TILT[(i + showCards[0].seat) % 4]}deg; z-index: {i + 1}"
                 in:fly={{
                   x: DIR[rel(tc.seat)].x * 0.8,
                   y: DIR[rel(tc.seat)].y * 0.8,
                   duration: 240,
                 }}
-              >
-                <CardView card={tc.card} />
-              </div>
-            {/each}
-          {/if}
-          {#if lingerTrick}
-            {#each lingerTrick as tc, i (tc.seat)}
-              <div
-                class="trick-card tp{rel(tc.seat)} done"
-                class:won={tc.seat === pub.leader}
-                style="rotate: {TILT[(i + lingerTrick[0].seat) % 4]}deg; z-index: {i + 1}"
                 out:fly={{ x: lingerExit.x * 1.6, y: lingerExit.y * 1.6, duration: 420 }}
               >
                 <CardView card={tc.card} />
@@ -238,11 +235,18 @@
         {:else if pub.phase === 'SCORED' && pub.lastResult}
           {@const r = pub.lastResult}
           <div class="panel overlay-panel result" in:scale={{ duration: 220 }}>
-            <strong>{$t.scored}</strong>
-            <span>
-              {$t.wij} {r.points[myTeam]}–{r.points[1 - myTeam]} {$t.zij} → {teamName(r.winnerTeam)}
-              {r.erased} {$t.erased}{r.kapot ? ` (${$t.kapot})` : ''}{r.koei ? ` +${$t.koei}` : ''}
-            </span>
+            <div class="result-head">{$t.scored}</div>
+            <div class="result-score">
+              <span class="rs-name">{$t.wij}</span>
+              <b class="rs-num">{r.points[myTeam]}–{r.points[1 - myTeam]}</b>
+              <span class="rs-name">{$t.zij}</span>
+            </div>
+            <div class="result-flags">
+              <span class="chip flag-win">{teamName(r.winnerTeam)} {$t.wins}</span>
+              <span class="chip">{r.erased} {$t.erased}</span>
+              {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
+              {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
+            </div>
           </div>
         {:else if pub.phase === 'GAME_OVER'}
           <div class="panel overlay-panel result over" in:scale={{ duration: 260 }}>

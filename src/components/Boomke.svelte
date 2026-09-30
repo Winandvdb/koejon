@@ -14,15 +14,17 @@
 
   /** Collapsed during play; opens automatically when a hand is scored. */
   let open = $state(false)
-  const expanded = $derived(open || phase === 'SCORED' || phase === 'GAME_OVER')
+  const scoring = $derived(phase === 'SCORED' || phase === 'GAME_OVER')
+  const expanded = $derived(open || scoring)
 
   const STEP = 15
   const TOP = 30
   const CX = 70
   const ARM = 30
   /** Bottom band for hanging koei tails; extra tails stack a bit lower. */
-  const KOEI_ZONE = 34
-  const KOEI_ROW = 9
+  const KOEI_ZONE = 24
+  /** Root spacing must exceed one tail's drop+tuft so tails never touch. */
+  const KOEI_ROW = 20
 
   /** My team on the left of the trunk, the others on the right. */
   const sides = $derived([
@@ -39,22 +41,25 @@
   /** Tail root on the trunk, at the foot of the line ladder. */
   const kry = (k: number) => TOP + n * STEP + 8 + k * KOEI_ROW
 
-  /** A pen-scribble stroke from (x1,y1) to (x2,y2): a fast zigzag wave. */
-  const scribble = (x1: number, y1: number, x2: number, y2: number): string => {
-    const len = Math.hypot(x2 - x1, y2 - y1) || 1
-    const ux = (x2 - x1) / len
-    const uy = (y2 - y1) / len
-    const n = Math.max(4, Math.round(len / 5.5))
-    let d = `M${x1.toFixed(1)} ${y1.toFixed(1)}`
-    for (let i = 1; i <= n; i++) {
-      const t = i / n
-      const off = i === n ? 0 : (i % 2 ? 1 : -1) * (2.4 + (i % 3) * 0.9)
-      d += ` L${(x1 + ux * len * t - uy * off).toFixed(1)} ${(y1 + uy * len * t + ux * off).toFixed(1)}`
+  /** Zigzag that lies along a line, like scribbling over it with a pen. */
+  const wave = (x1: number, y: number, x2: number, amp = 3.4): string => {
+    const dir = Math.sign(x2 - x1) || 1
+    const len = Math.abs(x2 - x1)
+    const step = 6
+    let d = `M${x1} ${y}`
+    let flip = 1
+    for (let t = step; ; t += step, flip = -flip) {
+      if (t >= len) {
+        d += ` L${x2} ${y}`
+        break
+      }
+      d += ` L${(x1 + dir * t).toFixed(1)} ${(y + amp * flip).toFixed(1)}`
     }
     return d
   }
 
-  /** Scratch groups: consecutive marks crossed in the same hand share one stroke. */
+  /** Scratch groups: consecutive marks crossed in the same hand share one
+   *  big scribble that spans their combined height. */
   const scratches = $derived.by(() => {
     const out: { side: 0 | 1; lo: number; hi: number }[] = []
     for (const side of [0, 1] as const) {
@@ -75,7 +80,7 @@
   const remaining = (side: 0 | 1) => sides[side].filter((m) => !m.crossed).length
 </script>
 
-<div class="boomke-wrap">
+<div class="boomke-wrap" class:scored={scoring}>
   {#if expanded}
     <div class="boomke">
       <div class="boomke-labels">
@@ -94,34 +99,38 @@
       {/each}
       {#each koeis[side] as m, k (k)}
         {@const rootY = kry(k)}
-        {@const tx = CX + dir * (18 + k * 8)}
-        {@const ty = rootY + 22}
-        <!-- a cow's tail: starts on the trunk, sags halfway into a 45° droop -->
+        {@const tx = CX + dir * 34}
+        {@const ty = rootY + 11}
+        <!-- a cow's tail: straight out to the middle, then a smooth slight droop.
+             Every koei is the same shape, offset down the trunk. -->
         <path
-          d="M{CX} {rootY} C{CX + dir * 20} {rootY} {tx - dir * 7} {ty - 7} {tx} {ty}"
+          d="M{CX} {rootY} L{CX + dir * 18} {rootY} Q{CX + dir * 28} {rootY} {tx} {ty}"
           class="koei-tail"
         />
         <path
-          d="M{tx} {ty} l{dir * 5} 5 M{tx} {ty} l{dir * 2} 6 M{tx} {ty} l{dir * 6} 2"
+          d="M{tx} {ty} l{dir * 6} 4 M{tx} {ty} l{dir * 3} 5 M{tx} {ty} l{dir * 8} 2"
           class="koei-hair"
         />
         {#if m.crossed}
-          <path d={scribble(tx + dir * 4, rootY + 2, tx - dir * 10, ty + 3)} class="scratch" />
+          <path d={wave(CX + dir * 4, rootY + 2, CX + dir * 24)} class="scratch" />
         {/if}
       {/each}
     {/each}
-    <!-- one diagonal scratch per scoring batch -->
+    <!-- one big scribble per scoring batch, tall enough to cover its lines -->
     {#each scratches as sc (sc.side + '-' + sc.lo)}
       {@const dir = sc.side === 0 ? -1 : 1}
+      {@const amp = ((sc.hi - sc.lo) * STEP) / 2 + 4}
       <path
-        d={scribble(CX + dir * (ARM + 5), y(sc.lo) + 6, CX + dir * -3, y(sc.hi) - 6)}
+        d={wave(CX + dir * -2, (y(sc.lo) + y(sc.hi)) / 2, CX + dir * (ARM + 4), amp)}
         class="scratch"
       />
     {/each}
       </svg>
     </div>
   {/if}
-  <button class="boomke-chip" onclick={() => (open = !open)} aria-expanded={expanded}>
-    {$t.boomke} · {$t.wij} {remaining(0)} – {$t.zij} {remaining(1)}
-  </button>
+  {#if !scoring}
+    <button class="boomke-chip" onclick={() => (open = !open)} aria-expanded={expanded}>
+      {$t.boomke} · {$t.wij} {remaining(0)} – {$t.zij} {remaining(1)}
+    </button>
+  {/if}
 </div>

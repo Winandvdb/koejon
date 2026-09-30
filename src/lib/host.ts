@@ -350,7 +350,16 @@ export class HostGame {
   private scheduleBots(): void {
     if (this.botTimer) return
     if (this.state.phase === 'LOBBY' || this.state.phase === 'GAME_OVER') return
-    if (this.autoSeat() === undefined) return
+    const seat = this.autoSeat()
+    if (seat === undefined) return
+    // The "seen it" pause exists for humans — bots confirm instantly.
+    if (botAction(this.state, seat).type === 'ack') {
+      this.enqueue(async () => {
+        const s = this.autoSeat()
+        if (s !== undefined && this.tryApply(botAction(this.state, s))) await this.commit()
+      })
+      return
+    }
     // Announce the dealer for a moment before the cards go out.
     const drawLinger = this.state.phase === 'DEALING'
     // A bid just got announced ("Ik ga"/"Pas"/dealer choice/second card):
