@@ -39,12 +39,19 @@
         const snap = await getDoc(roomRef(storedCode))
         const room = snap.exists() ? (snap.data() as RoomDoc) : null
         if (room && seatOf(room, uid) >= 0) attach(await joinRoom(storedCode, uid, name))
-        else localStorage.removeItem('koejon-room')
+        else forgetRoom()
       }
     } catch {
-      localStorage.removeItem('koejon-room')
+      forgetRoom()
     }
   })
+
+  // Drop a stale room session: clear the stored code AND the invite URL so
+  // the home screen doesn't fall back to a dead join page.
+  function forgetRoom() {
+    localStorage.removeItem('koejon-room')
+    history.replaceState(null, '', location.pathname)
+  }
 
   let unsubView: (() => void) | null = null
   let hadRoom = $state(false)
