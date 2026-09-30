@@ -159,7 +159,8 @@
   }
 
   $effect(() => {
-    if (soloStarting && view?.room?.pub?.phase !== 'LOBBY') soloStarting = false
+    const ph = view?.room?.pub?.phase
+    if (soloStarting && ph && ph !== 'LOBBY') soloStarting = false
   })
 
   async function onJoin(code: string, name: string) {
