@@ -97,6 +97,7 @@ const dict = {
     darkMode: 'Donker',
     lightMode: 'Licht',
     trickN: 'Slag',
+    sortHand: 'Sorteer op kleur',
   },
   en: {
     title: 'Koejonnen',
@@ -191,6 +192,7 @@ const dict = {
     darkMode: 'Dark',
     lightMode: 'Light',
     trickN: 'Trick',
+    sortHand: 'Sort by suit',
   },
 } as const
 
