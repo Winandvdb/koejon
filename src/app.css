@@ -1683,6 +1683,12 @@ button.tag {
   text-transform: lowercase;
 }
 
+/* The labels row can be wider than the svg — keep the drawing centered. */
+.boomke svg {
+  display: block;
+  margin-inline: auto;
+}
+
 .boomke .trunk {
   stroke: var(--trunk);
   stroke-width: 4;
@@ -1908,6 +1914,12 @@ button.tag {
 @media (max-width: 700px), (max-height: 560px) and (orientation: landscape) {
   .felt-overlay {
     padding-bottom: calc(var(--card) * 0.5 + 60px);
+  }
+
+  /* The dealer's turned cards hover over the lifted nameplate — raise the
+     action buttons clear of them. Landscape overrides this below. */
+  .felt-overlay.lifted {
+    padding-bottom: calc(var(--card) * 1.5 + 76px);
   }
 
   .felt {
