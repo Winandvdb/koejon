@@ -210,7 +210,8 @@ function doDeal(s: State): void {
   s.trick = []
   s.lastTrick = null
   s.prevTrick = null
-  s.trickAcks = []
+  // The first leader has "seen" the dealer's cards implicitly.
+  s.trickAcks = [s.turn]
   s.tricksPlayed = 0
   s.tricksWon = [0, 0]
   s.points = [0, 0]
@@ -255,7 +256,8 @@ function resolveTrick(s: State): void {
   s.prevTrick = s.lastTrick
   s.lastTrick = s.trick
   s.trick = []
-  s.trickAcks = []
+  // The winner leads next — their card is the confirmation, no click needed.
+  s.trickAcks = [winner]
   s.leader = winner
   s.turn = winner
   pushLog(s, { t: 'trick', seat: winner })

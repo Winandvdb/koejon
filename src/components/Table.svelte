@@ -150,7 +150,7 @@
   <div class="table">
     <div class="felt">
       {#if $settings.info}<InfoPanel {pub} {seats} {myTeam} />{/if}
-      <Boomke marks={pub.marks} {myTeam} />
+      <Boomke marks={pub.marks} {myTeam} phase={pub.phase} />
 
       {@render opponent((my + 2) % 4, 2)}
       {@render opponent((my + 1) % 4, 1)}
@@ -188,7 +188,7 @@
         </div>
       </div>
 
-      <div class="felt-overlay">
+      <div class="felt-overlay" class:lifted={showTurned && my === pub.dealer}>
         {#if pub.phase === 'DEALER_DRAW' && pub.dealerDraw}
           {@const dd = pub.dealerDraw}
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
@@ -201,20 +201,9 @@
                 </div>
               {/each}
             </div>
-            {#if dd.pending === 2}
-              {#if has('chooseDealer')}
-                <div class="small">{$t.chooseDealer}:</div>
-                <div class="btnrow">
-                  {#each [0, 1, 2, 3] as d (d)}
-                    <button class="btn" onclick={() => send({ type: 'chooseDealer', seat: my, dealer: d })}>
-                      {name(d)}
-                    </button>
-                  {/each}
-                </div>
-              {:else}
-                <div class="small">{name(dd.winnerSeat!)} {$t.picksDealer}</div>
-              {/if}
-            {:else}
+            {#if dd.pending === 2 && !has('chooseDealer')}
+              <div class="small">{name(dd.winnerSeat!)} {$t.picksDealer}</div>
+            {:else if dd.pending !== 2}
               <div class="small">{name(dd.drawer[dd.pending])} {$t.drawsNow}</div>
             {/if}
           </div>
@@ -222,40 +211,7 @@
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
             <strong>{name(pub.dealer)} {$t.isDealer}</strong>
           </div>
-        {:else if has('ack')}
-          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
-            <button class="btn primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
-          </div>
-        {:else if has('bid') || has('choose')}
-          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
-            {#if has('bid')}
-              <div class="bid-row">
-                <button class="btn primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>
-                  {$t.play}
-                </button>
-                <button class="btn" onclick={() => send({ type: 'bid', seat: my, play: false })}>
-                  {$t.pass}
-                </button>
-              </div>
-            {:else if has('choose')}
-              <div class="small">{$t.dealerChoice}</div>
-              <div class="bid-row">
-                {#each chooseSuits as s (s)}
-                  <button class="btn suit-btn" onclick={() => send({ type: 'choose', seat: my, suit: s })}>
-                    {SUIT_GLYPH[s]}
-                  </button>
-                {/each}
-                {#if choosePass}
-                  <button class="btn" onclick={() => send({ type: 'choose', seat: my, suit: null })}>
-                    {$t.pass}
-                  </button>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        {#if pub.phase === 'SCORED' && pub.lastResult}
+        {:else if pub.phase === 'SCORED' && pub.lastResult}
           {@const r = pub.lastResult}
           <div class="panel overlay-panel result" in:scale={{ duration: 220 }}>
             <strong>{$t.scored}</strong>
@@ -263,20 +219,60 @@
               {$t.wij} {r.points[myTeam]}–{r.points[1 - myTeam]} {$t.zij} → {teamName(r.winnerTeam)}
               {r.erased} {$t.erased}{r.kapot ? ` (${$t.kapot})` : ''}{r.koei ? ` +${$t.koei}` : ''}
             </span>
-            {#if has('next')}
-              <button class="btn primary" onclick={() => send({ type: 'next', seat: my })}>
-                {$t.nextHand}
-              </button>
-            {/if}
           </div>
-        {/if}
-        {#if pub.phase === 'GAME_OVER'}
+        {:else if pub.phase === 'GAME_OVER'}
           <div class="panel overlay-panel result over" in:scale={{ duration: 260 }}>
             <strong>{$t.gameOver}</strong>
             <span>{teamName(pub.winner!)} {$t.wins}!</span>
-            {#if isHost}
-              <button class="btn primary" onclick={onnewmatch}>{$t.newMatch}</button>
+          </div>
+        {/if}
+
+        <!-- Action buttons float on the felt, raised like table buttons. -->
+        {#if has('chooseDealer')}
+          <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.chooseDealer}</span>
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            {#each [0, 1, 2, 3] as d (d)}
+              <button class="fab" onclick={() => send({ type: 'chooseDealer', seat: my, dealer: d })}>
+                {name(d)}
+              </button>
+            {/each}
+          </div>
+        {:else if has('ack')}
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            <button class="fab primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+          </div>
+        {:else if has('bid')}
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            <button class="fab primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>
+              {$t.play}
+            </button>
+            <button class="fab" onclick={() => send({ type: 'bid', seat: my, play: false })}>
+              {$t.pass}
+            </button>
+          </div>
+        {:else if has('choose')}
+          <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.dealerChoice}</span>
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            {#each chooseSuits as s (s)}
+              <button class="fab" onclick={() => send({ type: 'choose', seat: my, suit: s })}>
+                {SUIT_GLYPH[s]}
+              </button>
+            {/each}
+            {#if choosePass}
+              <button class="fab" onclick={() => send({ type: 'choose', seat: my, suit: null })}>
+                {$t.pass}
+              </button>
             {/if}
+          </div>
+        {:else if has('next')}
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            <button class="fab primary" onclick={() => send({ type: 'next', seat: my })}>
+              {$t.nextHand}
+            </button>
+          </div>
+        {:else if pub.phase === 'GAME_OVER' && isHost}
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            <button class="fab primary" onclick={onnewmatch}>{$t.newMatch}</button>
           </div>
         {/if}
       </div>

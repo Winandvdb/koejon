@@ -37,12 +37,13 @@ environment deviations. Each entry lists the chosen behavior.
   for ~3 s, then the host issues the deal itself (after the draw, after scoring and
   after all-passed hands).
 - **Trick confirmation** — a completed trick stays on the table until every seat has
-  confirmed it (`ack`); the trick winner cannot lead before all 4 acks are in.
-  Bots ack automatically; human players click "Gezien". This also keeps the
+  confirmed it (`ack`); the next lead is gated on all 4 acks. The leading player is
+  auto-confirmed (their next card is the confirmation — no extra click); bots ack
+  automatically; other humans click "Gezien". This also keeps the
   first-two-tricks review window open as long as needed.
 - **Dealer's cards confirmation** — the same `ack` gate applies at the start of
-  PLAYING: the turned cards stay at the dealer's seat until all 4 seats confirmed
-  them, then the first lead is allowed.
+  PLAYING: the turned cards stay at the dealer's seat until all seats confirmed
+  them (the first leader auto-confirms), then the first lead is allowed.
 - **Trick review window** — only the first two completed tricks of a hand may be
   looked back at, and only until the first card of the third trick is played
   (owner's literal reading of the rule). The info panel shows them during that

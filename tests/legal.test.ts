@@ -157,20 +157,23 @@ describe('trick resolution', () => {
       turn: 2,
     })
     let s2 = apply(s, { type: 'play', seat: 2, card: C('S', '9') })
-    // Winner (3) may not lead until everyone acked.
-    expect(legalActions(s2, 3)).toEqual([{ type: 'ack', seat: 3 }])
+    // Winner (3) may not lead until the others acked; the winner auto-acks.
+    expect(s2.trickAcks).toEqual([3])
+    expect(legalActions(s2, 3)).toEqual([])
     expect(() => apply(s2, { type: 'play', seat: 3, card: C('H', 'Q') })).toThrow()
-    for (const seat of [0, 1, 2, 3]) s2 = apply(s2, { type: 'ack', seat })
+    for (const seat of [0, 1, 2]) s2 = apply(s2, { type: 'ack', seat })
     expect(legalActions(s2, 3).some((a) => a.type === 'play')).toBe(true)
     const s3 = apply(s2, { type: 'play', seat: 3, card: C('H', 'Q') })
     expect(s3.trick).toHaveLength(1)
   })
 
   it('the first lead of a hand also waits for all four confirmations', () => {
-    const s = playingState({ trickAcks: [], hands: [[], [C('H', 'Q')], [], []] })
-    expect(legalActions(s, 1)).toEqual([{ type: 'ack', seat: 1 }])
+    // Real deals auto-ack the first leader (seat 1 here); the others must confirm.
+    const s = playingState({ trickAcks: [1], hands: [[], [C('H', 'Q')], [], []] })
+    expect(legalActions(s, 1)).toEqual([])
+    expect(legalActions(s, 0)).toEqual([{ type: 'ack', seat: 0 }])
     let s2 = s
-    for (const seat of [0, 1, 2, 3]) s2 = apply(s2, { type: 'ack', seat })
+    for (const seat of [0, 2, 3]) s2 = apply(s2, { type: 'ack', seat })
     expect(legalActions(s2, 1).some((a) => a.type === 'play')).toBe(true)
   })
 })

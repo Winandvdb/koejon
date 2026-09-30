@@ -16,7 +16,6 @@
     myTeam: number
   } = $props()
 
-  let minimized = $state(false)
   let showLast = $state(false)
 
   const name = (i: number) => seats[i]?.name ?? `#${i}`
@@ -61,30 +60,24 @@
   })
 </script>
 
-<div class="info-panel" class:minimized>
+<div class="info-panel">
   <div class="info-head">
-    {#if minimized}
-      <button class="info-toggle" onclick={() => (minimized = false)} aria-label={$t.showInfo}>ℹ</button>
-    {:else}
-      <span class="info-title">
-        {#if pub.trump}
-          <span class="suitglyph" class:g-red={redSuit(pub.trump)}>{SUIT_GLYPH[pub.trump]}</span>
-          {suitName(pub.trump, $lang)}
-          <em class="lvltag">{$t[pub.level === 1 ? 'level1' : 'level2']}</em>
-        {:else if proposed}
-          <span class="suitglyph" class:g-red={redSuit(proposed)}>{SUIT_GLYPH[proposed]}</span>
-          {suitName(proposed, $lang)}?
-        {:else}
-          {$t.trump}: —
-        {/if}
-        {#if pub.multiplier > 1}<span class="mult">×{pub.multiplier}</span>{/if}
-      </span>
-      <button class="info-toggle" onclick={() => (minimized = true)} aria-label={$t.close}>–</button>
-    {/if}
+    <span class="info-title">
+      {#if pub.trump}
+        <span class="suitglyph" class:g-red={redSuit(pub.trump)}>{SUIT_GLYPH[pub.trump]}</span>
+        {suitName(pub.trump, $lang)}
+        <em class="lvltag">{$t[pub.level === 1 ? 'level1' : 'level2']}</em>
+      {:else if proposed}
+        <span class="suitglyph" class:g-red={redSuit(proposed)}>{SUIT_GLYPH[proposed]}</span>
+        {suitName(proposed, $lang)}?
+      {:else}
+        {$t.trump}: —
+      {/if}
+      {#if pub.multiplier > 1}<span class="mult">×{pub.multiplier}</span>{/if}
+    </span>
   </div>
 
-  {#if !minimized}
-    <div class="info-body" transition:slide={{ duration: 180 }}>
+  <div class="info-body">
       {#if pub.bidder !== null}
         <div class="iline">{$t.playingTeam}: <strong>{name(pub.bidder)}</strong> ({teamName(pub.bidder % 2)})</div>
       {/if}
@@ -113,6 +106,5 @@
           </div>
         {/if}
       {/if}
-    </div>
-  {/if}
+  </div>
 </div>
