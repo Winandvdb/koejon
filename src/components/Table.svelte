@@ -3,8 +3,8 @@
   import type { Action, Card, Suit } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
-  import { settings } from '../lib/settings'
   import type { SeatInfo } from '../lib/net-types'
+  import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
@@ -24,6 +24,7 @@
   } = $props()
 
   const room = $derived(view.room!)
+  const opts = $derived(room.opts ?? DEFAULT_ROOM_OPTS)
   const pub = $derived(room.pub!)
   const seats = $derived(room.seats)
   const my = $derived(view.mySeat)
@@ -72,6 +73,13 @@
   const playing = $derived(
     pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER',
   )
+
+  /** Seats still to confirm the current pause (start of hand or completed trick). */
+  const pendingAcks = $derived(
+    pub.phase === 'PLAYING' && pub.trickAcks.length < 4
+      ? [0, 1, 2, 3].filter((s) => !pub.trickAcks.includes(s))
+      : ([] as number[]),
+  )
   /** A completed trick lingers on the felt until the winner leads again. */
   const lingerTrick = $derived(
     playing && pub.trick.length === 0 && pub.lastTrick !== null ? pub.lastTrick : null,
@@ -119,7 +127,7 @@
     </span>
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
-    {#if $settings.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
+    {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
     {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
     {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
       <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
@@ -161,7 +169,7 @@
   {#if view.hostStale}<div class="hostleft">{$t.hostLeft}</div>{/if}
   <div class="table">
     <div class="felt">
-      {#if $settings.info}<InfoPanel {pub} {seats} {myTeam} />{/if}
+      {#if opts.info}<InfoPanel {pub} {seats} {myTeam} {opts} />{/if}
       <Boomke marks={pub.marks} {myTeam} phase={pub.phase} />
 
       {@render opponent((my + 2) % 4, 2)}
@@ -295,6 +303,13 @@
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
             <button class="fab primary" onclick={onnewmatch}>{$t.newMatch}</button>
           </div>
+        {/if}
+
+        <!-- While the game waits on confirmations, say who we're waiting on. -->
+        {#if pendingAcks.length > 0 && !has('ack')}
+          <span class="wait-hint" in:fly={{ y: 8, duration: 200 }}>
+            {$t.waitingFor} {pendingAcks.map((s) => name(s)).join(', ')}…
+          </span>
         {/if}
       </div>
 

@@ -2,18 +2,19 @@
   import { slide } from 'svelte/transition'
   import { trickWinnerIndex, type PublicState, type TrickCard } from '../engine'
   import { SUIT_GLYPH, lang, suitName, t } from '../lib/i18n'
-  import type { SeatInfo } from '../lib/net-types'
-  import { settings } from '../lib/settings'
+  import type { RoomOpts, SeatInfo } from '../lib/net-types'
   import CardView from './CardView.svelte'
 
   let {
     pub,
     seats,
     myTeam,
+    opts,
   }: {
     pub: PublicState
     seats: (SeatInfo | null)[]
     myTeam: number
+    opts: RoomOpts
   } = $props()
 
   let showLast = $state(false)
@@ -81,12 +82,18 @@
       {#if pub.bidder !== null}
         <div class="iline">{$t.playingTeam}: <strong>{name(pub.bidder)}</strong> ({teamName(pub.bidder % 2)})</div>
       {/if}
-      {#if $settings.score && (pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER')}
-        <div class="iline">{$t.tricks}: {$t.wij} {pub.tricksWon[myTeam]}–{pub.tricksWon[1 - myTeam]} {$t.zij}</div>
-        <div class="iline">{$t.points}: {$t.wij} {pub.points[myTeam]}–{pub.points[1 - myTeam]} {$t.zij}</div>
+      {#if opts.score && (pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER')}
+        <div class="iline">
+          {$t.tricks}: <span class="nw">{$t.wij} {pub.tricksWon[myTeam]}</span> –
+          <span class="nw">{$t.zij} {pub.tricksWon[1 - myTeam]}</span>
+        </div>
+        <div class="iline">
+          {$t.points}: <span class="nw">{$t.wij} {pub.points[myTeam]}</span> –
+          <span class="nw">{$t.zij} {pub.points[1 - myTeam]}</span>
+        </div>
       {/if}
 
-      {#if $settings.lastTricks && lastTricks.length > 0}
+      {#if lastTricks.length > 0}
         <button class="link-btn" onclick={() => (showLast = !showLast)} aria-expanded={showLast}>
           {$t.lastTricks} {showLast ? '▴' : '▾'}
         </button>

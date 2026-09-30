@@ -16,10 +16,16 @@
     onsolo: (name: string) => void
   } = $props()
 
-  // Invite links land as ?room=CODE — prefill the join field.
+  // Invite links land as ?room=CODE — show a dedicated join-only view.
   const inviteCode = new URLSearchParams(location.search).get('room') ?? ''
   let name = $state(localStorage.getItem('koejon-name') ?? '')
   let code = $state(inviteCode.toUpperCase())
+  let invited = $state(!!inviteCode)
+
+  function backToHome() {
+    invited = false
+    history.replaceState(null, '', location.pathname)
+  }
 
   const HERO: Card[] = [
     { s: 'H', r: 'A' },
@@ -57,26 +63,40 @@
 
   {#if error}<div class="alert">{error}</div>{/if}
 
-  <div class="panel home-panel">
-    <label class="field">
-      <span>{$t.nickname}</span>
-      <input bind:value={name} placeholder={$t.nicknamePh} maxlength="20" oninput={save} />
-    </label>
-    <div class="home-actions">
-      <button class="btn big primary" disabled={!name.trim()} onclick={() => oncreate(name.trim())}>
-        <span>🌐 {$t.createRoom}</span>
-      </button>
-      <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim())}>
-        <span>🤖 {$t.playSolo}</span>
-      </button>
+  {#if invited}
+    <div class="panel home-panel">
+      <h2>{$t.joinRoom} · {inviteCode.toUpperCase()}</h2>
+      <form class="invite-join" onsubmit={join}>
+        <label class="field">
+          <span>{$t.nickname}</span>
+          <input bind:value={name} placeholder={$t.nicknamePh} maxlength="20" oninput={save} />
+        </label>
+        <button class="btn big primary" type="submit" disabled={!name.trim()}>{$t.joinRoom}</button>
+      </form>
+      <button class="link-btn" onclick={backToHome}>← {$t.title}</button>
     </div>
-    <div class="divider"><span>{$t.or}</span></div>
-    <form class="join-form" onsubmit={join}>
+  {:else}
+    <div class="panel home-panel">
       <label class="field">
-        <span>{$t.joinRoom}</span>
-        <input class="code-input" bind:value={code} placeholder={$t.codePh} maxlength="6" />
+        <span>{$t.nickname}</span>
+        <input bind:value={name} placeholder={$t.nicknamePh} maxlength="20" oninput={save} />
       </label>
-      <button class="btn" type="submit" disabled={!name.trim() || !code.trim()}>{$t.joinRoom}</button>
-    </form>
-  </div>
+      <div class="home-actions">
+        <button class="btn big primary" disabled={!name.trim()} onclick={() => oncreate(name.trim())}>
+          <span>🌐 {$t.createRoom}</span>
+        </button>
+        <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim())}>
+          <span>🤖 {$t.playSolo}</span>
+        </button>
+      </div>
+      <div class="divider"><span>{$t.or}</span></div>
+      <form class="join-form" onsubmit={join}>
+        <label class="field">
+          <span>{$t.joinRoom}</span>
+          <input class="code-input" bind:value={code} placeholder={$t.codePh} maxlength="6" />
+        </label>
+        <button class="btn" type="submit" disabled={!name.trim() || !code.trim()}>{$t.joinRoom}</button>
+      </form>
+    </div>
+  {/if}
 </div>

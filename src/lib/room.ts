@@ -11,6 +11,7 @@ import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
 import { db } from './firebase'
 import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
+import { DEFAULT_ROOM_OPTS } from './net-types'
 
 export const roomRef = (code: string) => doc(db, 'rooms', code)
 export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
@@ -164,6 +165,7 @@ export async function createRoom(uid: string, name: string): Promise<RoomSession
       pub: toPublic(engine),
       version: 1,
       heartbeat: Date.now(),
+      opts: { ...DEFAULT_ROOM_OPTS },
     }
     await setDoc(ref, room)
     await setDoc(engineRef(code), { json: JSON.stringify(engine) })
@@ -179,9 +181,13 @@ export async function joinRoom(code: string, uid: string, name: string): Promise
   if (!snap.exists()) throw new Error('room-not-found')
   const room = snap.data() as RoomDoc
   const session = new RoomSession(code, uid)
-  if (seatOf(room, uid) >= 0) return session // rejoin
-  if (room.pub && room.pub.phase !== 'LOBBY') throw new Error('room-started')
-  if (room.seats.every((s) => s !== null)) throw new Error('room-full')
+  const si = seatOf(room, uid)
+  const reclaim = si >= 0 && !!room.seats[si]!.bot
+  if (si >= 0 && !reclaim) return session // rejoin
+  if (!reclaim) {
+    if (room.pub && room.pub.phase !== 'LOBBY') throw new Error('room-started')
+    if (room.seats.every((s) => s !== null)) throw new Error('room-full')
+  }
   await session.send({ kind: 'join', name })
   return session
 }

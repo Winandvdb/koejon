@@ -69,6 +69,11 @@ body,
   margin: 0;
 }
 
+/* No pull-to-refresh or rubber-band reveal while playing. */
+html {
+  overscroll-behavior-y: none;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -173,6 +178,21 @@ h3 {
 }
 
 /* ---------- Controls ---------- */
+
+/* Touch polish: no tap flash, no double-tap zoom delay, no long-press
+   selection/callout on game controls. */
+.btn,
+.icon-btn,
+.fab,
+.segmented button,
+.hand-card,
+.boomke-chip,
+.link-btn {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
 
 .btn {
   appearance: none;
@@ -308,13 +328,6 @@ h3 {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
-}
-
-.suit-btn {
-  font-size: 1.5rem;
-  width: 54px;
-  padding: 4px 0;
-  line-height: 1.2;
 }
 
 .field {
@@ -489,10 +502,11 @@ input[type='checkbox'] {
   background: var(--border);
 }
 
-.join-form {
+.join-form,
+.invite-join {
   display: flex;
-  gap: 8px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .code-input {
@@ -562,6 +576,21 @@ input[type='checkbox'] {
   border-bottom: 1px solid var(--border);
 }
 
+.seat-list li.clickable {
+  cursor: pointer;
+}
+
+.seat-list li.picked {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.move-hint {
+  margin: 0 0 8px;
+}
+
 .seat-list li:last-child {
   border-bottom: 0;
 }
@@ -572,6 +601,27 @@ input[type='checkbox'] {
   gap: 4px;
   flex: 1;
   min-width: 0;
+}
+
+/* The seat name doubles as the host's pick/move handle. */
+.seat-list .row-pick {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.seat-list .row-pick:disabled {
+  cursor: default;
+}
+
+.seat-list .seat-nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .seat-list .avatar {
@@ -779,6 +829,8 @@ input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* The green felt: seats on fixed grid slots — panels can never push a seat away. */
@@ -847,14 +899,14 @@ input[type='checkbox'] {
   align-items: center;
   justify-content: flex-end;
   /* Above my nameplate and clear of my overlapping hand. */
-  padding-bottom: calc(var(--card) * 0.6 + 42px);
+  padding-bottom: calc(var(--card) * 0.6 + 20px);
   pointer-events: none;
   gap: 8px;
 }
 
 /* When I deal, my turned cards float above my nameplate — lift the overlay clear of them. */
 .felt-overlay.lifted {
-  padding-bottom: calc(var(--card) * 1.62 + 56px);
+  padding-bottom: calc(var(--card) * 1.62 + 30px);
 }
 
 /* While a hand is scored the boomke is open in the right corner:
@@ -899,6 +951,15 @@ input[type='checkbox'] {
   cursor: pointer;
   box-shadow: var(--shadow);
   white-space: nowrap;
+}
+
+/* Shown while the hand waits on another seat's confirmation. */
+.wait-hint {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  opacity: 0.9;
 }
 
 /* ---------- Floating action buttons on the felt ---------- */
@@ -1319,6 +1380,11 @@ input[type='checkbox'] {
   transform: translateY(-14px);
 }
 
+/* Touch has no hover: a press lifts the card a bit before it is played. */
+.hand-card.playable:active {
+  transform: translateY(-10px);
+}
+
 .hand-card.dim .card-face {
   filter: brightness(0.72) saturate(0.6);
 }
@@ -1390,6 +1456,10 @@ input[type='checkbox'] {
 }
 
 .iline {
+  white-space: nowrap;
+}
+
+.nw {
   white-space: nowrap;
 }
 
@@ -1614,25 +1684,43 @@ input[type='checkbox'] {
     font-size: 14px;
   }
 
+  /* Inputs under 16px make iOS Safari zoom on focus. */
+  input:not([type='checkbox']) {
+    font-size: 16px;
+  }
+
   .topbar {
     padding: 6px 8px;
     gap: 2px;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+  }
+
+  .segmented button {
+    padding: 4px 8px;
+  }
+
+  .room-chip {
+    margin-left: 4px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+  }
+
+  /* A hand is at most 6 cards: spread them across the width so each keeps a
+     wide tap strip instead of the deep overlap meant for 12. */
+  .hand-card + .hand-card {
+    margin-left: calc(min(var(--cw) * 0.8, (100vw - var(--cw) - 32px) / 5) - var(--cw));
   }
 
   .brand-name {
     display: none;
   }
 
-  .suit-btn {
-    width: 46px;
-  }
-
   .btn {
     padding: 8px 12px;
-  }
-
-  .invite .code {
-    font-size: 1.5rem;
   }
 
   .modal-backdrop {
@@ -1662,7 +1750,7 @@ input[type='checkbox'] {
   .felt {
     grid-template-columns: 62px minmax(0, 1fr) 62px;
     margin: 6px 6px 0;
-    padding: 8px 6px calc(var(--card) * 0.5);
+    padding: 8px;
     border-radius: 20px;
   }
 
@@ -1670,6 +1758,20 @@ input[type='checkbox'] {
      in the bottom-right corner can never overlap it. */
   .me-anchor {
     translate: 0 -44px;
+  }
+
+  /* The hint floats left on phones: right is where the boomke chip lives. */
+  .turn-hint {
+    left: auto;
+    right: calc(100% + 8px);
+    font-size: 0.78rem;
+  }
+
+  /* Long hints must wrap instead of running off the felt. */
+  .blind-hint {
+    white-space: normal;
+    text-align: center;
+    max-width: 78vw;
   }
 
   /* Long info lines (e.g. the playing team) must wrap, not clip. */
@@ -1724,8 +1826,24 @@ input[type='checkbox'] {
     height: auto;
   }
 
+  /* The trump/level title may not overflow the narrow panel. */
+  .info-title {
+    white-space: normal;
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
   .last-tricks {
     gap: 0;
+  }
+
+  /* Cards share the panel width evenly — fixed px widths overflowed and the
+     overflow:hidden body clipped the last card and the winner's ring. */
+  .last-tricks .lt-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3px;
+    padding: 0 3px;
   }
 
   .last-tricks .mini {
@@ -1734,6 +1852,12 @@ input[type='checkbox'] {
     min-width: 0;
     max-width: none;
     font-size: 0.6rem;
+  }
+
+  .last-tricks .mini > .card-face {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 5 / 7;
   }
 
   .last-tricks .card-face .br,
@@ -1746,5 +1870,32 @@ input[type='checkbox'] {
     inset: 0;
     justify-content: center;
     font-size: calc(var(--cw) * 0.46);
+  }
+}
+
+/* Very narrow phones: the room code is also in the lobby invite panel. */
+@media (max-width: 380px) {
+  .room-chip {
+    display: none;
+  }
+}
+
+/* Landscape phones: cards must shrink with height, not width — the felt is
+   only ~240 px tall once the topbar and the hand are accounted for. */
+@media (max-height: 560px) and (orientation: landscape) {
+  :root {
+    --card: clamp(36px, 13vh, 58px);
+  }
+
+  .felt-overlay.lifted {
+    padding-bottom: calc(var(--card) * 0.9 + 44px);
+  }
+
+  .hero-cards {
+    height: 96px;
+  }
+
+  .hero-card {
+    --cw: 56px;
   }
 }

@@ -13,7 +13,6 @@
   import type { RoomDoc } from './lib/net-types'
   import { HostGame } from './lib/host'
   import { lang, t } from './lib/i18n'
-  import { settings } from './lib/settings'
   import { theme } from './lib/theme'
   import type { Action } from './engine'
   import Home from './components/Home.svelte'
@@ -31,7 +30,6 @@
 
   onMount(async () => {
     uid = await signIn()
-    const urlCode = new URLSearchParams(location.search).get('room')
     const storedCode = localStorage.getItem('koejon-room')
     const name = localStorage.getItem('koejon-name') ?? ''
     try {
@@ -41,9 +39,6 @@
         const room = snap.exists() ? (snap.data() as RoomDoc) : null
         if (room && seatOf(room, uid) >= 0) attach(await joinRoom(storedCode, uid, name))
         else localStorage.removeItem('koejon-room')
-      } else if (urlCode && name) {
-        // Invite link + stored nickname: join straight into the lobby.
-        attach(await joinRoom(urlCode, uid, name))
       }
     } catch {
       localStorage.removeItem('koejon-room')
@@ -51,14 +46,25 @@
   })
 
   let unsubView: (() => void) | null = null
+  let hadRoom = $state(false)
 
   function attach(s: RoomSession) {
     teardown()
     session = s
-    unsubView = s.view.subscribe((v) => (view = v))
+    unsubView = s.view.subscribe((v) => {
+      view = v
+      if (v.room) hadRoom = true
+    })
+    err = ''
     localStorage.setItem('koejon-room', s.code)
     history.replaceState(null, '', `${location.pathname}?room=${s.code}`)
   }
+
+  // The room doc vanished (host destroyed it): leave cleanly instead of
+  // dropping back onto a dead invite screen.
+  $effect(() => {
+    if (session && view && hadRoom && !view.room) teardown()
+  })
 
   function teardown() {
     unsubView?.()
@@ -69,6 +75,8 @@
     host = null
     hostPromise = null
     view = null
+    hadRoom = false
+    err = ''
     localStorage.removeItem('koejon-room')
     history.replaceState(null, '', location.pathname)
   }
@@ -191,13 +199,32 @@
   {#if session}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
   <div class="settings-anchor">
-    <button class="icon-btn" title={$t.settings} aria-label={$t.settings} onclick={() => (showSettings = !showSettings)}>⚙</button>
-    {#if showSettings}
-      <div class="settings-pop panel">
-        <label><input type="checkbox" bind:checked={$settings.info} /> {$t.showInfo}</label>
-        <label><input type="checkbox" bind:checked={$settings.score} /> {$t.showScore}</label>
-        <label><input type="checkbox" bind:checked={$settings.lastTricks} /> {$t.showLastTricks}</label>
-      </div>
+    {#if view?.room}
+      {@const r = view.room}
+      {@const hostCtl = r.hostUid !== uid}
+      <button class="icon-btn" title={$t.settings} aria-label={$t.settings} onclick={() => (showSettings = !showSettings)}>⚙</button>
+      {#if showSettings}
+        <div class="settings-pop panel">
+          <label>
+            <input
+              type="checkbox"
+              checked={r.opts?.info ?? true}
+              disabled={hostCtl}
+              onchange={(e) => host?.setOption('info', e.currentTarget.checked)}
+            />
+            {$t.showInfo}
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={r.opts?.score ?? false}
+              disabled={hostCtl}
+              onchange={(e) => host?.setOption('score', e.currentTarget.checked)}
+            />
+            {$t.showScore}
+          </label>
+        </div>
+      {/if}
     {/if}
   </div>
   <button class="icon-btn" title={$t.rules} aria-label={$t.rules} onclick={() => (showRules = true)}>📖</button>
@@ -230,6 +257,7 @@
       onremovebot={(i) => host?.removeBot(i)}
       onkick={(i) => host?.kickSeat(i)}
       onshuffle={() => host?.shuffleSeats()}
+      onswap={(a, b) => host?.swapSeats(a, b)}
       onstart={() => host?.startGame()}
     />
   {:else if view.mySeat < 0}

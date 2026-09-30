@@ -6,6 +6,16 @@ export interface SeatInfo {
   bot: boolean
 }
 
+/** Host-controlled table display options; guests inherit them. */
+export interface RoomOpts {
+  /** Trump suit, level, multiplier and playing team on the table. */
+  info: boolean
+  /** Running points and trick counts. */
+  score: boolean
+}
+
+export const DEFAULT_ROOM_OPTS: RoomOpts = { info: true, score: false }
+
 export interface RoomDoc {
   code: string
   hostUid: string
@@ -14,6 +24,7 @@ export interface RoomDoc {
   version: number
   /** Host heartbeat, epoch ms. Clients flag "host left" when stale. */
   heartbeat: number
+  opts?: RoomOpts
 }
 
 /** rooms/{code}/hands/{uid} */

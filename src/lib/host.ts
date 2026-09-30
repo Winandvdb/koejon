@@ -12,8 +12,8 @@ import type { Action, Card, State } from '../engine'
 import { botAction } from '../bots/bot'
 import { db } from './firebase'
 import { actionsCol, engineRef, handRef, roomRef } from './room'
-import type { HostHandsDoc, IntentDoc, RoomDoc, SeatInfo } from './net-types'
-import { BOT_UID_PREFIX } from './net-types'
+import type { HostHandsDoc, IntentDoc, RoomDoc, RoomOpts, SeatInfo } from './net-types'
+import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 
 const BOT_NAMES = ['Klaas', 'Grietje', 'Piet', 'Truus', 'Henk', 'Ans']
 
@@ -47,6 +47,7 @@ export interface HostOptions {
 export class HostGame {
   private state!: State
   private seats: (SeatInfo | null)[] = [null, null, null, null]
+  private opts: RoomOpts = { ...DEFAULT_ROOM_OPTS }
   private version = 0
   private busy: Promise<void> = Promise.resolve()
   private unsubs: Unsubscribe[] = []
@@ -77,6 +78,7 @@ export class HostGame {
     if (room.hostUid !== uid) throw new Error('not-host')
     h.seats = room.seats
     h.version = room.version
+    h.opts = room.opts ?? { ...DEFAULT_ROOM_OPTS }
     const engSnap = await getDoc(engineRef(code))
     h.state = engSnap.exists()
       ? (JSON.parse((engSnap.data() as { json: string }).json) as State)
@@ -155,6 +157,23 @@ export class HostGame {
     })
   }
 
+  /** Host toggles a shared display option; guests follow the room value. */
+  setOption(key: keyof RoomOpts, value: boolean): void {
+    this.enqueue(async () => {
+      this.opts = { ...this.opts, [key]: value }
+      await this.commit()
+    })
+  }
+
+  /** Swap two seats — or move into an empty one. */
+  swapSeats(a: number, b: number): void {
+    this.enqueue(async () => {
+      if (this.state.phase !== 'LOBBY' || a === b) return
+      ;[this.seats[a], this.seats[b]] = [this.seats[b], this.seats[a]]
+      await this.commit()
+    })
+  }
+
   startGame(): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY') return
@@ -220,7 +239,16 @@ export class HostGame {
     try {
       const intent = data.intent
       if (intent.kind === 'join') {
-        if (this.state.phase === 'LOBBY' && !this.seats.some((s) => s?.uid === uid)) {
+        // Reclaim: the seat is still this uid's, held by a bot since they left.
+        const ri = this.seats.findIndex((s) => s?.uid === uid && s.bot)
+        if (ri >= 0) {
+          this.seats[ri] = {
+            uid,
+            name: String(intent.name ?? '').slice(0, 20) || this.seats[ri]!.name,
+            bot: false,
+          }
+          await this.commit()
+        } else if (this.state.phase === 'LOBBY' && !this.seats.some((s) => s?.uid === uid)) {
           const i = this.seats.findIndex((s) => s === null)
           if (i >= 0) {
             this.seats[i] = {
@@ -237,8 +265,9 @@ export class HostGame {
           if (this.state.phase === 'LOBBY') {
             this.seats[i] = null
           } else {
-            // Mid-game leave: a bot takes over the seat so the match can finish.
-            this.seats[i] = { uid: `${BOT_UID_PREFIX}${i}`, name: this.seats[i]!.name, bot: true }
+            // Mid-game leave: a bot holds the seat, but the uid stays so the
+            // player can reclaim it by rejoining the room.
+            this.seats[i] = { uid, name: this.seats[i]!.name, bot: true }
             await deleteDoc(handRef(this.code, uid))
           }
           await this.commit()
@@ -280,6 +309,7 @@ export class HostGame {
       pub: toPublic(this.state),
       version: this.version + 1,
       heartbeat: Date.now(),
+      opts: this.opts,
     }
     batch.update(roomRef(this.code), room)
     const botHands: Record<number, Card[]> = {}

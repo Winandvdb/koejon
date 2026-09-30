@@ -12,6 +12,7 @@
     onremovebot,
     onkick,
     onshuffle,
+    onswap,
     onstart,
   }: {
     room: RoomDoc
@@ -21,8 +22,24 @@
     onremovebot: (seat: number) => void
     onkick: (seat: number) => void
     onshuffle: () => void
+    onswap: (a: number, b: number) => void
     onstart: () => void
   } = $props()
+
+  /** Picked seat index for manual moves (host only): tap a player, tap a seat. */
+  let picked = $state(-1)
+
+  function pickSeat(i: number) {
+    if (!isHost) return
+    if (picked === i) {
+      picked = -1
+    } else if (picked >= 0) {
+      onswap(picked, i)
+      picked = -1
+    } else if (room.seats[i]) {
+      picked = i
+    }
+  }
 
   const full = $derived(room.seats.every((s) => s !== null))
   const myTeam = $derived(mySeat % 2)
@@ -68,11 +85,15 @@
     <h2>{$t.lobby}</h2>
     <ul class="seat-list">
       {#each room.seats as seat, i (i)}
-        <li class:is-bot={seat?.bot}>
-          <span class="seat-name">
+        <li class:is-bot={seat?.bot} class:picked={picked === i}>
+          <button
+            class="seat-name row-pick"
+            disabled={!isHost || (!seat && picked < 0)}
+            onclick={() => pickSeat(i)}
+          >
             {#if seat}
               <span class="avatar">{seat.bot ? '🤖' : seat.name.slice(0, 1).toUpperCase()}</span>
-              {seat.name}
+              <span class="seat-nm">{seat.name}</span>
               {#if i === mySeat}<span class="tag">{$t.you}</span>{/if}
               {#if seat.uid === room.hostUid}<span class="tag">{$t.host}</span>{/if}
               {#if seat.bot}<span class="tag muted">{$t.bot}</span>{/if}
@@ -80,22 +101,31 @@
               <span class="avatar empty-avatar"></span>
               <em>{$t.empty}</em>
             {/if}
-          </span>
+          </button>
           {#if seat && isHost && (seat.bot || i !== mySeat)}
             <button
               class="icon-btn tiny"
               title={$t.remove}
               aria-label={$t.remove}
-              onclick={() => (seat.bot ? onremovebot(i) : onkick(i))}>✕</button>
+              onclick={(e) => {
+                e.stopPropagation()
+                seat.bot ? onremovebot(i) : onkick(i)
+              }}>✕</button>
           {/if}
           {#if !seat && isHost}
-            <button class="btn tiny" onclick={() => onaddbot(i)}>+ {$t.bot}</button>
+            <button
+              class="btn tiny"
+              onclick={(e) => {
+                e.stopPropagation()
+                onaddbot(i)
+              }}>+ {$t.bot}</button>
           {/if}
           <span class="team" class:ta={i % 2 === myTeam}>{teamName(i)}</span>
         </li>
       {/each}
     </ul>
     {#if isHost}
+      <p class="move-hint small muted">{$t.moveHint}</p>
       <button class="btn" onclick={onshuffle}>{$t.shuffle}</button>
     {/if}
   </div>
