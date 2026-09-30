@@ -69,9 +69,18 @@
   }
 
   // The room doc vanished (host destroyed it): leave cleanly instead of
-  // dropping back onto a dead invite screen.
+  // dropping back onto a dead invite screen. While attaching (room not yet
+  // loaded) wait a moment, then give up so nobody is stuck on a spinner.
   $effect(() => {
-    if (session && view && hadRoom && !view.room) teardown()
+    if (!session || !view || view.room) return
+    if (hadRoom) {
+      teardown()
+      return
+    }
+    const t = setTimeout(() => {
+      if (view && !view.room) teardown()
+    }, 5000)
+    return () => clearTimeout(t)
   })
 
   function teardown() {
@@ -254,8 +263,12 @@
 <main class="main">
   {#if !uid}
     <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
-  {:else if !session || !view || !view.room}
+  {:else if !session}
     <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} />
+  {:else if !view || !view.room}
+    <!-- Attaching, or the room doc just vanished — teardown runs in the
+         effect; never mount Home here or the invite view flashes. -->
+    <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
   {:else if view.room.pub!.phase === 'LOBBY'}
     <Lobby
       room={view.room}
