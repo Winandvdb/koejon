@@ -93,6 +93,7 @@
     hostPromise = null
     view = null
     hadRoom = false
+    soloStarting = false
     err = ''
     localStorage.removeItem('koejon-room')
     history.replaceState(null, '', location.pathname)
@@ -138,8 +139,12 @@
   }
 
   // Solo: create a room, fill it with bots and start right away.
+  // soloStarting hides the lobby flash until the first deal starts.
+  let soloStarting = $state(false)
+
   async function onSolo(name: string, level: BotLevel) {
     err = ''
+    soloStarting = true
     try {
       attach(await createRoom(uid, name))
       const h = await ensureHost()
@@ -148,9 +153,14 @@
       h.addBot(3, level)
       h.startGame()
     } catch (e) {
+      soloStarting = false
       showErr(e, '', true)
     }
   }
+
+  $effect(() => {
+    if (soloStarting && view?.room?.pub?.phase !== 'LOBBY') soloStarting = false
+  })
 
   async function onJoin(code: string, name: string) {
     err = ''
@@ -268,6 +278,8 @@
   {:else if !view || !view.room}
     <!-- Attaching, or the room doc just vanished — teardown runs in the
          effect; never mount Home here or the invite view flashes. -->
+    <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
+  {:else if soloStarting && view.room.pub!.phase === 'LOBBY'}
     <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
   {:else if view.room.pub!.phase === 'LOBBY'}
     <Lobby
