@@ -3,6 +3,7 @@ import {
   apply,
   createMatch,
   pendingSeats,
+  RANK_ORDER,
   trickWinnerIndex,
 } from '../src/engine'
 import type { State } from '../src/engine'
@@ -23,7 +24,23 @@ function runMatch(seed: number): { state: State; steps: number; hands: number } 
     const seats = pendingSeats(s)
     if (seats.length === 0) throw new Error(`match ${seed} stalled in ${s.phase}`)
     // Act with the first pending seat (others wait for the next step).
-    s = apply(s, botAction(s, seats[0], rand))
+    const a = botAction(s, seats[0], rand)
+    // No-underbuy invariant: a lower trump is never played while the seat can
+    // follow the led suit and a trump already lies in the trick.
+    if (a.type === 'play' && s.trick.length > 0) {
+      const trump = s.trump!
+      const led = s.trick[0].card.s
+      const top = Math.max(
+        0,
+        ...s.trick.filter((tc) => tc.card.s === trump).map((tc) => RANK_ORDER[tc.card.r]),
+      )
+      const canFollow = s.hands[a.seat].some((c) => c.s === led)
+      if (led !== trump && canFollow && top > 0) {
+        const ok = a.card.s === led || (a.card.s === trump && RANK_ORDER[a.card.r] > top)
+        expect(ok, `underbuy in match ${seed}`).toBe(true)
+      }
+    }
+    s = apply(s, a)
 
     // Per-trick invariant: the recorded winner really won the trick.
     if (s.lastTrick && s.lastTrick.length === 4 && s.tricksPlayed !== lastTrickSeen) {
