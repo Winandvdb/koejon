@@ -180,3 +180,51 @@ describe('bot dealer choice', () => {
     expect(botAction(s, 0, never)).toEqual({ type: 'choose', seat: 0, suit: 'H' })
   })
 })
+
+describe('bot levels', () => {
+  it('easy ignores knijpen', () => {
+    const s = bidState(TRASH, { lines: [2, 13] })
+    expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'bid', seat: 1, play: false })
+  })
+
+  it('easy never asks troefke, even with a strong trump hand', () => {
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = [C('H', '9'), C('H', 'J'), C('H', 'K'), C('S', '9'), C('C', '9'), C('D', '9')]
+    const s = playingState({ bidder: 1, turn: 3, leader: 3, trickAcks: [3], hands })
+    expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'ack', seat: 1 })
+  })
+
+  it('easy dealer keeps the plain 70% rule', () => {
+    const s = playingState({
+      phase: 'DEALER_CHOICE',
+      dealer: 0,
+      turned: { first: C('H', 'A'), second: C('H', '10'), secondUp: true },
+    })
+    // rand 0.8: easy passes (>0.7), normal goes (<0.9).
+    expect(botAction(s, 0, () => 0.8, 'easy')).toEqual({ type: 'choose', seat: 0, suit: null })
+    expect(botAction(s, 0, () => 0.8, 'normal')).toEqual({ type: 'choose', seat: 0, suit: 'H' })
+  })
+
+  it('normal counts trumps and leads the boss; easy has no memory', () => {
+    // Trick 1: HA fell under a spade lead, won by seat2 (team0) — no sweep.
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = [C('H', 'K'), C('S', '9'), C('D', '9'), C('C', '9'), C('C', '10')]
+    const s = playingState({
+      bidder: 1,
+      turn: 1,
+      tricksPlayed: 1,
+      tricksWon: [1, 0],
+      hands,
+      log: [
+        { t: 'card', seat: 0, card: C('S', '9') },
+        { t: 'card', seat: 3, card: C('S', '10') },
+        { t: 'card', seat: 2, card: C('H', 'A') },
+        { t: 'card', seat: 1, card: C('S', 'J') },
+        { t: 'trick', seat: 2 },
+      ],
+    })
+    // HA is gone, so HK is boss — normal pulls it; easy assumes HA is still out.
+    expect(botAction(s, 1, smart, 'normal')).toEqual({ type: 'play', seat: 1, card: C('H', 'K') })
+    expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('S', '9') })
+  })
+})

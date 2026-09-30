@@ -255,6 +255,7 @@
       mySeat={view.mySeat}
       onaddbot={(i) => host?.addBot(i)}
       onremovebot={(i) => host?.removeBot(i)}
+      onbotlevel={(i) => host?.cycleBotLevel(i)}
       onkick={(i) => host?.kickSeat(i)}
       onshuffle={() => host?.shuffleSeats()}
       onswap={(a, b) => host?.swapSeats(a, b)}

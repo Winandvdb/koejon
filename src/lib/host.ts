@@ -9,7 +9,8 @@ import {
 } from 'firebase/firestore'
 import { apply, createMatch, pendingSeats, toPublic, visibleHand } from '../engine'
 import type { Action, Card, State } from '../engine'
-import { botAction } from '../bots/bot'
+import { botAction, BOT_LEVELS } from '../bots/bot'
+import type { BotLevel } from '../bots/bot'
 import { db } from './firebase'
 import { actionsCol, engineRef, handRef, roomRef } from './room'
 import type { HostHandsDoc, IntentDoc, RoomDoc, RoomOpts, SeatInfo } from './net-types'
@@ -126,12 +127,24 @@ export class HostGame {
 
   // ---- lobby operations (host UI calls these directly) ----
 
-  addBot(seat: number): void {
+  addBot(seat: number, level: BotLevel = 'normal'): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY' || this.seats[seat] !== null) return
       const taken = new Set(this.seats.map((s) => s?.name))
       const name = BOT_NAMES.find((n) => !taken.has(n)) ?? `Bot ${seat + 1}`
-      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true }
+      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
+      await this.commit()
+    })
+  }
+
+  /** Rotate a bot's difficulty: easy → normal → hard. */
+  cycleBotLevel(seat: number): void {
+    this.enqueue(async () => {
+      if (this.state.phase !== 'LOBBY') return
+      const s = this.seats[seat]
+      if (!s?.bot) return
+      const cur = s.botLevel ?? 'normal'
+      s.botLevel = BOT_LEVELS[(BOT_LEVELS.indexOf(cur) + 1) % BOT_LEVELS.length]
       await this.commit()
     })
   }
@@ -353,10 +366,10 @@ export class HostGame {
     const seat = this.autoSeat()
     if (seat === undefined) return
     // The "seen it" pause exists for humans — bots confirm instantly.
-    if (botAction(this.state, seat).type === 'ack') {
+    if (botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal').type === 'ack') {
       this.enqueue(async () => {
         const s = this.autoSeat()
-        if (s !== undefined && this.tryApply(botAction(this.state, s))) await this.commit()
+        if (s !== undefined && this.tryApply(botAction(this.state, s, Math.random, this.seats[s]?.botLevel ?? 'normal'))) await this.commit()
       })
       return
     }
@@ -380,7 +393,7 @@ export class HostGame {
       this.enqueue(async () => {
         const seat = this.autoSeat()
         if (seat === undefined) return
-        const a = botAction(this.state, seat)
+        const a = botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal')
         if (this.tryApply(a)) await this.commit()
       })
     }, wait)

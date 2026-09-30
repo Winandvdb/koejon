@@ -10,6 +10,7 @@
     mySeat,
     onaddbot,
     onremovebot,
+    onbotlevel,
     onkick,
     onshuffle,
     onswap,
@@ -20,6 +21,7 @@
     mySeat: number
     onaddbot: (seat: number) => void
     onremovebot: (seat: number) => void
+    onbotlevel: (seat: number) => void
     onkick: (seat: number) => void
     onshuffle: () => void
     onswap: (a: number, b: number) => void
@@ -42,6 +44,7 @@
   }
 
   const full = $derived(room.seats.every((s) => s !== null))
+  const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
   const myTeam = $derived(mySeat % 2)
   const teamName = (seat: number) => (seat % 2 === myTeam ? $t.wij : $t.zij)
 
@@ -102,6 +105,15 @@
               <em>{$t.empty}</em>
             {/if}
           </button>
+          {#if seat?.bot && isHost}
+            <button
+              class="tag lvl-btn"
+              title={$t.botLevel}
+              onclick={(e) => {
+                e.stopPropagation()
+                onbotlevel(i)
+              }}>{lvlName[seat.botLevel ?? 'normal']}</button>
+          {/if}
           {#if seat && isHost && (seat.bot || i !== mySeat)}
             <button
               class="icon-btn tiny"

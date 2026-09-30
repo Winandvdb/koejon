@@ -16,8 +16,24 @@ const oppSeatsOf = (seat: number) => [(seat + 1) % 4, (seat + 3) % 4]
 
 // ---- Tunables --------------------------------------------------------------
 
-/** Share of card decisions that use the smart rule; the rest dump low. */
-const SKILL = 0.9
+export type BotLevel = 'easy' | 'normal' | 'hard'
+export const BOT_LEVELS: BotLevel[] = ['easy', 'normal', 'hard']
+
+export interface BotProfile {
+  /** Share of card decisions that use the smart rule; the rest dump low. */
+  skill: number
+  /** What the bot remembers: nothing, trumps only, or trumps plus voids. */
+  memory: 'none' | 'trumps' | 'full'
+  /** Knijpen, troefke and dealer-choice weighing — beginners lack these. */
+  tactics: boolean
+}
+
+export const BOT_PROFILES: Record<BotLevel, BotProfile> = {
+  easy: { skill: 0.55, memory: 'none', tactics: false },
+  normal: { skill: 0.8, memory: 'trumps', tactics: true },
+  hard: { skill: 0.95, memory: 'full', tactics: true },
+}
+
 const BID_THRESHOLD = 8
 /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
 const KNIJP_MIN = 4
@@ -90,37 +106,41 @@ interface HandRead {
  * has shown out of a suit. Side-suit ranks are deliberately not counted, so the
  * bot still misjudges some tricks — like a human does.
  */
-function readHand(s: State, seat: number): HandRead {
+function readHand(s: State, seat: number, memory: BotProfile['memory']): HandRead {
   const trump = s.trump!
-  // Cards played this hand: 4 per finished trick plus the open one.
-  const want = s.tricksPlayed * 4 + s.trick.length
-  const played: TrickCard[] = []
-  for (let i = s.log.length - 1; i >= 0 && played.length < want; i--) {
-    const ev = s.log[i]
-    if (ev.t === 'card' && ev.card && ev.seat !== undefined) {
-      played.unshift({ seat: ev.seat, card: ev.card })
-    }
-  }
-  // A sluff of a third suit, a trump under an existing trump, or any non-trump
-  // under a trump lead means the led suit was missing.
+  const trumpsGone = new Set<Rank>()
   const voids = new Set<string>()
-  for (let t = 0; t + 1 < played.length; t += 4) {
-    const w = played.slice(t, t + 4)
-    const led = w[0].card.s
-    let topTrump = led === trump ? RANK_ORDER[w[0].card.r] : 0
-    for (let i = 1; i < w.length; i++) {
-      const c = w[i].card
-      if (c.s === trump) {
-        if (led !== trump && RANK_ORDER[c.r] < topTrump) voids.add(`${w[i].seat}:${led}`)
-        topTrump = Math.max(topTrump, RANK_ORDER[c.r])
-      } else if (led === trump || c.s !== led) {
-        voids.add(`${w[i].seat}:${led}`)
+  if (memory !== 'none') {
+    // Cards played this hand: 4 per finished trick plus the open one.
+    const want = s.tricksPlayed * 4 + s.trick.length
+    const played: TrickCard[] = []
+    for (let i = s.log.length - 1; i >= 0 && played.length < want; i--) {
+      const ev = s.log[i]
+      if (ev.t === 'card' && ev.card && ev.seat !== undefined) {
+        played.unshift({ seat: ev.seat, card: ev.card })
+      }
+    }
+    for (const tc of played) if (tc.card.s === trump) trumpsGone.add(tc.card.r)
+    if (memory === 'full') {
+      // A sluff of a third suit, a trump under an existing trump, or any
+      // non-trump under a trump lead means the led suit was missing.
+      for (let t = 0; t + 1 < played.length; t += 4) {
+        const w = played.slice(t, t + 4)
+        const led = w[0].card.s
+        let topTrump = led === trump ? RANK_ORDER[w[0].card.r] : 0
+        for (let i = 1; i < w.length; i++) {
+          const c = w[i].card
+          if (c.s === trump) {
+            if (led !== trump && RANK_ORDER[c.r] < topTrump) voids.add(`${w[i].seat}:${led}`)
+            topTrump = Math.max(topTrump, RANK_ORDER[c.r])
+          } else if (led === trump || c.s !== led) {
+            voids.add(`${w[i].seat}:${led}`)
+          }
+        }
       }
     }
   }
   const mine = s.hands[seat].filter((c) => c.s === trump)
-  const trumpsGone = new Set<Rank>()
-  for (const tc of played) if (tc.card.s === trump) trumpsGone.add(tc.card.r)
   let bossOut: Rank | null = null
   for (let i = RANKS.length - 1; i >= 0; i--) {
     const r = RANKS[i]
@@ -266,14 +286,19 @@ function followCard(s: State, seat: number, legal: Card[], read: HandRead): Card
   return worthIt ? cheapestWin : cheapest(legal, trump)
 }
 
-function choosePlayCard(s: State, seat: number, rand: () => number): Card {
+function choosePlayCard(
+  s: State,
+  seat: number,
+  rand: () => number,
+  profile: BotProfile,
+): Card {
   const legal = legalCards(s, seat)
   if (legal.length === 1) return legal[0]
-  const read = readHand(s, seat)
+  const read = readHand(s, seat, profile.memory)
   const smart =
     s.trick.length === 0 ? leadCard(s, seat, legal, read) : followCard(s, seat, legal, read)
   // Imperfect on purpose: sometimes fall back to a lazy dump.
-  return rand() < SKILL ? smart : cheapest(legal, s.trump!)
+  return rand() < profile.skill ? smart : cheapest(legal, s.trump!)
 }
 
 // ---- Entry point -----------------------------------------------------------------
@@ -282,7 +307,13 @@ function choosePlayCard(s: State, seat: number, rand: () => number): Card {
  * Pick an engine action for a bot seat. Uses only legalActions,
  * so the no-underbuy and follow rules are always respected.
  */
-export function botAction(s: State, seat: number, rand: () => number = Math.random): Action {
+export function botAction(
+  s: State,
+  seat: number,
+  rand: () => number = Math.random,
+  level: BotLevel = 'normal',
+): Action {
+  const profile = BOT_PROFILES[level]
   const legal = legalActions(s, seat)
   if (legal.length === 0) throw new Error(`bot seat ${seat} has no legal action in ${s.phase}`)
 
@@ -299,7 +330,7 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
       return first
     case 'ack': {
       const t = legal.find((a) => a.type === 'troefke')
-      if (t && wantsTroefke(s, seat, rand)) return t
+      if (t && profile.tactics && wantsTroefke(s, seat, rand)) return t
       return first
     }
     case 'chooseDealer': {
@@ -320,8 +351,9 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
       const decisive = s.lines[myTeam] <= stakes || (s.phase === 'BIDDING_R2' && oppLines <= 2)
       const play =
         rating >= BID_THRESHOLD ||
-        (knijpen && (rating >= KNIJP_MIN || rand() < KNIJP_CHANCE)) ||
-        (decisive && rating >= BID_THRESHOLD - 2)
+        (profile.tactics &&
+          ((knijpen && (rating >= KNIJP_MIN || rand() < KNIJP_CHANCE)) ||
+            (decisive && rating >= BID_THRESHOLD - 2)))
       return { type: 'bid', seat, play }
     }
     case 'choose': {
@@ -334,6 +366,14 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
       const best = suits.reduce((a, b) => (rankOf(a) >= rankOf(b) ? a : b))
       // A level-2 win erases 2 lines — always go when that ends the match.
       if (s.lines[teamOf(seat)] <= 2) return { type: 'choose', seat, suit: best }
+      // Beginners weigh nothing: play a shown suit most of the time.
+      if (!profile.tactics) {
+        return {
+          type: 'choose',
+          seat,
+          suit: rand() < 0.7 ? suits[Math.floor(rand() * suits.length)] : null,
+        }
+      }
       let p: number
       if (suits.length === 1) {
         const low =
@@ -347,6 +387,6 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
       return { type: 'choose', seat, suit: rand() < p ? best : null }
     }
     case 'play':
-      return { type: 'play', seat, card: choosePlayCard(s, seat, rand) }
+      return { type: 'play', seat, card: choosePlayCard(s, seat, rand, profile) }
   }
 }

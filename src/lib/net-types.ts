@@ -1,9 +1,12 @@
 import type { Action, Card, PublicState } from '../engine'
+import type { BotLevel } from '../bots/bot'
 
 export interface SeatInfo {
   uid: string
   name: string
   bot: boolean
+  /** Bot difficulty; absent means 'normal'. */
+  botLevel?: BotLevel
 }
 
 /** Host-controlled table display options; guests inherit them. */
