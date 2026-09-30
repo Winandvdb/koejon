@@ -145,7 +145,7 @@ describe('scoring', () => {
     expect(s2.koeien).toEqual([0, 0])
   })
 
-  it('match ends at 0 lines; next goes to GAME_OVER', () => {
+  it('match ends at 0 lines: straight to GAME_OVER, no next hand', () => {
     const s = lastTrickState({
       bidder: 1,
       points: [19, 21],
@@ -158,8 +158,8 @@ describe('scoring', () => {
     const s2 = finish(s, 0)
     expect(s2.lines[1]).toBe(0)
     expect(s2.winner).toBe(1)
-    const s3 = apply(s2, { type: 'next', seat: 2 })
-    expect(s3.phase).toBe('GAME_OVER')
+    expect(s2.phase).toBe('GAME_OVER')
+    expect(s2.lastResult!.winnerTeam).toBe(1)
   })
 
   it('boomke marks: crossed in one batch per hand, koei appended uncrossed', () => {

@@ -1713,6 +1713,33 @@ button.tag {
   fill: none;
 }
 
+/* ---------- Confetti: one falling burst when the match ends ---------- */
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 60;
+}
+
+.confetti i {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 13px;
+  border-radius: 2px;
+  background: var(--cf);
+  transform: rotate(var(--rot));
+  animation: confetti-fall 3s ease-in forwards;
+}
+
+@keyframes confetti-fall {
+  to {
+    transform: translateY(110vh) rotate(calc(var(--rot) + 540deg));
+  }
+}
+
 /* ---------- Rules modal ---------- */
 
 .modal-backdrop {
@@ -1798,6 +1825,10 @@ button.tag {
   .nameplate.active {
     animation: none;
     box-shadow: 0 0 0 2px var(--gold);
+  }
+
+  .confetti {
+    display: none;
   }
 }
 

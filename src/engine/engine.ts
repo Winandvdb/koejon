@@ -325,17 +325,17 @@ function scoreHand(s: State): void {
     multiplier: s.multiplier,
   }
   pushLog(s, draw ? { t: 'tied' } : { t: 'score', team: winner, n: erased })
-  if (!draw && s.lines[winner] === 0) s.winner = winner
   s.multiplier = draw ? s.multiplier * 2 : 1
-  s.phase = 'SCORED'
+  if (!draw && s.lines[winner] === 0) {
+    s.winner = winner
+    s.phase = 'GAME_OVER'
+    pushLog(s, { t: 'game-over', team: winner })
+  } else {
+    s.phase = 'SCORED'
+  }
 }
 
 function nextHand(s: State): void {
-  if (s.winner !== null) {
-    s.phase = 'GAME_OVER'
-    pushLog(s, { t: 'game-over', team: s.winner })
-    return
-  }
   s.dealer = leftOf(s.dealer)
   s.phase = 'DEALING'
 }

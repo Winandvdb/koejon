@@ -138,6 +138,16 @@
     localStorage.setItem('koejon-sort', sortHand ? '1' : '0')
   }
 
+  /** One-shot confetti burst when the match ends. */
+  const CONFETTI_COLORS = ['var(--gold)', 'var(--team-decl)', 'var(--team-def)', 'var(--accent)', '#fff']
+  const confetti = Array.from({ length: 72 }, (_, i) => ({
+    x: Math.random() * 100,
+    delay: Math.random() * 900,
+    dur: 2200 + Math.random() * 1800,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    rot: Math.random() * 360,
+  }))
+
   /** Short-lived table talk, one bubble per seat. */
   let sayings = $state<Record<number, { key: string; text: string }>>({})
   const firedQuotes = new Set<string>()
@@ -296,9 +306,22 @@
             </div>
           </div>
         {:else if pub.phase === 'GAME_OVER'}
+          {@const r = pub.lastResult}
           <div class="panel overlay-panel result over" in:scale={{ duration: 260 }}>
-            <strong>{$t.gameOver}</strong>
-            <span>{teamName(pub.winner!)} {$t.wins}!</span>
+            <div class="result-head">{$t.gameOver}</div>
+            {#if r}
+              <div class="result-score">
+                <span class="rs-name">{$t.wij}</span>
+                <b class="rs-num">{r.points[myTeam]}–{r.points[1 - myTeam]}</b>
+                <span class="rs-name">{$t.zij}</span>
+              </div>
+              <div class="result-flags">
+                <span class="chip">{r.erased} {$t.erased}</span>
+                {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
+                {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
+              </div>
+            {/if}
+            <strong>{teamName(pub.winner!)} {$t.wins}!</strong>
           </div>
         {/if}
 
@@ -407,4 +430,14 @@
       </div>
     </div>
   </div>
+
+  {#if pub.phase === 'GAME_OVER'}
+    <div class="confetti" aria-hidden="true">
+      {#each confetti as c, i (i)}
+        <i
+          style="left:{c.x}%; --cf:{c.color}; --rot:{c.rot}deg; animation-delay:{c.delay}ms; animation-duration:{c.dur}ms"
+        ></i>
+      {/each}
+    </div>
+  {/if}
 </div>
