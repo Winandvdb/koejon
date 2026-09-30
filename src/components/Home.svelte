@@ -8,10 +8,12 @@
     error = '',
     oncreate,
     onjoin,
+    onsolo,
   }: {
     error?: string
     oncreate: (name: string) => void
     onjoin: (code: string, name: string) => void
+    onsolo: (name: string) => void
   } = $props()
 
   // Invite links land as ?room=CODE — prefill the join field.
@@ -63,6 +65,9 @@
     <div class="home-actions">
       <button class="btn big primary" disabled={!name.trim()} onclick={() => oncreate(name.trim())}>
         <span>🌐 {$t.createRoom}</span>
+      </button>
+      <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim())}>
+        <span>🤖 {$t.playSolo}</span>
       </button>
     </div>
     <div class="divider"><span>{$t.or}</span></div>

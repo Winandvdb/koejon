@@ -49,6 +49,7 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     trick: [],
     lastTrick: null,
     prevTrick: null,
+    trickAcks: [],
     tricksPlayed: 0,
     tricksWon: [0, 0],
     points: [0, 0],
@@ -76,12 +77,18 @@ export function pendingSeats(s: State): number[] {
       if (dd.pending === 2) return [dd.winnerSeat!]
       return [dd.drawer[dd.pending]]
     }
+    case 'DEALING':
+      return [s.dealer]
     case 'BIDDING_R1':
     case 'BIDDING_R2':
       return [(s.dealer + 1 + s.bidIndex) % 4]
     case 'DEALER_CHOICE':
       return [s.dealer]
     case 'PLAYING':
+      // All seats confirm the dealer's cards before the first lead, and
+      // a completed trick stays until every seat has confirmed it too.
+      if (s.trickAcks.length < 4)
+        return [0, 1, 2, 3].filter((x) => !s.trickAcks.includes(x))
       return [s.turn]
     case 'SCORED':
       return [0, 1, 2, 3]
@@ -139,6 +146,9 @@ export function legalActions(s: State, seat: number): Action[] {
       }
       break
     }
+    case 'DEALING':
+      if (seat === s.dealer) out.push({ type: 'deal', seat })
+      break
     case 'BIDDING_R1':
     case 'BIDDING_R2':
       if (seat === (s.dealer + 1 + s.bidIndex) % 4) {
@@ -152,7 +162,9 @@ export function legalActions(s: State, seat: number): Action[] {
       }
       break
     case 'PLAYING':
-      if (seat === s.turn) {
+      if (s.trickAcks.length < 4) {
+        if (!s.trickAcks.includes(seat)) out.push({ type: 'ack', seat })
+      } else if (seat === s.turn) {
         for (const card of legalCards(s, seat)) out.push({ type: 'play', seat, card })
       }
       break
@@ -198,6 +210,7 @@ function doDeal(s: State): void {
   s.trick = []
   s.lastTrick = null
   s.prevTrick = null
+  s.trickAcks = []
   s.tricksPlayed = 0
   s.tricksWon = [0, 0]
   s.points = [0, 0]
@@ -220,7 +233,16 @@ function allPassed(s: State): void {
   pushLog(s, { t: 'all-pass', n: s.multiplier * 2 })
   s.multiplier *= 2
   s.dealer = leftOf(s.dealer)
-  doDeal(s)
+  s.hands = [[], [], [], []]
+  s.turned = null
+  s.trump = null
+  s.level = 0
+  s.bidder = null
+  s.bidIndex = 0
+  s.trick = []
+  s.lastTrick = null
+  s.prevTrick = null
+  s.phase = 'DEALING'
 }
 
 function resolveTrick(s: State): void {
@@ -233,6 +255,7 @@ function resolveTrick(s: State): void {
   s.prevTrick = s.lastTrick
   s.lastTrick = s.trick
   s.trick = []
+  s.trickAcks = []
   s.leader = winner
   s.turn = winner
   pushLog(s, { t: 'trick', seat: winner })
@@ -286,7 +309,7 @@ function nextHand(s: State): void {
     return
   }
   s.dealer = leftOf(s.dealer)
-  doDeal(s)
+  s.phase = 'DEALING'
 }
 
 /** Apply a validated action; returns a new state. Throws IllegalActionError. */
@@ -341,6 +364,9 @@ export function apply(state: State, action: Action): State {
       s.dealer = action.dealer
       s.dealerDraw = null
       pushLog(s, { t: 'first-dealer', seat: action.dealer })
+      s.phase = 'DEALING'
+      break
+    case 'deal':
       doDeal(s)
       break
     case 'bid': {
@@ -388,6 +414,9 @@ export function apply(state: State, action: Action): State {
       }
       break
     }
+    case 'ack':
+      s.trickAcks.push(action.seat)
+      break
     case 'next':
       nextHand(s)
       break

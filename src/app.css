@@ -882,6 +882,30 @@ input[type='checkbox'] {
   font-size: 1.05rem;
 }
 
+.draws {
+  display: flex;
+  gap: 16px;
+}
+
+.drawn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.drawn-card {
+  --cw: calc(var(--card) * 0.6);
+  display: block;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.4);
+}
+
+.drawn-card > * {
+  width: 100%;
+  height: 100%;
+}
+
 .area-me {
   grid-area: me;
   display: flex;
@@ -1067,7 +1091,7 @@ input[type='checkbox'] {
 }
 
 .turned-at .mini-card {
-  --cw: calc(var(--card) * 0.5);
+  --cw: calc(var(--card) * 0.8);
   display: block;
   width: var(--cw);
   height: calc(var(--cw) * 1.4);

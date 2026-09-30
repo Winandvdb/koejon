@@ -48,7 +48,8 @@ describe('emulator e2e', () => {
     const host = await HostGame.attach(session.code, uid, {
       botDelay: () => 5,
       heartbeatMs: 60_000,
-      trickLingerMs: 20,
+      drawLingerMs: 20,
+      bidLingerMs: 20,
     })
 
     let latest: SessionView | null = null

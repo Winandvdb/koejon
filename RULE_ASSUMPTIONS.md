@@ -5,18 +5,19 @@ environment deviations. Each entry lists the chosen behavior.
 
 ## Game rules
 
-- **Advancing after a hand is scored** — the rules do not say who moves the game from
-  `SCORED` to the next deal. Any seated player (or bot) may send the `next` action; the
-  first one received advances the game.
+- **Advancing after a hand is scored** — the result panel stays up until a human
+  clicks "next hand"; bots never advance a scored hand so the result cannot flash
+  past. Any seated player's click advances the game for everyone.
 - **Koei bookkeeping** — a defending win gives the playing team a Koei: the team's line
   count increases by 1 (may exceed 13) and a separate `koeien` counter is incremented so
-  the scoreboard can draw those lines crooked with hairs.
+  the scoreboard can draw those lines crooked with hairs. On the boomke the Koei is
+  drawn at the bottom, below the line ladder.
 - **Dealer-draw packets** — team B draws from the same shuffled deck minus team A's
   packet ("the remaining deck"). Tie on rank → both players redraw on a fresh shuffle.
   Packet sizes are picked by the engine: A ∈ [4, 16], B ∈ [4, remaining − 4].
-- **Dealer draw is fully automatic** — the draw/choose steps need no input, so the
-  host resolves them for humans too; the draw winner picks a random teammate as
-  first dealer (same rule the bots use). No dealer-draw UI is shown.
+- **Dealer draw** — the packet draws need no input and resolve automatically.
+  The draw winner then chooses the first dealer interactively (bots pick a random
+  teammate). The chosen dealer is announced for at least 3 s before the deal.
 - **Dealer's hidden cards** — the engine always tracks the dealer's full 6-card hand;
   masking is a view concern. During bidding the dealer's hand doc contains
   `cards: null` and the UI renders card backs (4 hand cards + the face-down set-aside
@@ -32,12 +33,16 @@ environment deviations. Each entry lists the chosen behavior.
 - **Seating** — the room creator is always seat 0 and host; joining players take the
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
 - **20–20** — implemented as a defending-team win per spec (playing team needs >20).
-- **Dealing is automatic** — there is no `DEALING` phase or deal prompt: choosing the
-  first dealer, an all-passed hand and `next` after scoring all deal immediately
-  (owner decision; the spec's interactive deal step was removed).
-- **Trick linger** — a completed trick stays on the table until the winner leads the next
-  trick. The host delays a bot's next lead by at least 3 s; a human winner simply leads
-  when ready (no timer).
+- **Dealing is automatic** — no deal prompt: the `DEALING` phase announces the dealer
+  for ~3 s, then the host issues the deal itself (after the draw, after scoring and
+  after all-passed hands).
+- **Trick confirmation** — a completed trick stays on the table until every seat has
+  confirmed it (`ack`); the trick winner cannot lead before all 4 acks are in.
+  Bots ack automatically; human players click "Gezien". This also keeps the
+  first-two-tricks review window open as long as needed.
+- **Dealer's cards confirmation** — the same `ack` gate applies at the start of
+  PLAYING: the turned cards stay at the dealer's seat until all 4 seats confirmed
+  them, then the first lead is allowed.
 - **Trick review window** — only the first two completed tricks of a hand may be
   looked back at, and only until the first card of the third trick is played
   (owner's literal reading of the rule). The info panel shows them during that

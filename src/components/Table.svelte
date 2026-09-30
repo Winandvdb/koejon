@@ -60,7 +60,12 @@
   )
   const dealerBlind = $derived(biddingPhase && my === pub.dealer)
   /** The turned cards sit at the dealer's seat while bidding runs. */
-  const showTurned = $derived(biddingPhase && pub.turned !== null)
+  // Turned cards stay at the dealer until all seats confirmed them at play start.
+  const showTurned = $derived(
+    pub.turned !== null &&
+      (biddingPhase ||
+        (pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trickAcks.length < 4)),
+  )
 
   const playing = $derived(
     pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER',
@@ -72,16 +77,25 @@
   /** Lingered cards fly out towards the seat that won the trick. */
   const lingerExit = $derived(DIR[rel(pub.leader)])
 
-  /** Last bid ("Ik ga"/"Pas") each seat announced this bidding round. */
+  /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
     const map = new Map<number, string>()
-    if (!biddingPhase) return map
-    for (const ev of pub.log) {
-      if (ev.t === 'pass' && ev.seat !== undefined) map.set(ev.seat, $t.pass)
-      if (ev.t === 'play-call' && ev.seat !== undefined) map.set(ev.seat, $t.play)
+    for (let i = pub.log.length - 1; i >= 0; i--) {
+      const ev = pub.log[i]
+      if (ev.t === 'deal' || ev.t === 'first-dealer' || ev.t === 'all-pass') break
+      if (ev.seat === undefined || map.has(ev.seat)) continue
+      if (ev.t === 'pass' || ev.t === 'dealer-pass') map.set(ev.seat, $t.pass)
+      else if (ev.t === 'play-call') map.set(ev.seat, $t.play)
     }
     return map
   })
+
+  /** Bubbles stay up during bidding, the dealer announce and until the first card falls. */
+  const showBids = $derived(
+    biddingPhase ||
+      pub.phase === 'DEALING' ||
+      (pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0),
+  )
 
   const acting = (i: number) => pub.actionSeats.includes(i)
 
@@ -104,7 +118,7 @@
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
     {#if $settings.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
-    {#if lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+    {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
   </div>
 {/snippet}
 
@@ -175,7 +189,44 @@
       </div>
 
       <div class="felt-overlay">
-        {#if has('bid') || has('choose')}
+        {#if pub.phase === 'DEALER_DRAW' && pub.dealerDraw}
+          {@const dd = pub.dealerDraw}
+          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+            <h3>{$t.drawForDealer}</h3>
+            <div class="draws">
+              {#each dd.draws as d (d.seat)}
+                <div class="drawn" in:scale={{ duration: 250 }}>
+                  <span class="drawn-card"><CardView card={d.card} /></span>
+                  <span class="small">{name(d.seat)}</span>
+                </div>
+              {/each}
+            </div>
+            {#if dd.pending === 2}
+              {#if has('chooseDealer')}
+                <div class="small">{$t.chooseDealer}:</div>
+                <div class="btnrow">
+                  {#each [0, 1, 2, 3] as d (d)}
+                    <button class="btn" onclick={() => send({ type: 'chooseDealer', seat: my, dealer: d })}>
+                      {name(d)}
+                    </button>
+                  {/each}
+                </div>
+              {:else}
+                <div class="small">{name(dd.winnerSeat!)} {$t.picksDealer}</div>
+              {/if}
+            {:else}
+              <div class="small">{name(dd.drawer[dd.pending])} {$t.drawsNow}</div>
+            {/if}
+          </div>
+        {:else if pub.phase === 'DEALING'}
+          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+            <strong>{name(pub.dealer)} {$t.isDealer}</strong>
+          </div>
+        {:else if has('ack')}
+          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+            <button class="btn primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+          </div>
+        {:else if has('bid') || has('choose')}
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
             {#if has('bid')}
               <div class="bid-row">

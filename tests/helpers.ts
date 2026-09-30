@@ -47,6 +47,8 @@ export function playingState(over: Partial<State> = {}): State {
     trick: [],
     lastTrick: null,
     prevTrick: null,
+    // Default: everyone already confirmed, so plays are legal immediately.
+    trickAcks: [0, 1, 2, 3],
     tricksPlayed: 0,
     tricksWon: [0, 0],
     points: [0, 0],
@@ -110,6 +112,7 @@ export function dealtState(seed: number, dealer = 0): State {
   }
   if (!s.dealerDraw || s.dealerDraw.pending !== 2) throw new Error('draw did not finish')
   s = apply(s, { type: 'chooseDealer', seat: s.dealerDraw.winnerSeat!, dealer })
+  s = apply(s, { type: 'deal', seat: dealer })
   return s
 }
 

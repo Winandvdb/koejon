@@ -19,13 +19,25 @@ const BOT_NAMES = ['Klaas', 'Grietje', 'Piet', 'Truus', 'Henk', 'Ans']
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/** A Firestore write that hangs would freeze the serialized queue forever. */
+const withTimeout = <T>(p: Promise<T>, ms = 10_000): Promise<T> =>
+  Promise.race([
+    p,
+    delay(ms).then(() => {
+      throw new Error('firestore-write-timeout')
+    }),
+  ])
+
 export interface HostOptions {
   /** Delay before a bot acts. Default ~0.5–1 s. */
   botDelay?: () => number
   heartbeatMs?: number
-  /** Min. pause before a bot leads the trick after one just completed,
-   *  so the finished trick stays visible. Default 3 s. */
-  trickLingerMs?: number
+  /** Min. pause after the dealer draw completes, so the drawn cards and the
+   *  draw winner stay visible before dealing. Default 3 s. */
+  drawLingerMs?: number
+  /** Min. pause after a bid ("Ik ga"/"Pas"/dealer choice) before the next
+   *  automatic action, so the announcement is readable. Default 2 s. */
+  bidLingerMs?: number
 }
 
 /**
@@ -42,7 +54,8 @@ export class HostGame {
   private hbTimer: ReturnType<typeof setInterval> | null = null
   private botDelay: () => number
   private heartbeatMs: number
-  private trickLingerMs: number
+  private drawLingerMs: number
+  private bidLingerMs: number
 
   private constructor(
     private code: string,
@@ -51,7 +64,8 @@ export class HostGame {
   ) {
     this.botDelay = opts.botDelay ?? (() => 500 + Math.random() * 500)
     this.heartbeatMs = opts.heartbeatMs ?? 5000
-    this.trickLingerMs = opts.trickLingerMs ?? 3000
+    this.drawLingerMs = opts.drawLingerMs ?? 3000
+    this.bidLingerMs = opts.bidLingerMs ?? 2000
   }
 
   /** Load persisted engine state and room seats, then start listening. */
@@ -85,6 +99,8 @@ export class HostGame {
     )
     h.hbTimer = setInterval(() => {
       updateDoc(roomRef(code), { heartbeat: Date.now() }).catch(() => {})
+      // Watchdog: re-arm bot scheduling in case a wakeup was ever missed.
+      h.scheduleBots()
     }, h.heartbeatMs)
     h.scheduleBots()
     return h
@@ -216,7 +232,7 @@ export class HostGame {
         }
       }
     } finally {
-      await deleteDoc(ref).catch(() => {})
+      await withTimeout(deleteDoc(ref)).catch(() => {})
     }
   }
 
@@ -253,41 +269,54 @@ export class HostGame {
     }
     batch.set(handRef(this.code, 'host'), { botHands } satisfies HostHandsDoc)
     batch.set(engineRef(this.code), { json: JSON.stringify(this.state) })
-    await batch.commit()
+    await withTimeout(batch.commit())
     this.scheduleBots()
   }
 
   // ---- bots ----
 
-  /** Seat the host should act for: any bot, or anyone during the automatic dealer draw. */
+  /** Seat the host should act for: any bot, plus automatic steps for anyone —
+   *  the packet draws and the deal itself. Picking the dealer stays a real choice,
+   *  and a scored hand stays up until a human clicks "next hand". */
   private autoSeat(): number | undefined {
+    if (this.state.phase === 'SCORED') return undefined
     const pend = pendingSeats(this.state)
     const bot = pend.find((i) => this.seats[i]?.bot)
     if (bot !== undefined) return bot
-    return this.state.phase === 'DEALER_DRAW' ? pend[0] : undefined
+    if (this.state.phase === 'DEALER_DRAW' && this.state.dealerDraw?.pending !== 2) return pend[0]
+    if (this.state.phase === 'DEALING') return pend[0]
+    return undefined
   }
 
   private scheduleBots(): void {
     if (this.botTimer) return
     if (this.state.phase === 'LOBBY' || this.state.phase === 'GAME_OVER') return
     if (this.autoSeat() === undefined) return
-    // A bot leading right after a completed trick pauses so the finished
-    // trick stays on the table (a human leader just takes their time).
-    const linger =
-      this.state.phase === 'PLAYING' && this.state.trick.length === 0 && this.state.lastTrick
-    this.botTimer = setTimeout(
-      () => {
-        this.botTimer = null
-        this.enqueue(async () => {
-          const seat = this.autoSeat()
-          if (seat === undefined) return
-          const a = botAction(this.state, seat)
-          this.tryApply(a)
-          await this.commit()
-        })
-      },
-      linger ? Math.max(this.botDelay(), this.trickLingerMs) : this.botDelay(),
+    // Announce the dealer for a moment before the cards go out.
+    const drawLinger = this.state.phase === 'DEALING'
+    // A bid just got announced ("Ik ga"/"Pas"/dealer choice/second card):
+    // pause before the next automatic action so the bubble is readable.
+    const lastEv = this.state.log[this.state.log.length - 1]?.t
+    const bidLinger =
+      lastEv === 'pass' ||
+      lastEv === 'play-call' ||
+      lastEv === 'dealer-pass' ||
+      lastEv === 'second-card'
+    const wait = Math.max(
+      this.botDelay(),
+      drawLinger ? this.drawLingerMs : 0,
+      bidLinger ? this.bidLingerMs : 0,
     )
+    this.botTimer = setTimeout(() => {
+      this.botTimer = null
+      this.enqueue(async () => {
+        const seat = this.autoSeat()
+        if (seat === undefined) return
+        const a = botAction(this.state, seat)
+        this.tryApply(a)
+        await this.commit()
+      })
+    }, wait)
   }
 }
 

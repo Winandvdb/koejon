@@ -63,7 +63,7 @@ describe('bidding round 1', () => {
     for (const seat of [1, 2, 3]) s = apply(s, bid(seat, false))
     for (const seat of [1, 2, 3]) s = apply(s, bid(seat, false))
     s = apply(s, { type: 'choose', seat: 0, suit: null })
-    expect(s.phase).toBe('BIDDING_R1')
+    expect(s.phase).toBe('DEALING')
     expect(s.dealer).toBe(1)
     expect(s.multiplier).toBe(2)
   })

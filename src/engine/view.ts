@@ -28,6 +28,7 @@ export interface PublicState {
   trick: TrickCard[]
   lastTrick: TrickCard[] | null
   prevTrick: TrickCard[] | null
+  trickAcks: number[]
   tricksPlayed: number
   tricksWon: [number, number]
   points: [number, number]
@@ -64,6 +65,7 @@ export function toPublic(s: State): PublicState {
     trick: s.trick,
     lastTrick: s.lastTrick,
     prevTrick: s.prevTrick,
+    trickAcks: s.trickAcks,
     tricksPlayed: s.tricksPlayed,
     tricksWon: s.tricksWon,
     points: s.points,
@@ -119,6 +121,7 @@ export function clientState(
     trick: pub.trick,
     lastTrick: pub.lastTrick,
     prevTrick: pub.prevTrick,
+    trickAcks: pub.trickAcks,
     tricksPlayed: pub.tricksPlayed,
     tricksWon: pub.tricksWon,
     points: pub.points,

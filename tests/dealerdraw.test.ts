@@ -33,7 +33,7 @@ describe('dealer draw', () => {
     const loser = winner === s.dealerDraw!.draws[0].seat ? s.dealerDraw!.draws[1].seat : s.dealerDraw!.draws[0].seat
     expect(() => apply(s, { type: 'chooseDealer', seat: loser, dealer: 0 })).toThrow()
     s = apply(s, { type: 'chooseDealer', seat: winner, dealer: 3 })
-    expect(s.phase).toBe('BIDDING_R1')
+    expect(s.phase).toBe('DEALING')
     expect(s.dealer).toBe(3)
     expect(s.dealerDraw).toBeNull()
   })

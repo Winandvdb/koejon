@@ -9,6 +9,7 @@ export interface Card {
 export type Phase =
   | 'LOBBY'
   | 'DEALER_DRAW'
+  | 'DEALING'
   | 'BIDDING_R1'
   | 'BIDDING_R2'
   | 'DEALER_CHOICE'
@@ -99,6 +100,8 @@ export interface State {
   lastTrick: TrickCard[] | null
   /** The trick before lastTrick — kept so the last two tricks stay reviewable. */
   prevTrick: TrickCard[] | null
+  /** Seats that confirmed the completed trick; the next lead waits for all 4. */
+  trickAcks: number[]
   tricksPlayed: number
   tricksWon: [number, number]
   points: [number, number]
@@ -116,9 +119,11 @@ export type Action =
   | { type: 'start'; seat: number }
   | { type: 'draw'; seat: number }
   | { type: 'chooseDealer'; seat: number; dealer: number }
+  | { type: 'deal'; seat: number }
   | { type: 'bid'; seat: number; play: boolean }
   | { type: 'choose'; seat: number; suit: Suit | null }
   | { type: 'play'; seat: number; card: Card }
+  | { type: 'ack'; seat: number }
   | { type: 'next'; seat: number }
 
 export const START_LINES = 13

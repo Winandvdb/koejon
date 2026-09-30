@@ -99,6 +99,8 @@ export function botAction(s: State, seat: number, rand: () => number = Math.rand
   switch (first.type) {
     case 'start':
     case 'draw':
+    case 'deal':
+    case 'ack':
     case 'next':
       return first
     case 'chooseDealer': {

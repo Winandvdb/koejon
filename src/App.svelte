@@ -35,13 +35,38 @@
     host?.dispose()
     session = null
     host = null
+    hostPromise = null
     view = null
+  }
+
+  let hostPromise: Promise<HostGame> | null = null
+
+  function ensureHost(): Promise<HostGame> {
+    if (!hostPromise) {
+      hostPromise = HostGame.attach(session!.code, uid).then((h) => (host = h))
+    }
+    return hostPromise
   }
 
   async function onCreate(name: string) {
     err = ''
     try {
       attach(await createRoom(uid, name))
+    } catch (e) {
+      err = String(e)
+    }
+  }
+
+  // Solo: create a room, fill it with bots and start right away.
+  async function onSolo(name: string) {
+    err = ''
+    try {
+      attach(await createRoom(uid, name))
+      const h = await ensureHost()
+      h.addBot(1)
+      h.addBot(2)
+      h.addBot(3)
+      h.startGame()
     } catch (e) {
       err = String(e)
     }
@@ -61,7 +86,7 @@
   $effect(() => {
     const r = view?.room
     if (session && r && !host && r.hostUid === uid) {
-      HostGame.attach(session.code, uid).then((h) => (host = h)).catch((e) => (err = String(e)))
+      ensureHost().catch((e) => (err = String(e)))
     }
   })
 
@@ -117,7 +142,7 @@
   {#if !uid}
     <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
   {:else if !session || !view || !view.room}
-    <Home error={err} oncreate={onCreate} onjoin={onJoin} />
+    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} />
   {:else if view.room.pub!.phase === 'LOBBY'}
     <Lobby
       room={view.room}
