@@ -73,14 +73,19 @@ Prerequisites in the [Firebase console](https://console.firebase.google.com) for
 Then:
 
 ```bash
-cp .env.example .env.local   # fill in your web app's VITE_FIREBASE_* values
-npm run build
-firebase deploy              # deploys hosting (dist/) + firestore.rules
+# fill .env.production with your web app's VITE_FIREBASE_* values
+# (it is committed on purpose: web config is public and embedded in the
+# bundle anyway — security comes from Firestore rules, not the apiKey)
+firebase deploy              # runs npm run build (predeploy), then deploys
+                             # hosting to the "app" target (koejon.web.app)
+                             # + firestore.rules
 ```
 
-To point the CLI at a different project, edit `.firebaserc` or run `firebase use`.
+The GitHub Actions workflows need no secrets for the config — the committed
+`.env.production` supplies it to `npm run build` in CI as well.
+`.env.local` stays for local dev overrides only and is gitignored.
 
-Never commit `.env.local` — it is gitignored.
+To point the CLI at a different project, edit `.firebaserc` or run `firebase use`.
 
 ## How it works
 

@@ -78,3 +78,5 @@ dist/
 # Emulator logs
 ui-debug.log
 firestore-debug.log
+
+.idea/

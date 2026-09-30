@@ -8,8 +8,10 @@ const viteEnv: Record<string, string | undefined> =
 const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
 const env = (k: string): string | undefined => viteEnv[k] ?? proc?.env?.[k]
 
+// Emulator in dev/tests or when forced; never silently in a production build.
 export const USE_EMULATOR =
-  env('VITE_USE_FIREBASE_EMULATOR') === 'true' || !env('VITE_FIREBASE_API_KEY')
+  env('VITE_USE_FIREBASE_EMULATOR') === 'true' ||
+  (!env('VITE_FIREBASE_API_KEY') && viteEnv.MODE !== 'production')
 
 const config: FirebaseOptions = USE_EMULATOR
   ? {
@@ -26,6 +28,12 @@ const config: FirebaseOptions = USE_EMULATOR
       messagingSenderId: env('VITE_FIREBASE_MESSAGING_SENDER_ID'),
       storageBucket: env('VITE_FIREBASE_STORAGE_BUCKET'),
     }
+
+if (!USE_EMULATOR && !env('VITE_FIREBASE_API_KEY')) {
+  throw new Error(
+    'Missing Firebase web config: build with a filled .env.local (see .env.example)',
+  )
+}
 
 export const app: FirebaseApp = initializeApp(config)
 export const auth: Auth = getAuth(app)

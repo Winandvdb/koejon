@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "koejon-3059e"
-  }
+  },
+  "targets": {
+    "koejon-3059e": {
+      "hosting": {
+        "app": [
+          "koejon"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }
