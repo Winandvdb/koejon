@@ -1736,11 +1736,9 @@ input[type='checkbox'] {
   }
 }
 
-/* Phones in either orientation: narrow side seats and a compact info box. */
 @media (max-width: 700px), (max-height: 560px) and (orientation: landscape) {
-  /* The nameplate is lifted ~44px on small screens; keep buttons above it. */
   .felt-overlay {
-    padding-bottom: calc(var(--card) * 0.5 + 50px);
+    padding-bottom: calc(var(--card) * 0.5 + 60px);
   }
 
   .felt-overlay.scored {
