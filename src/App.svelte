@@ -11,6 +11,7 @@
     type SessionView,
   } from './lib/room'
   import type { RoomDoc } from './lib/net-types'
+  import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
   import { lang, t } from './lib/i18n'
   import { theme } from './lib/theme'
@@ -121,14 +122,14 @@
   }
 
   // Solo: create a room, fill it with bots and start right away.
-  async function onSolo(name: string) {
+  async function onSolo(name: string, level: BotLevel) {
     err = ''
     try {
       attach(await createRoom(uid, name))
       const h = await ensureHost()
-      h.addBot(1)
-      h.addBot(2)
-      h.addBot(3)
+      h.addBot(1, level)
+      h.addBot(2, level)
+      h.addBot(3, level)
       h.startGame()
     } catch (e) {
       showErr(e, '', true)

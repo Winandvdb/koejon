@@ -2,6 +2,8 @@
   import { fly } from 'svelte/transition'
   import { t } from '../lib/i18n'
   import type { Card } from '../engine'
+  import { BOT_LEVELS } from '../bots/bot'
+  import type { BotLevel } from '../bots/bot'
   import CardView from './CardView.svelte'
 
   let {
@@ -13,12 +15,17 @@
     error?: string
     oncreate: (name: string) => void
     onjoin: (code: string, name: string) => void
-    onsolo: (name: string) => void
+    onsolo: (name: string, level: BotLevel) => void
   } = $props()
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
   const inviteCode = new URLSearchParams(location.search).get('room') ?? ''
   let name = $state(localStorage.getItem('koejon-name') ?? '')
+  const savedLevel = localStorage.getItem('koejon-bot-level') as BotLevel | null
+  let botLevel = $state<BotLevel>(
+    savedLevel && BOT_LEVELS.includes(savedLevel) ? savedLevel : 'normal',
+  )
+  const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
   let code = $state(inviteCode.toUpperCase())
   let invited = $state(!!inviteCode)
 
@@ -85,9 +92,21 @@
         <button class="btn big primary" disabled={!name.trim()} onclick={() => oncreate(name.trim())}>
           <span>🌐 {$t.createRoom}</span>
         </button>
-        <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim())}>
+        <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim(), botLevel)}>
           <span>🤖 {$t.playSolo}</span>
         </button>
+        <div class="lvl-seg" role="group" aria-label={$t.botLevel}>
+          {#each BOT_LEVELS as l (l)}
+            <button
+              class="lvl-opt"
+              class:on={botLevel === l}
+              onclick={() => {
+                botLevel = l
+                localStorage.setItem('koejon-bot-level', l)
+              }}>{lvlName[l]}</button
+            >
+          {/each}
+        </div>
       </div>
       <div class="divider"><span>{$t.or}</span></div>
       <form class="join-form" onsubmit={join}>
