@@ -1284,6 +1284,18 @@ button.tag {
   border-bottom-color: var(--panel);
 }
 
+/* Table talk floats one row higher, so it clears a bid bubble. */
+.bubble.say {
+  bottom: calc(100% + 42px);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.seat-p2 .bubble.say {
+  bottom: auto;
+  top: calc(100% + 42px);
+}
+
 .turn-hint {
   position: absolute;
   left: calc(100% + 8px);

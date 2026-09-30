@@ -3,6 +3,7 @@
   import type { Action, Card, Suit } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
+  import { activeQuotes } from '../lib/quotes'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
   import CardView from './CardView.svelte'
@@ -113,6 +114,23 @@
 
   const acting = (i: number) => pub.actionSeats.includes(i)
 
+  /** Short-lived table talk, one bubble per seat. */
+  let sayings = $state<Record<number, { key: string; text: string }>>({})
+  const firedQuotes = new Set<string>()
+  $effect(() => {
+    for (const q of activeQuotes(pub)) {
+      if (firedQuotes.has(q.key)) continue
+      firedQuotes.add(q.key)
+      sayings = { ...sayings, [q.seat]: { key: q.key, text: q.text } }
+      setTimeout(() => {
+        if (sayings[q.seat]?.key !== q.key) return
+        const rest = { ...sayings }
+        delete rest[q.seat]
+        sayings = rest
+      }, 4000)
+    }
+  })
+
   $effect(() => {
     document.title = myTurn ? `● ${$t.yourTurn} — ${$t.title}` : $t.title
     return () => {
@@ -133,6 +151,7 @@
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
     {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
     {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+    {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
     {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
       <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
     {/if}
