@@ -44,6 +44,17 @@ describe('bot bidding', () => {
     const s = bidState([C('H', 'A'), C('H', 'K'), C('H', '9'), C('S', 'A'), C('D', 'A'), C('C', '9')])
     expect(botAction(s, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
   })
+
+  it('waits on the first card with a decent hand — the 2nd card doubles the stake', () => {
+    // ~9.5 rated for hearts: enough for the 2nd card, not for the 1st.
+    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('C', '9')]
+    expect(botAction(bidState(hand), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+    const r2 = bidState(hand, {
+      phase: 'BIDDING_R2',
+      turned: { first: C('S', '9'), second: C('H', 'Q'), secondUp: true },
+    })
+    expect(botAction(r2, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
+  })
 })
 
 describe('bot troefke', () => {

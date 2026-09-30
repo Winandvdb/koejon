@@ -34,7 +34,9 @@ export const BOT_PROFILES: Record<BotLevel, BotProfile> = {
   hard: { skill: 0.95, memory: 'full', tactics: true },
 }
 
-const BID_THRESHOLD = 8
+/** The 2nd card doubles the stake, so the 1st card asks a stronger hand. */
+const BID_THRESHOLD_1 = 10
+const BID_THRESHOLD_2 = 8
 /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
 const KNIJP_MIN = 4
 const KNIJP_CHANCE = 0.85
@@ -363,11 +365,12 @@ export function botAction(
       // A hand worth all remaining lines deserves a looser bid.
       const stakes = s.phase === 'BIDDING_R1' ? s.multiplier : 2
       const decisive = s.lines[myTeam] <= stakes || (s.phase === 'BIDDING_R2' && oppLines <= 2)
+      const threshold = s.phase === 'BIDDING_R1' ? BID_THRESHOLD_1 : BID_THRESHOLD_2
       const play =
-        rating >= BID_THRESHOLD ||
+        rating >= threshold ||
         (profile.tactics &&
           ((knijpen && (rating >= KNIJP_MIN || rand() < KNIJP_CHANCE)) ||
-            (decisive && rating >= BID_THRESHOLD - 2)))
+            (decisive && rating >= threshold - 2)))
       return { type: 'bid', seat, play }
     }
     case 'choose': {
