@@ -8,7 +8,9 @@
   --accent: #1d6b45;
   --accent-contrast: #ffffff;
   --gold: #e0ac2e;
+  --gold-contrast: #2a1d00;
   --danger: #c0392b;
+  --danger-contrast: #ffffff;
   --suit-red: #c62828;
   --felt-1: #2b8c5a;
   --felt-2: #1d6b45;
@@ -26,6 +28,7 @@
   --koei: #a93226;
   --trunk: #7b4a1f;
   --fab: #f5efe0;
+  --fab-contrast: #17211c;
   --radius: 14px;
   --card: clamp(54px, 7vw, 94px);
   color-scheme: light;
@@ -55,6 +58,7 @@
   --koei: #e0705f;
   --trunk: #b08a5e;
   --fab: #38503f;
+  --fab-contrast: #e4ebe7;
   color-scheme: dark;
 }
 
@@ -848,7 +852,7 @@ button.tag {
 
 .hostleft {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-contrast);
   text-align: center;
   padding: 6px;
   border-radius: 8px;
@@ -1026,7 +1030,7 @@ button.tag {
   font: inherit;
   font-weight: 800;
   font-size: 1rem;
-  color: var(--text);
+  color: var(--fab-contrast);
   background: var(--fab);
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
@@ -1055,7 +1059,7 @@ button.tag {
 
 .fab.troef {
   background: var(--gold);
-  color: #2a1d00;
+  color: var(--gold-contrast);
   border-color: rgba(255, 255, 255, 0.4);
 }
 
@@ -1102,12 +1106,12 @@ button.tag {
 
 .result-flags .flag-win {
   background: var(--gold);
-  color: #241b02;
+  color: var(--gold-contrast);
 }
 
 .result-flags .flag-bad {
   background: var(--danger);
-  color: #fff;
+  color: var(--danger-contrast);
 }
 
 .result-flags .flag-koei {
@@ -1205,6 +1209,12 @@ button.tag {
   font-weight: 600;
 }
 
+/* The nameplate is always a dark pill: buttons on it follow its colour,
+   not --text (which is dark in light mode and would vanish). */
+.nameplate .icon-btn {
+  color: inherit;
+}
+
 .np-muted {
   color: rgba(255, 255, 255, 0.7);
 }
@@ -1223,12 +1233,12 @@ button.tag {
 
 .chip.dealer {
   background: var(--gold);
-  color: #2a1d00;
+  color: var(--gold-contrast);
 }
 
 .chip.bidder {
   background: #ffb300;
-  color: #2a1d00;
+  color: var(--gold-contrast);
 }
 
 .chip.tricks {
@@ -1255,7 +1265,7 @@ button.tag {
 
 .bubble.troef {
   background: var(--gold);
-  color: #2a1d00;
+  color: var(--gold-contrast);
 }
 
 .bubble.troef::after {
@@ -1303,7 +1313,7 @@ button.tag {
   translate: 0 -50%;
   white-space: nowrap;
   font-weight: 800;
-  color: #2a1d00;
+  color: var(--gold-contrast);
   background: var(--gold);
   padding: 2px 12px;
   border-radius: 999px;
@@ -1564,7 +1574,7 @@ button.tag {
 
 .mult {
   background: var(--gold);
-  color: #2a1d00;
+  color: var(--gold-contrast);
   border-radius: 999px;
   padding: 0 8px;
   font-size: 0.75rem;
