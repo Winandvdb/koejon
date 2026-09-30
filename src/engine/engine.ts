@@ -1,6 +1,6 @@
-import { fullDeck, RANK_ORDER, RANK_POINTS, sameCard, trickPoints, trickWinnerIndex } from './cards'
+import { fullDeck, RANK_ORDER, sameCard, trickPoints, trickWinnerIndex } from './cards'
 import { rngRange, rngShuffle } from './rng'
-import type { Action, BoomkeMark, Card, DealerDraw, State, Suit, TrickCard } from './types'
+import type { Action, BoomkeMark, Card, State, Suit } from './types'
 import { START_LINES } from './types'
 
 const freshMarks = (): BoomkeMark[] =>
