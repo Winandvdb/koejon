@@ -6,7 +6,7 @@ export type Lang = 'nl' | 'en'
 const dict = {
   nl: {
     title: 'Koejonnen',
-    nickname: 'Bijnaam',
+    nickname: 'Naam',
     nicknamePh: 'Je naam…',
     createRoom: 'Speel online met vrienden',
     playSolo: 'Speel tegen bots',
