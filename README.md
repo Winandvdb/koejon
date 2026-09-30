@@ -78,7 +78,7 @@ Then:
 # bundle anyway — security comes from Firestore rules, not the apiKey)
 firebase deploy              # runs npm run build (predeploy), then deploys
                              # hosting to the "app" target (koejon.web.app)
-                             # + firestore.rules
+firebase deploy --only firestore:rules   # push rules only (CI does this too)
 ```
 
 The GitHub Actions workflows need no secrets for the config — the committed
@@ -111,7 +111,9 @@ To point the CLI at a different project, edit `.firebaserc` or run `firebase use
 
 If the host disconnects the room shows a "host left" state (no host migration — known
 limitation). Reconnects resume from the Firestore snapshot; a host reload restores the
-engine from `rooms/{code}/engine/state`.
+engine from `rooms/{code}/engine/state`. When the host explicitly leaves, the whole
+room tree is deleted instead. A stuck human seat can be replaced by a bot from the
+host's kick button (lobby seat list or in-game nameplate).
 
 ## Rules
 

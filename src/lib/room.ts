@@ -4,14 +4,13 @@ import {
   getDoc,
   onSnapshot,
   setDoc,
-  type DocumentReference,
   type Unsubscribe,
 } from 'firebase/firestore'
 import { derived, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
 import { db } from './firebase'
-import type { HandDoc, Intent, IntentDoc, RoomDoc, SeatInfo } from './net-types'
+import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
 
 export const roomRef = (code: string) => doc(db, 'rooms', code)
 export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
@@ -107,15 +106,19 @@ export class RoomSession {
     while (!this.disposed && this.outbox.length > 0 && this.actionDocGone) {
       this.sending = true
       const item = this.outbox.shift()!
+      // Mark the doc as present up front. The snapshot stream reports our own
+      // write and then the host's delete in order, so it owns the flag again
+      // from here — setting it after the await could clobber a delete that
+      // already landed.
+      this.actionDocGone = false
       try {
         await setDoc(actionRef(this.code, this.uid), {
           intent: item.intent,
           ts: Date.now(),
         } satisfies IntentDoc)
-        // The doc now exists; wait for the host to delete it before the next send.
-        this.actionDocGone = false
         item.resolve()
       } catch (e) {
+        this.actionDocGone = true // nothing was written
         item.reject(e)
       }
       this.sending = false

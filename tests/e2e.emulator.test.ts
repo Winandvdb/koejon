@@ -54,13 +54,17 @@ describe('emulator e2e', () => {
 
     let latest: SessionView | null = null
     let sentFor = -1
+    let lastTry = 0
     // Drive the host's own seat with the same bot policy whenever it is our turn.
     const maybeSend = () => {
       const v = latest
       const pub = v?.room?.pub
       if (!v || !pub || v.mySeat < 0 || !v.state) return
       if (pub.phase === 'LOBBY') return
-      if (v.room!.version === sentFor || !pub.actionSeats.includes(v.mySeat)) return
+      if (!pub.actionSeats.includes(v.mySeat)) return
+      // Same version: retry only via the resend interval — a dropped intent does
+      // not bump the version, so a stale send must be retried to make progress.
+      if (v.room!.version === sentFor && Date.now() - lastTry < 1500) return
       let a
       try {
         a = botAction(v.state, v.mySeat)
@@ -69,6 +73,7 @@ describe('emulator e2e', () => {
         return
       }
       sentFor = v.room!.version
+      lastTry = Date.now()
       console.log(`[e2e] seat ${v.mySeat} v${v.room!.version} sends`, JSON.stringify(a))
       session.act(a).catch((e) => console.warn('[e2e] act failed:', e))
     }

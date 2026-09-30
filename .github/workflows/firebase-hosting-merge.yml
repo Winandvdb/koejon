@@ -12,6 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm ci && npm run build && npm test
+      - name: Deploy Firestore rules
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KOEJON_3059E }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          # rules only — we use no composite indexes (firestore.indexes.json is empty)
+          npx firebase-tools deploy --only firestore:rules --project koejon-3059e
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
