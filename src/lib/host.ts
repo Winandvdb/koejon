@@ -114,7 +114,11 @@ export class HostGame {
       ),
     )
     h.hbTimer = setInterval(() => {
-      updateDoc(roomRef(code), { heartbeat: Date.now() }).catch(() => {})
+      // A hidden tab cannot play anyway — skip the write so an idle tab does
+      // not burn heartbeat writes all night.
+      if (typeof document === 'undefined' || !document.hidden) {
+        updateDoc(roomRef(code), { heartbeat: Date.now() }).catch(() => {})
+      }
       // Watchdog: re-arm bot scheduling in case a wakeup was ever missed.
       h.scheduleBots()
     }, h.heartbeatMs)
@@ -329,6 +333,9 @@ export class HostGame {
 
   // ---- persistence ----
 
+  /** JSON snapshots of docs as last written — unchanged docs are not rewritten. */
+  private lastWritten = new Map<string, string>()
+
   private async commit(): Promise<void> {
     const batch = writeBatch(db)
     const room: Partial<RoomDoc> = {
@@ -339,6 +346,14 @@ export class HostGame {
       opts: this.opts,
     }
     batch.update(roomRef(this.code), room)
+    const confirmed = new Map<string, string>()
+    const setIfChanged = (ref: DocumentReference, data: unknown) => {
+      const json = JSON.stringify(data)
+      if (this.lastWritten.get(ref.path) !== json) {
+        batch.set(ref, data)
+        confirmed.set(ref.path, json)
+      }
+    }
     const botHands: Record<number, Card[]> = {}
     for (let i = 0; i < 4; i++) {
       const seat = this.seats[i]
@@ -346,15 +361,16 @@ export class HostGame {
       if (seat.bot) {
         botHands[i] = this.state.hands[i]
       } else {
-        batch.set(handRef(this.code, seat.uid), { cards: visibleHand(this.state, i) })
+        setIfChanged(handRef(this.code, seat.uid), { cards: visibleHand(this.state, i) })
       }
     }
-    batch.set(handRef(this.code, 'host'), { botHands } satisfies HostHandsDoc)
-    batch.set(engineRef(this.code), { json: JSON.stringify(this.state) })
+    setIfChanged(handRef(this.code, 'host'), { botHands } satisfies HostHandsDoc)
+    setIfChanged(engineRef(this.code), { json: JSON.stringify(this.state) })
     // The version only moves forward when the write lands: the rules reject a
     // version that is not exactly +1, so a failed commit stays retryable and a
     // second host instance stays fenced out instead of corrupting the room.
     await withTimeout(batch.commit())
+    for (const [path, json] of confirmed) this.lastWritten.set(path, json)
     this.version++
     this.scheduleBots()
   }
