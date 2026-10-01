@@ -36,11 +36,6 @@ export interface HandDoc {
   cards: Card[] | null
 }
 
-/** rooms/{code}/hands/host — bot hands keyed by seat number. */
-export interface HostHandsDoc {
-  botHands: Record<number, Card[]>
-}
-
 /** rooms/{code}/actions/{uid} — a player's pending intent. */
 export type Intent =
   | { kind: 'join'; name: string }
@@ -51,5 +46,19 @@ export interface IntentDoc {
   intent: Intent
   ts: number
 }
+
+/** rooms/{code}/rtc/{uid} — WebRTC signaling; SDPs carry all ICE candidates. */
+export interface RtcDoc {
+  offer: string
+  offerTs: number
+  answer?: string
+  /** The offerTs this answer belongs to. */
+  answerFor?: number
+}
+
+/** Messages on the host↔guest data channel. */
+export type PeerMsg =
+  | { t: 'state'; room: RoomDoc; hand: HandDoc | null }
+  | { t: 'intent'; intent: Intent }
 
 export const BOT_UID_PREFIX = 'bot:'

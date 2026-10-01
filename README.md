@@ -5,6 +5,18 @@ Anonymous Authentication + Firestore for rooms (no other backend). The room crea
 browser is the host: it runs the authoritative game engine, executes all bot turns, and
 writes every state transition. Other clients only send intents.
 
+Transport (`src/lib/transport.ts`):
+
+- **Solo** runs fully in the tab (`link-local.ts`) — no Firestore traffic; a reload resumes
+  from `localStorage`.
+- **Multiplayer**: each guest opens a WebRTC data channel to the host (`link-p2p.ts`); Firestore
+  carries only the lobby view and signaling (`rooms/{code}/rtc/{uid}`, ~2 writes per connect).
+  A guest whose channel does not open (strict NAT, no WebRTC) falls back to the Firestore path
+  (`link-firestore.ts`) automatically. Load the page with `?p2p=off` to force that fallback
+  for that tab (kept across refreshes; `?p2p=on` undoes it). The console logs `[p2p] on/off`.
+  Optional TURN relay: set `VITE_TURN_URL`, `VITE_TURN_USER`, `VITE_TURN_CRED`.
+- The host keeps the full engine state in its own `localStorage` for reload recovery.
+
 ## Install
 
 ```bash

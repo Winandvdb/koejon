@@ -1,20 +1,12 @@
-import {
-  deleteDoc,
-  getDoc,
-  onSnapshot,
-  updateDoc,
-  writeBatch,
-  type DocumentReference,
-  type Unsubscribe,
-} from 'firebase/firestore'
 import { apply, createMatch, pendingSeats, toPublic, visibleHand } from '../engine'
-import type { Action, Card, State } from '../engine'
+import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
-import { db } from './firebase'
-import { actionsCol, engineRef, handRef, roomRef } from './room'
-import type { HostHandsDoc, IntentDoc, RoomDoc, RoomOpts, SeatInfo } from './net-types'
+import { HEARTBEAT_MS } from './link-firestore'
+import type { KeyValueStore } from './link-local'
+import type { HandDoc, Intent, RoomOpts, SeatInfo } from './net-types'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
+import type { HostLink } from './transport'
 
 const BOT_NAMES = [
   'Klaas',
@@ -31,17 +23,6 @@ const BOT_NAMES = [
   'Lea',
 ]
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-/** A Firestore write that hangs would freeze the serialized queue forever. */
-const withTimeout = <T>(p: Promise<T>, ms = 10_000): Promise<T> =>
-  Promise.race([
-    p,
-    delay(ms).then(() => {
-      throw new Error('firestore-write-timeout')
-    }),
-  ])
-
 export interface HostOptions {
   /** Delay before a bot acts. Default ~0.5–1 s. */
   botDelay?: () => number
@@ -52,7 +33,15 @@ export interface HostOptions {
   /** Min. pause after a bid ("Ik ga"/"Pas"/dealer choice) before the next
    *  automatic action, so the announcement is readable. Default 2 s. */
   bidLingerMs?: number
+  /** Where the full engine state is kept for reload recovery. Only this
+   *  browser (same anonymous uid) can be host, so it never leaves the device.
+   *  Default: localStorage when present; none in plain Node. */
+  storage?: KeyValueStore
+  /** Test hook: called after every landed commit. */
+  onCommit?: () => void
 }
+
+const engineKey = (code: string) => `koejon-engine-${code}`
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -64,70 +53,94 @@ export class HostGame {
   private opts: RoomOpts = { ...DEFAULT_ROOM_OPTS }
   private version = 0
   private busy: Promise<void> = Promise.resolve()
-  private unsubs: Unsubscribe[] = []
   private botTimer: ReturnType<typeof setTimeout> | null = null
   private hbTimer: ReturnType<typeof setInterval> | null = null
+  private releaseLock: (() => void) | null = null
   private botDelay: () => number
   private heartbeatMs: number
   private drawLingerMs: number
   private bidLingerMs: number
+  private storage: HostOptions['storage']
+  private onCommit: HostOptions['onCommit']
 
   private constructor(
     private code: string,
     private uid: string,
+    private link: HostLink,
     opts: HostOptions = {},
   ) {
+    this.heartbeatMs = opts.heartbeatMs ?? HEARTBEAT_MS
     this.botDelay = opts.botDelay ?? (() => 500 + Math.random() * 500)
-    this.heartbeatMs = opts.heartbeatMs ?? 5000
     this.drawLingerMs = opts.drawLingerMs ?? 3000
     this.bidLingerMs = opts.bidLingerMs ?? 2000
+    this.storage = opts.storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage)
+    this.onCommit = opts.onCommit
   }
 
   /** Load persisted engine state and room seats, then start listening. */
-  static async attach(code: string, uid: string, opts?: HostOptions): Promise<HostGame> {
-    const h = new HostGame(code, uid, opts)
-    const roomSnap = await getDoc(roomRef(code))
-    if (!roomSnap.exists()) throw new Error('room-not-found')
-    const room = roomSnap.data() as RoomDoc
-    if (room.hostUid !== uid) throw new Error('not-host')
-    h.seats = room.seats
-    h.version = room.version
-    h.opts = room.opts ?? { ...DEFAULT_ROOM_OPTS }
-    const engSnap = await getDoc(engineRef(code))
-    h.state = engSnap.exists()
-      ? (JSON.parse((engSnap.data() as { json: string }).json) as State)
-      : createMatch((Math.random() * 2 ** 31) | 0)
-
-    h.unsubs.push(
-      onSnapshot(
-        actionsCol(code),
-        (snap) => {
-          for (const ch of snap.docChanges()) {
-            if (ch.type === 'added' || ch.type === 'modified') {
-              const ref = ch.doc.ref
-              const data = ch.doc.data() as IntentDoc
-              h.enqueue(() => h.processIntent(ch.doc.id, data, ref))
-            }
-          }
-        },
-        (err) => console.error('[host] actions listener error', err),
-      ),
+  static async attach(code: string, uid: string, link: HostLink, opts?: HostOptions): Promise<HostGame> {
+    const h = new HostGame(code, uid, link, opts)
+    await h.lockTab()
+    try {
+      await h.load()
+    } catch (e) {
+      // The link stays usable: the caller may retry attach on it.
+      h.releaseLock?.()
+      throw e
+    }
+    h.link.onIntent(
+      (uid, intent) =>
+        new Promise((resolve) => h.enqueue(() => h.processIntent(uid, intent).finally(resolve))),
     )
     h.hbTimer = setInterval(() => {
-      // A hidden tab cannot play anyway — skip the write so an idle tab does
-      // not burn heartbeat writes all night.
-      if (typeof document === 'undefined' || !document.hidden) {
-        updateDoc(roomRef(code), { heartbeat: Date.now() }).catch(() => {})
-      }
+      h.link.heartbeat()
       // Watchdog: re-arm bot scheduling in case a wakeup was ever missed.
       h.scheduleBots()
     }, h.heartbeatMs)
+    // After a reload: one publish gives this tab and every guest the current
+    // state (own hand included) without waiting for the next move.
+    if (h.state.phase !== 'LOBBY') h.enqueue(() => h.commit())
     h.scheduleBots()
     return h
   }
 
+  private async load(): Promise<void> {
+    const room = await this.link.load()
+    if (!room) throw new Error('room-not-found')
+    if (room.hostUid !== this.uid) throw new Error('not-host')
+    this.seats = room.seats
+    this.version = room.version
+    this.opts = room.opts ?? { ...DEFAULT_ROOM_OPTS }
+    // A lobby has no engine state worth keeping (seats live in the room), and
+    // a saved one may be left over from an earlier solo match.
+    const inLobby = !room.pub || room.pub.phase === 'LOBBY'
+    const saved = inLobby ? null : this.readEngine()
+    if (saved) this.state = saved
+    else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
+    else throw new Error('engine-lost')
+  }
+
+  /** One host tab per room: a second one would answer the same guests. */
+  private async lockTab(): Promise<void> {
+    const locks = (globalThis.navigator as Navigator | undefined)?.locks
+    if (!locks) return
+    // Wait a moment: a tab that just reloaded or left may still be releasing it.
+    const got = await new Promise<boolean>((resolve) => {
+      locks
+        .request(`koejon-host-${this.code}`, { signal: AbortSignal.timeout(2000) }, () => {
+          resolve(true)
+          // Held until dispose.
+          return new Promise<void>((release) => (this.releaseLock = release))
+        })
+        .catch(() => resolve(false))
+    })
+    if (!got) throw new Error('host-elsewhere')
+  }
+
   dispose(): void {
-    for (const u of this.unsubs) u()
+    this.link.dispose()
+    this.releaseLock?.()
+    this.releaseLock = null
     if (this.botTimer) clearTimeout(this.botTimer)
     if (this.hbTimer) clearInterval(this.hbTimer)
   }
@@ -141,6 +154,14 @@ export class HostGame {
 
   /** Surface queue failures in tests; keeps running otherwise. */
   onError?: (e: unknown) => void
+
+  /** The host's own intents: applied in place, no Firestore round trip. */
+  submit(intent: Intent): void {
+    // Plain-data copy, as the wire would make: UI values can be Svelte proxies,
+    // which the engine's structuredClone cannot copy once they sit in the state.
+    const plain = JSON.parse(JSON.stringify(intent)) as Intent
+    this.enqueue(() => this.processIntent(this.uid, plain))
+  }
 
   // ---- lobby operations (host UI calls these directly) ----
 
@@ -243,8 +264,8 @@ export class HostGame {
       if (this.state.phase === 'LOBBY') {
         this.seats[seat] = null
       } else {
+        // The next publish drops the kicked player's hand.
         this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}`, name: s.name, bot: true }
-        await deleteDoc(handRef(this.code, s.uid)).catch(() => {})
       }
       await this.commit()
     })
@@ -254,69 +275,62 @@ export class HostGame {
   async destroyRoom(): Promise<void> {
     this.dispose()
     await this.busy.catch(() => {})
-    const batch = writeBatch(db)
-    for (const s of this.seats) {
-      if (s && !s.bot) batch.delete(handRef(this.code, s.uid))
+    await this.link.destroy(this.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
+    try {
+      this.storage?.removeItem(engineKey(this.code))
+    } catch {
+      // Storage blocked: nothing to clean up.
     }
-    batch.delete(handRef(this.code, 'host'))
-    batch.delete(engineRef(this.code))
-    batch.delete(roomRef(this.code))
-    await batch.commit()
   }
 
   // ---- intents from players ----
 
-  private async processIntent(uid: string, data: IntentDoc, ref: DocumentReference): Promise<void> {
-    try {
-      const intent = data.intent
-      if (intent.kind === 'join') {
-        // Reclaim: the seat is still this uid's, held by a bot since they left.
-        const ri = this.seats.findIndex((s) => s?.uid === uid && s.bot)
-        if (ri >= 0) {
-          this.seats[ri] = {
+  private async processIntent(uid: string, intent: Intent): Promise<void> {
+    if (intent.kind === 'join') {
+      // Reclaim: the seat is still this uid's, held by a bot since they left.
+      const ri = this.seats.findIndex((s) => s?.uid === uid && s.bot)
+      if (ri >= 0) {
+        this.seats[ri] = {
+          uid,
+          name: String(intent.name ?? '').slice(0, 20) || this.seats[ri]!.name,
+          bot: false,
+        }
+        await this.commit()
+      } else if (this.state.phase === 'LOBBY' && !this.seats.some((s) => s?.uid === uid)) {
+        const i = this.seats.findIndex((s) => s === null)
+        if (i >= 0) {
+          this.seats[i] = {
             uid,
-            name: String(intent.name ?? '').slice(0, 20) || this.seats[ri]!.name,
+            name: String(intent.name ?? '').slice(0, 20) || 'Speler',
             bot: false,
           }
           await this.commit()
-        } else if (this.state.phase === 'LOBBY' && !this.seats.some((s) => s?.uid === uid)) {
-          const i = this.seats.findIndex((s) => s === null)
-          if (i >= 0) {
-            this.seats[i] = {
-              uid,
-              name: String(intent.name ?? '').slice(0, 20) || 'Speler',
-              bot: false,
-            }
-            await this.commit()
-          }
-        }
-      } else if (intent.kind === 'leave') {
-        const i = this.seats.findIndex((s) => s?.uid === uid)
-        if (i >= 0) {
-          if (this.state.phase === 'LOBBY') {
-            this.seats[i] = null
-          } else {
-            // Mid-game leave: a bot holds the seat, but the uid stays so the
-            // player can reclaim it by rejoining the room.
-            this.seats[i] = { uid, name: this.seats[i]!.name, bot: true }
-            await deleteDoc(handRef(this.code, uid))
-          }
-          await this.commit()
-        }
-      } else if (intent.kind === 'act') {
-        const a = intent.action
-        const seat = this.seats[a.seat]
-        const startOk =
-          a.type !== 'start' ||
-          (uid === this.uid && this.state.phase === 'LOBBY' && this.seats.every(Boolean))
-        // No commit when the action was dropped: a spammed or stale intent
-        // must not turn into a full batch write.
-        if (seat && seat.uid === uid && startOk && this.tryApply(a)) {
-          await this.commit()
         }
       }
-    } finally {
-      await withTimeout(deleteDoc(ref)).catch(() => {})
+    } else if (intent.kind === 'leave') {
+      const i = this.seats.findIndex((s) => s?.uid === uid)
+      if (i >= 0) {
+        if (this.state.phase === 'LOBBY') {
+          this.seats[i] = null
+        } else {
+          // Mid-game leave: a bot holds the seat, but the uid stays so the
+          // player can reclaim it by rejoining the room. The next publish
+          // drops their hand.
+          this.seats[i] = { uid, name: this.seats[i]!.name, bot: true }
+        }
+        await this.commit()
+      }
+    } else if (intent.kind === 'act') {
+      const a = intent.action
+      const seat = this.seats[a.seat]
+      const startOk =
+        a.type !== 'start' ||
+        (uid === this.uid && this.state.phase === 'LOBBY' && this.seats.every(Boolean))
+      // No commit when the action was dropped: a spammed or stale intent
+      // must not turn into a full batch write.
+      if (seat && seat.uid === uid && startOk && this.tryApply(a)) {
+        await this.commit()
+      }
     }
   }
 
@@ -333,45 +347,33 @@ export class HostGame {
 
   // ---- persistence ----
 
-  /** JSON snapshots of docs as last written — unchanged docs are not rewritten. */
-  private lastWritten = new Map<string, string>()
+  private readEngine(): State | null {
+    try {
+      const json = this.storage?.getItem(engineKey(this.code))
+      return json ? (JSON.parse(json) as State) : null
+    } catch {
+      return null
+    }
+  }
 
   private async commit(): Promise<void> {
-    const batch = writeBatch(db)
-    const room: Partial<RoomDoc> = {
-      seats: this.seats,
-      pub: toPublic(this.state),
-      version: this.version + 1,
-      heartbeat: Date.now(),
-      opts: this.opts,
+    this.drainBotAcks()
+    try {
+      this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
+    } catch {
+      // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
-    batch.update(roomRef(this.code), room)
-    const confirmed = new Map<string, string>()
-    const setIfChanged = (ref: DocumentReference, data: unknown) => {
-      const json = JSON.stringify(data)
-      if (this.lastWritten.get(ref.path) !== json) {
-        batch.set(ref, data)
-        confirmed.set(ref.path, json)
-      }
-    }
-    const botHands: Record<number, Card[]> = {}
-    for (let i = 0; i < 4; i++) {
-      const seat = this.seats[i]
-      if (!seat) continue
-      if (seat.bot) {
-        botHands[i] = this.state.hands[i]
-      } else {
-        setIfChanged(handRef(this.code, seat.uid), { cards: visibleHand(this.state, i) })
-      }
-    }
-    setIfChanged(handRef(this.code, 'host'), { botHands } satisfies HostHandsDoc)
-    setIfChanged(engineRef(this.code), { json: JSON.stringify(this.state) })
-    // The version only moves forward when the write lands: the rules reject a
-    // version that is not exactly +1, so a failed commit stays retryable and a
-    // second host instance stays fenced out instead of corrupting the room.
-    await withTimeout(batch.commit())
-    for (const [path, json] of confirmed) this.lastWritten.set(path, json)
+    const hands = new Map<string, HandDoc>()
+    this.seats.forEach((seat, i) => {
+      if (seat && !seat.bot) hands.set(seat.uid, { cards: visibleHand(this.state, i) })
+    })
+    // The version only moves forward when the publish lands.
+    await this.link.publish(
+      { seats: this.seats, pub: toPublic(this.state), version: this.version + 1, opts: this.opts },
+      hands,
+    )
     this.version++
+    this.onCommit?.()
     this.scheduleBots()
   }
 
@@ -390,19 +392,26 @@ export class HostGame {
     return undefined
   }
 
+  private botMove(seat: number): Action {
+    return botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal')
+  }
+
+  /** The "seen it" pause exists for humans — bots confirm instantly, inside
+   *  the commit that caused the pause instead of one commit per bot. */
+  private drainBotAcks(): void {
+    while (this.state.phase === 'PLAYING') {
+      const seat = this.autoSeat()
+      if (seat === undefined || !this.seats[seat]?.bot) return
+      const a = this.botMove(seat)
+      if (a.type !== 'ack' || !this.tryApply(a)) return
+    }
+  }
+
   private scheduleBots(): void {
     if (this.botTimer) return
     if (this.state.phase === 'LOBBY' || this.state.phase === 'GAME_OVER') return
     const seat = this.autoSeat()
     if (seat === undefined) return
-    // The "seen it" pause exists for humans — bots confirm instantly.
-    if (botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal').type === 'ack') {
-      this.enqueue(async () => {
-        const s = this.autoSeat()
-        if (s !== undefined && this.tryApply(botAction(this.state, s, Math.random, this.seats[s]?.botLevel ?? 'normal'))) await this.commit()
-      })
-      return
-    }
     // Announce the dealer for a moment before the cards go out.
     const drawLinger = this.state.phase === 'DEALING'
     // A bid just got announced ("Ik ga"/"Pas"/dealer choice/second card):
@@ -423,8 +432,7 @@ export class HostGame {
       this.enqueue(async () => {
         const seat = this.autoSeat()
         if (seat === undefined) return
-        const a = botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal')
-        if (this.tryApply(a)) await this.commit()
+        if (this.tryApply(this.botMove(seat))) await this.commit()
       })
     }, wait)
   }
