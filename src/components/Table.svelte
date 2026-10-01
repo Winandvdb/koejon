@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { fly, scale } from 'svelte/transition'
   import { RANK_ORDER, SUITS } from '../engine'
   import type { Action, Card, Suit } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { sortHand } from '../lib/prefs'
-  import { activeQuotes } from '../lib/quotes'
+  import { activeQuotes, hurryQuote } from '../lib/quotes'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
   import CardView from './CardView.svelte'
@@ -147,18 +148,42 @@
   /** Short-lived table talk, one bubble per seat. */
   let sayings = $state<Record<number, { key: string; text: string }>>({})
   const firedQuotes = new Set<string>()
+  const say = (seat: number, key: string, text: string) => {
+    sayings = { ...sayings, [seat]: { key, text } }
+    setTimeout(() => {
+      if (sayings[seat]?.key !== key) return
+      const rest = { ...sayings }
+      delete rest[seat]
+      sayings = rest
+    }, 4000)
+  }
   $effect(() => {
     for (const q of activeQuotes(pub)) {
       if (firedQuotes.has(q.key)) continue
       firedQuotes.add(q.key)
-      sayings = { ...sayings, [q.seat]: { key: q.key, text: q.text } }
-      setTimeout(() => {
-        if (sayings[q.seat]?.key !== q.key) return
-        const rest = { ...sayings }
-        delete rest[q.seat]
-        sayings = rest
-      }, 4000)
+      say(q.seat, q.key, q.text)
     }
+  })
+
+  /** Nag a seat that keeps the table waiting: one pending actor for > 9 s. */
+  let waitSeat = -1
+  let waitTimer: ReturnType<typeof setTimeout> | null = null
+  let waitN = 0
+  $effect(() => {
+    const pending = pub.actionSeats.length === 1 ? pub.actionSeats[0] : -1
+    if (pending === waitSeat) return
+    waitSeat = pending
+    if (waitTimer) clearTimeout(waitTimer)
+    waitTimer = null
+    if (pending < 0) return
+    waitTimer = setTimeout(() => {
+      waitTimer = null
+      const q = hurryQuote(pending)
+      say(q.seat, `w${waitN++}`, q.text)
+    }, 9000)
+  })
+  onDestroy(() => {
+    if (waitTimer) clearTimeout(waitTimer)
   })
 
   $effect(() => {

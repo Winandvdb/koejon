@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { toPublic } from '../src/engine'
 import type { BoomkeMark, HandResult, TrickCard } from '../src/engine'
-import { activeQuotes, QUOTES } from '../src/lib/quotes'
+import { activeQuotes, hurryQuote, QUOTES } from '../src/lib/quotes'
 import { C, playingState } from './helpers'
 
 const TRICK: TrickCard[] = [
@@ -54,10 +54,10 @@ describe('table quotes', () => {
         lastTrick: TRICK,
       }),
     )
-    const qs = activeQuotes(pub)
-    expect(qs).toHaveLength(1)
-    expect(qs[0].seat % 2).toBe(0) // a winner-team seat
-    expect(QUOTES.gouwe).toContain(qs[0].text)
+    const g = activeQuotes(pub).find((q) => q.key.startsWith('g'))
+    expect(g).toBeDefined()
+    expect(g!.seat % 2).toBe(0) // a winner-team seat
+    expect(QUOTES.gouwe).toContain(g!.text)
   })
 
   it('no gouwe when the opponents hold only one trick', () => {
@@ -69,7 +69,7 @@ describe('table quotes', () => {
         lastTrick: TRICK,
       }),
     )
-    expect(activeQuotes(pub)).toHaveLength(0)
+    expect(activeQuotes(pub).some((q) => q.key.startsWith('g'))).toBe(false)
   })
 
   it('a lost hand calls for a redeal; a draw stays quiet', () => {
@@ -246,5 +246,160 @@ describe('table quotes', () => {
       }),
     )
     expect(activeQuotes(split).some((q) => q.key.startsWith('e'))).toBe(false)
+  })
+
+  it('a proven void in the led suit asks "wat was ook alweer troef?"', () => {
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 1,
+        trick: [
+          { seat: 0, card: C('S', 'K') },
+          { seat: 2, card: C('D', '9') }, // cannot follow spades, no trump played
+        ],
+      }),
+    )
+    const qs = activeQuotes(pub)
+    expect(qs).toHaveLength(1)
+    expect(qs[0].seat).toBe(2)
+    expect(QUOTES.forgot).toContain(qs[0].text)
+  })
+
+  it('overtrumping the trump that took the partner ace apologises', () => {
+    // Partner seat 0 leads S-A, opponent seat 1 buys with H-9, seat 2 overbuys H-Q.
+    const open = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 0,
+        trick: [
+          { seat: 0, card: C('S', 'A') },
+          { seat: 1, card: C('H', '9') },
+          { seat: 2, card: C('H', 'Q') },
+        ],
+      }),
+    )
+    const o = activeQuotes(open).find((q) => q.key.startsWith('o'))
+    expect(o).toBeDefined()
+    expect(o!.seat).toBe(2)
+    expect(QUOTES.notAce).toContain(o!.text)
+
+    // Same catch on the lingering finished trick (position-4 resolves instantly).
+    const linger = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 1,
+        tricksWon: [1, 0],
+        leader: 2,
+        lastTrick: [
+          { seat: 0, card: C('S', 'A') },
+          { seat: 1, card: C('H', '9') },
+          { seat: 3, card: C('D', '9') },
+          { seat: 2, card: C('H', 'Q') },
+        ],
+      }),
+    )
+    expect(activeQuotes(linger).some((q) => q.key.startsWith('o'))).toBe(true)
+
+    // No partner ace in the trick: no apology.
+    const noAce = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 0,
+        trick: [
+          { seat: 0, card: C('S', 'K') },
+          { seat: 1, card: C('H', '9') },
+          { seat: 2, card: C('H', 'Q') },
+        ],
+      }),
+    )
+    expect(activeQuotes(noAce).some((q) => q.key.startsWith('o'))).toBe(false)
+  })
+
+  it('a fat trick (over 10 points) is a goeie slag', () => {
+    const fat = [
+      { seat: 0, card: C('S', 'A') },
+      { seat: 1, card: C('S', 'K') },
+      { seat: 2, card: C('D', 'A') },
+      { seat: 3, card: C('S', 'Q') },
+    ] // 4 + 3 + 4 + 2 = 13 points
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 3,
+        tricksWon: [2, 1],
+        leader: 0,
+        lastTrick: fat,
+      }),
+    )
+    const s = activeQuotes(pub).find((q) => q.key.startsWith('s'))
+    expect(s).toBeDefined()
+    expect(s!.seat % 2).toBe(0)
+    expect(QUOTES.goodTrick).toContain(s!.text)
+
+    // A cheap trick stays quiet.
+    const lean = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 3,
+        tricksWon: [2, 1],
+        leader: 0,
+        lastTrick: TRICK, // 5 points
+      }),
+    )
+    expect(activeQuotes(lean).some((q) => q.key.startsWith('s'))).toBe(false)
+  })
+
+  it('the defenders celebrate their first trick: not kapot anymore', () => {
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        bidder: 0, // team 0 is playing
+        tricksPlayed: 3,
+        tricksWon: [2, 1],
+        leader: 1, // team 1 just won its first trick
+        lastTrick: TRICK,
+      }),
+    )
+    const qs = activeQuotes(pub)
+    const k = qs.find((q) => q.key.startsWith('k'))
+    expect(k).toBeDefined()
+    expect(k!.seat % 2).toBe(1) // a defending seat
+    expect(QUOTES.noKapot).toContain(k!.text)
+
+    // The playing team winning tricks does not trigger it.
+    const playing = toPublic(
+      playingState({
+        trump: 'H',
+        bidder: 0,
+        tricksPlayed: 3,
+        tricksWon: [1, 2],
+        leader: 0, // team 0 = playing team
+        lastTrick: TRICK,
+      }),
+    )
+    expect(activeQuotes(playing).some((q) => q.key.startsWith('k'))).toBe(false)
+  })
+
+  it('reaching 20 points mid-hand gets a "we zijn er al se"', () => {
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 4,
+        tricksWon: [2, 2],
+        leader: 0,
+        points: [21, 8],
+        lastTrick: TRICK,
+      }),
+    )
+    const q = activeQuotes(pub).find((x) => x.key === '2p1-0')
+    expect(q).toBeDefined()
+    expect(q!.seat % 2).toBe(0)
+    expect(QUOTES.there).toContain(q!.text)
+  })
+
+  it('hurryQuote picks a bystander and a nag line', () => {
+    const q = hurryQuote(0)
+    expect(q.seat).not.toBe(0)
+    expect(QUOTES.hurry).toContain(q.text)
   })
 })

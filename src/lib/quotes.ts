@@ -117,7 +117,7 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
     pub.trick.length > 0 ? pub.trick : lingering ? pub.lastTrick : null
   const shownNo = pub.trick.length > 0 ? pub.tricksPlayed + 1 : pub.tricksPlayed
 
-  if (shown && trump !== null && pub.phase === 'PLAYING' || (shown && lingering)) {
+  if (shown !== null && trump !== null) {
     const led = shown[0].card.s
     if (led === trump) {
       // A non-trump under a trump lead proves the seat is out of trump —
