@@ -220,6 +220,7 @@
 
 <div class="table-wrap">
   {#if view.hostStale}<div class="hostleft">{$t.hostLeft}</div>{/if}
+  {#if view.offline}<div class="hostleft">{$t.offline}</div>{/if}
   <div class="table">
     <div class="felt">
       {#if opts.info}<InfoPanel {pub} {seats} {myTeam} {opts} />{/if}

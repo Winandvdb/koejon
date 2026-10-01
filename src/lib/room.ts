@@ -41,12 +41,28 @@ export interface SessionView {
   state: State | null
   legal: Action[]
   hostStale: boolean
+  /** A Firestore listener died (offline or quota) — updates stopped. */
+  offline: boolean
 }
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** A hung write must not park the outbox forever. */
+const withTimeout = <T>(p: Promise<T>, ms = 10_000): Promise<T> =>
+  Promise.race([
+    p,
+    delay(ms).then(() => {
+      const e = new Error('firestore-write-timeout')
+      ;(e as Error & { code?: string }).code = 'unavailable'
+      throw e
+    }),
+  ])
 
 export class RoomSession {
   readonly room = writable<RoomDoc | null>(null)
   readonly handDoc = writable<HandDoc | null>(null)
   readonly hostStale = writable(false)
+  readonly connLost = writable(false)
   readonly view: Readable<SessionView>
   private unsubs: Unsubscribe[] = []
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
@@ -62,30 +78,45 @@ export class RoomSession {
     readonly code: string,
     readonly uid: string,
   ) {
+    const lost = (label: string) => (err: unknown) => {
+      console.error(`[room] ${label} listener error`, err)
+      this.connLost.set(true)
+    }
     this.unsubs.push(
-      onSnapshot(roomRef(code), (snap) => {
-        this.room.set(snap.exists() ? (snap.data() as RoomDoc) : null)
-      }),
-      onSnapshot(handRef(code, uid), (snap) => {
-        this.handDoc.set(snap.exists() ? (snap.data() as HandDoc) : null)
-      }),
+      onSnapshot(
+        roomRef(code),
+        (snap) => {
+          this.room.set(snap.exists() ? (snap.data() as RoomDoc) : null)
+        },
+        lost('room'),
+      ),
+      onSnapshot(
+        handRef(code, uid),
+        (snap) => {
+          this.handDoc.set(snap.exists() ? (snap.data() as HandDoc) : null)
+        },
+        lost('hand'),
+      ),
       onSnapshot(
         actionRef(code, uid),
         (snap) => {
           this.actionDocGone = !snap.exists()
           void this.flush()
         },
-        (err) => console.error('[room] action-doc listener error', err),
+        lost('action-doc'),
       ),
     )
     this.heartbeatTimer = setInterval(() => this.checkHeartbeat(), 5000)
-    this.view = derived([this.room, this.handDoc, this.hostStale], ([room, hd, hostStale]) => {
-      const mySeat = seatOf(room, uid)
-      const hand = hd?.cards ?? null
-      const state = room?.pub && mySeat >= 0 ? clientState(room.pub, mySeat, hand) : null
-      const legal = state ? legalActions(state, mySeat) : []
-      return { room, hand, mySeat, state, legal, hostStale }
-    })
+    this.view = derived(
+      [this.room, this.handDoc, this.hostStale, this.connLost],
+      ([room, hd, hostStale, connLost]) => {
+        const mySeat = seatOf(room, uid)
+        const hand = hd?.cards ?? null
+        const state = room?.pub && mySeat >= 0 ? clientState(room.pub, mySeat, hand) : null
+        const legal = state ? legalActions(state, mySeat) : []
+        return { room, hand, mySeat, state, legal, hostStale, offline: connLost }
+      },
+    )
   }
 
   private checkHeartbeat(): void {
@@ -113,10 +144,12 @@ export class RoomSession {
       // already landed.
       this.actionDocGone = false
       try {
-        await setDoc(actionRef(this.code, this.uid), {
-          intent: item.intent,
-          ts: Date.now(),
-        } satisfies IntentDoc)
+        await withTimeout(
+          setDoc(actionRef(this.code, this.uid), {
+            intent: item.intent,
+            ts: Date.now(),
+          } satisfies IntentDoc),
+        )
         item.resolve()
       } catch (e) {
         this.actionDocGone = true // nothing was written

@@ -31,7 +31,13 @@
   let showSettings = $state(false)
 
   onMount(async () => {
-    uid = await signIn()
+    try {
+      uid = await signIn()
+    } catch {
+      // No uid means no game anyway — show it instead of a stuck spinner.
+      err = $t.offline
+      return
+    }
     const storedCode = localStorage.getItem('koejon-room')
     const name = localStorage.getItem('koejon-name') ?? ''
     try {
@@ -194,7 +200,7 @@
   const send = (a: Action) => {
     session?.act(a).catch((e) => {
       console.error('[act]', e)
-      showErr(e)
+      showErr(e, '', true)
     })
   }
 
@@ -283,7 +289,9 @@
 
 <main class="main">
   {#if !uid}
-    <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
+    <div class="connecting">
+      {#if err}{err}{:else}<span class="spinner"></span>{$t.connection}{/if}
+    </div>
   {:else if !session}
     <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} />
   {:else if !view || !view.room}
