@@ -1,11 +1,11 @@
 ---
 id: task-5
 title: Make card suit symbols bigger
-status: In Progress
+status: Done
 assignee:
   - '@lab900-winand-vandenbergh'
 created_date: '2026-09-30 19:45'
-updated_date: '2026-10-05 09:41'
+updated_date: '2026-10-05 10:09'
 labels: []
 dependencies: []
 priority: medium
@@ -20,7 +20,7 @@ Increase the size of the suit signs (SUIT_GLYPH) shown on cards. The main render
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 Suit symbols on cards are visibly larger
-- [ ] #2 Card layout still fits without clipping or overlap
+- [x] #2 Card layout still fits without clipping or overlap
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -34,5 +34,5 @@ Increase the size of the suit signs (SUIT_GLYPH) shown on cards. The main render
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-src/app.css only: corner suit 0.9em -> 1.25em, center pip 0.52 -> 0.62 of card width, court suit 0.2 -> 0.27. CardView is reused by the turned trump card, so it follows. InfoPanel suit glyph and the dealer-choice buttons are not on cards: left unchanged. npm test and npm run build pass. AC2 (no clipping or overlap) needs a visual check at phone width and desktop width.
+src/app.css only: corner suit 0.9em -> 1.25em, center pip 0.52 -> 0.62 of card width, court suit 0.2 -> 0.24, court letter 0.44 -> 0.4 and raised so it clears the suit. CardView is reused by the turned trump card, so it follows. InfoPanel suit glyph and the dealer-choice buttons are not on cards: left unchanged. Real court art was tried and dropped. npm test and npm run build pass. Layout checked by hand: no clipping or overlap.
 <!-- SECTION:NOTES:END -->
