@@ -1,9 +1,11 @@
 ---
 id: task-7
 title: Played card lost and game rolls back on bad connection
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@lab900-winand-vandenbergh'
 created_date: '2026-10-05 07:14'
+updated_date: '2026-10-05 09:41'
 labels:
   - bug
   - network
