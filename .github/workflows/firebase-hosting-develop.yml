@@ -9,6 +9,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: npm ci && npm run build && npm test
+        env:
+          # Show the Firestore read/write counter on the dev channel.
+          VITE_SHOW_USAGE: 'true'
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
