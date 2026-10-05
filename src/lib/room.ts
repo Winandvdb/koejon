@@ -1,5 +1,5 @@
 import { getDoc, setDoc } from './fs'
-import { derived, writable, type Readable } from 'svelte/store'
+import { derived, get, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
@@ -9,6 +9,10 @@ import { P2P_ENABLED, P2PGuestLink, P2PHostLink } from './link-p2p'
 import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+/** How long a sent action may wait for the host's next state. The host
+ *  commits on receipt, so this covers only the network round trip. */
+export const ACT_ACK_MS = 8000
 
 export function makeCode(len = 5): string {
   const buf = new Uint8Array(len)
@@ -83,8 +87,26 @@ export class RoomSession {
     return this.link.send(intent)
   }
 
-  act(action: Action): Promise<void> {
-    return this.send({ kind: 'act', action })
+  /** Resolves once the host shows a newer state. A message lost on a weak
+   *  connection gives no error of its own, so no new state in time rejects. */
+  async act(action: Action): Promise<void> {
+    const before = get(this.room)?.seq
+    await this.send({ kind: 'act', action })
+    // A host without seq (older build) cannot confirm.
+    if (before === undefined) return
+    await new Promise<void>((resolve, reject) => {
+      let unsub = () => {}
+      const timer = setTimeout(() => {
+        unsub()
+        reject(new Error('act-lost'))
+      }, ACT_ACK_MS)
+      unsub = this.room.subscribe((r) => {
+        if ((r?.seq ?? 0) <= before) return
+        clearTimeout(timer)
+        queueMicrotask(() => unsub())
+        resolve()
+      })
+    })
   }
 
   leave(): Promise<void> {

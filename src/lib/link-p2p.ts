@@ -275,12 +275,22 @@ export class P2PGuestLink implements GuestLink {
   private retry: ReturnType<typeof setTimeout> | null = null
   private unsub: Unsubscribe | null = null
   private disposed = false
+  /** Newest game seq shown, and the seq of the last Firestore room. The host
+   *  skips Firestore writes while our channel is open, so after a drop that
+   *  copy can be old: showing it would undo plays we already saw. */
+  private shownSeq = 0
+  private fsSeq = 0
+  private fsHand: HandDoc | null | undefined
 
   constructor(
     private code: string,
     private uid: string,
   ) {
     this.inner = new FirestoreGuestLink(code, uid)
+  }
+
+  private get fsCurrent(): boolean {
+    return !this.open && this.fsSeq >= this.shownSeq
   }
 
   private get open(): boolean {
@@ -291,10 +301,17 @@ export class P2PGuestLink implements GuestLink {
     this.ev = ev
     this.inner.start({
       room: (r) => {
-        if (r === null || !this.open) ev.room(r)
+        if (r === null) return ev.room(r)
+        this.fsSeq = r.seq ?? 0
+        if (!this.fsCurrent) return
+        this.shownSeq = this.fsSeq
+        ev.room(r)
+        // A hand held back while this copy was old belongs to it now.
+        if (this.fsHand !== undefined) ev.hand(this.fsHand)
       },
       hand: (h) => {
-        if (!this.open) ev.hand(h)
+        this.fsHand = h
+        if (this.fsCurrent) ev.hand(h)
       },
       lost: () => {
         if (!this.open) ev.lost()
@@ -336,6 +353,8 @@ export class P2PGuestLink implements GuestLink {
       if (this.ch !== ch) return
       const msg = JSON.parse(m.data as string) as PeerMsg
       if (msg.t !== 'state') return
+      // The channel is in order and straight from the host: always current.
+      this.shownSeq = msg.room.seq ?? 0
       this.ev?.room(msg.room)
       this.ev?.hand(msg.hand)
     }
