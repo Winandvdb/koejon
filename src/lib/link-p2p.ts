@@ -127,7 +127,13 @@ export class P2PHostLink implements HostLink {
 
   onIntent(cb: (uid: string, intent: Intent) => Promise<void>): void {
     this.intentCb = cb
-    this.inner.onIntent(cb)
+    this.inner.onIntent((uid, intent) => {
+      // A guest only writes intent docs without an open channel: ours is dead
+      // and unnoticed, so its answer must go through Firestore.
+      const peer = this.peers.get(uid)
+      if (peer && this.isOpen(uid)) this.drop(uid, peer)
+      return cb(uid, intent)
+    })
     if (!this.p2p) return
     this.unsub = onSnapshot(
       rtcCol(this.code),

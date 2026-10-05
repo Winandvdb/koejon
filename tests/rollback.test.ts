@@ -4,14 +4,18 @@ import { createMatch, toPublic } from '../src/engine'
 import type { Card } from '../src/engine'
 import { HostGame } from '../src/lib/host'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
-import { P2PGuestLink } from '../src/lib/link-p2p'
+import { P2PGuestLink, P2PHostLink } from '../src/lib/link-p2p'
 import type { HandDoc, RoomDoc } from '../src/lib/net-types'
 import { ACT_ACK_MS, newRoomDoc, RoomSession } from '../src/lib/room'
 import type { GuestEvents, GuestLink, HostLink } from '../src/lib/transport'
-import { C } from './helpers'
+import { C, playingState } from './helpers'
 
 // Firestore stand-in: tests fire each listener by hand, as a late snapshot would.
-const fake = vi.hoisted(() => ({ listeners: new Map<string, (snap: unknown) => void>() }))
+const fake = vi.hoisted(() => ({
+  listeners: new Map<string, (snap: unknown) => void>(),
+  /** Paths of hand docs the host wrote, in order. */
+  handWrites: [] as string[],
+}))
 vi.mock('../src/lib/firebase', () => ({ db: {} }))
 vi.mock('../src/lib/fs', () => ({
   doc: (_db: unknown, ...p: string[]) => ({ path: p.join('/') }),
@@ -24,7 +28,12 @@ vi.mock('../src/lib/fs', () => ({
   updateDoc: async () => {},
   deleteDoc: async () => {},
   getDoc: async () => ({ exists: () => false }),
-  writeBatch: () => ({}),
+  writeBatch: () => ({
+    update: () => {},
+    set: (ref: { path: string }) => void fake.handWrites.push(ref.path),
+    delete: () => {},
+    commit: async () => {},
+  }),
 }))
 
 class FakeChannel {
@@ -45,7 +54,9 @@ class FakePC {
   signalingState = 'stable'
   connectionState = 'new'
   localDescription: unknown = null
+  closed = false
   onconnectionstatechange: (() => void) | null = null
+  ondatachannel: ((e: { channel: FakeChannel }) => void) | null = null
   constructor() {
     pcs.push(this)
   }
@@ -59,8 +70,14 @@ class FakePC {
     this.localDescription = d
     this.signalingState = 'have-local-offer'
   }
+  async setRemoteDescription() {}
+  async createAnswer() {
+    return { type: 'answer', sdp: '' }
+  }
   addEventListener() {}
-  close() {}
+  close() {
+    this.closed = true
+  }
 }
 
 const CODE = 'ABCDE'
@@ -88,8 +105,10 @@ function memoryStore(): KeyValueStore {
 
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   pcs.length = 0
   fake.listeners.clear()
+  fake.handWrites.length = 0
 })
 
 describe('no rollback on a flaky connection', () => {
@@ -161,6 +180,38 @@ describe('no rollback on a flaky connection', () => {
     expect(seqs[2]).toBeGreaterThan(seqs[1])
     again.dispose()
   })
+
+  test('an intent through Firestore moves that guest off its dead channel', async () => {
+    vi.stubGlobal('RTCPeerConnection', FakePC)
+    const link = new P2PHostLink(CODE, 'host', true)
+    await link.load()
+    const got: string[] = []
+    link.onIntent(async (uid) => void got.push(uid))
+    fake.listeners.get(`rooms/${CODE}/rtc`)!({
+      docChanges: () => [{ type: 'added', doc: { id: ME, data: () => ({ offer: '{}', offerTs: 1 }) } }],
+    })
+    await tick()
+    const pc = pcs[0]
+    const ch = new FakeChannel()
+    ch.readyState = 'open'
+    pc.ondatachannel!({ channel: ch })
+    ch.onopen!()
+    const hands = new Map([[ME, { cards: [] }]])
+    await link.publish(roomAt(5), hands)
+    expect(fake.handWrites).toEqual([])
+
+    // The guest's channel died unnoticed here; it falls back to an intent doc.
+    fake.listeners.get(`rooms/${CODE}/actions`)!({
+      docChanges: () => [{ type: 'added', doc: { id: ME, ref: {}, data: () => ({ intent: { kind: 'leave' } }) } }],
+    })
+    await tick()
+    expect(got).toEqual([ME])
+    expect(pc.closed).toBe(true)
+    // So the answer to that intent reaches the guest through Firestore.
+    await link.publish(roomAt(6), hands)
+    expect(fake.handWrites).toContain(`rooms/${CODE}/hands/${ME}`)
+    link.dispose()
+  })
 })
 
 describe('act waits for the host', () => {
@@ -185,6 +236,22 @@ describe('act waits for the host', () => {
     const { session } = fakeSession()
     const p = session.act({ type: 'ack', seat: 1 })
     const done = expect(p).rejects.toThrow('act-lost')
+    await vi.advanceTimersByTimeAsync(ACT_ACK_MS)
+    await done
+  })
+
+  test('a newer state from another move does not confirm ours', async () => {
+    vi.useFakeTimers()
+    const { session, ev } = fakeSession()
+    const card = C('S', '7')
+    const playing = { ...roomAt(5), pub: toPublic(playingState()) }
+    ev.room(playing)
+    ev.hand({ cards: [card] })
+    const p = session.act({ type: 'play', seat: 1, card })
+    const done = expect(p).rejects.toThrow('act-lost')
+    await vi.advanceTimersByTimeAsync(0)
+    // A new state in which our card is still to play: our move did not land.
+    ev.room({ ...playing, seq: 6 })
     await vi.advanceTimersByTimeAsync(ACT_ACK_MS)
     await done
   })

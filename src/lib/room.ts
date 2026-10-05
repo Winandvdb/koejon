@@ -20,6 +20,9 @@ export function makeCode(len = 5): string {
   return [...buf].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('')
 }
 
+/** Same action, whatever the key order of the objects. */
+const actionKey = (a: Action) => JSON.stringify(a, Object.keys(a).concat('s', 'r').sort())
+
 export function seatOf(room: RoomDoc | null, uid: string): number {
   if (!room) return -1
   return room.seats.findIndex((s) => s?.uid === uid)
@@ -87,21 +90,25 @@ export class RoomSession {
     return this.link.send(intent)
   }
 
-  /** Resolves once the host shows a newer state. A message lost on a weak
-   *  connection gives no error of its own, so no new state in time rejects. */
+  /** Resolves once the host shows a newer state in which this move is no
+   *  longer open, so it landed. A message lost on a weak connection gives no
+   *  error of its own, so no such state in time rejects. */
   async act(action: Action): Promise<void> {
     const before = get(this.room)?.seq
     await this.send({ kind: 'act', action })
     // A host without seq (older build) cannot confirm.
     if (before === undefined) return
+    const key = actionKey(action)
     await new Promise<void>((resolve, reject) => {
       let unsub = () => {}
       const timer = setTimeout(() => {
         unsub()
         reject(new Error('act-lost'))
       }, ACT_ACK_MS)
-      unsub = this.room.subscribe((r) => {
-        if ((r?.seq ?? 0) <= before) return
+      unsub = this.view.subscribe((v) => {
+        if ((v.room?.seq ?? 0) <= before) return
+        // Another seat's move also makes a newer state.
+        if (v.legal.some((a) => actionKey(a) === key)) return
         clearTimeout(timer)
         queueMicrotask(() => unsub())
         resolve()

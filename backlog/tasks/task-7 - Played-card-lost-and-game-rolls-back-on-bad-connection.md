@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@lab900-winand-vandenbergh'
 created_date: '2026-10-05 07:14'
-updated_date: '2026-10-05 09:48'
+updated_date: '2026-10-05 10:09'
 labels:
   - bug
   - network
@@ -51,4 +51,9 @@ Changes:
 Tests: tests/rollback.test.ts (fake RTC channel + fake Firestore: late seq-3 copy after seq 5 is ignored; seq after failed publish and reload; act resolve / act-lost). npm test and npm run build pass.
 
 Check by hand: 2 browsers, guest on P2P, throttle or cut the guest network mid-trick, then restore. The guest table must never go back. A lost play shows the error after about 8 s.
+
+Review fixes:
+- link-p2p.ts (P2PHostLink): an intent doc from a guest with an open channel means that channel is dead. The host drops it, so its answer goes through Firestore and the guest gets no false act-lost.
+- room.ts: act() resolves only when the newer state no longer offers the sent move, so another seat's move does not hide a lost one.
+- Tests for both in tests/rollback.test.ts.
 <!-- SECTION:NOTES:END -->
