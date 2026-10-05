@@ -4,8 +4,10 @@ title: Interactive cut (afpakken) of the deck before the next deal
 status: To Do
 assignee: []
 created_date: '2026-09-30 19:43'
+updated_date: '2026-10-05 08:32'
 labels: []
 dependencies: []
+priority: low
 ---
 
 ## Description
