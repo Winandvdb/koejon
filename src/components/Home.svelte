@@ -29,6 +29,8 @@
   const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
   let code = $state(inviteCode.toUpperCase())
   let invited = $state(!!inviteCode)
+  // Multiplayer needs Firestore; solo plays on without a network.
+  let online = $state(navigator.onLine)
 
   function backToHome() {
     invited = false
@@ -48,9 +50,11 @@
 
   function join(e: SubmitEvent) {
     e.preventDefault()
-    if (name.trim() && code.trim()) onjoin(code.trim(), name.trim())
+    if (online && name.trim() && code.trim()) onjoin(code.trim(), name.trim())
   }
 </script>
+
+<svelte:window ononline={() => (online = true)} onoffline={() => (online = false)} />
 
 <div class="home">
   <div class="hero">
@@ -79,8 +83,9 @@
           <span>{$t.nickname}</span>
           <input bind:value={name} placeholder={$t.nicknamePh} maxlength="20" oninput={save} />
         </label>
-        <button class="btn big primary" type="submit" disabled={!name.trim()}>{$t.joinRoom}</button>
+        <button class="btn big primary" type="submit" disabled={!online || !name.trim()}>{$t.joinRoom}</button>
       </form>
+      {#if !online}<p class="muted">{$t.offlineJoin}</p>{/if}
       <button class="link-btn" onclick={backToHome}>← {$t.title}</button>
     </div>
   {:else}
@@ -89,8 +94,9 @@
         <span>{$t.nickname}</span>
         <input bind:value={name} placeholder={$t.nicknamePh} maxlength="20" oninput={save} />
       </label>
+      {#if !online}<p class="muted">{$t.offlineSolo}</p>{/if}
       <div class="home-actions">
-        <button class="btn big primary" disabled={!name.trim()} onclick={() => oncreate(name.trim())}>
+        <button class="btn big primary" disabled={!online || !name.trim()} onclick={() => oncreate(name.trim())}>
           <span>🌐 {$t.createRoom}</span>
         </button>
         <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim(), botLevel)}>
@@ -115,7 +121,7 @@
           <span>{$t.joinRoom}</span>
           <input class="code-input" bind:value={code} placeholder={$t.codePh} maxlength="6" />
         </label>
-        <button class="btn" type="submit" disabled={!name.trim() || !code.trim()}>{$t.joinRoom}</button>
+        <button class="btn" type="submit" disabled={!online || !name.trim() || !code.trim()}>{$t.joinRoom}</button>
       </form>
     </div>
   {/if}

@@ -129,10 +129,16 @@ Make the names:
 
 - `<SLUG>`: 2 to 5 words from the title, lower case, joined with `-`. Example: `trick-rollback`.
 - `<BRANCH>`: `fix/task-<N>-<SLUG>` if the task has label `bug`, else `feature/task-<N>-<SLUG>`.
-- `<WT>`: the absolute path of `<REPO>/../koejon-task-<N>`.
+- `<WT>`: the absolute path `<REPO>/.worktrees/task-<N>`. It is inside the repo folder, so sandboxed commands can write there. `.worktrees/` is in `.gitignore`.
 
 ```bash
 cd <REPO>
+git check-ignore -q .worktrees/x || echo "NOT IGNORED"
+```
+
+If this prints `NOT IGNORED`, add the line `.worktrees/` to `<REPO>/.gitignore` before you continue. Do not commit that change in `<REPO>`. Tell the user about it in step 11.
+
+```bash
 git worktree add --no-track -b <BRANCH> <WT> origin/develop
 cd <WT>
 npm ci
@@ -201,14 +207,22 @@ If a check fails, fix the cause and run both again. If they still fail after 3 f
 
 ## Step 9: Update the task
 
-For each acceptance criterion that you completed and checked:
+Put each acceptance criterion in one of three groups:
+
+| Group | Meaning | Example |
+|---|---|---|
+| **Done** | You made the change AND a test or check proves it. | A new test passes. |
+| **Manual check** | You made the change, but only a person can confirm it. You cannot see the screen or a real bad network. | "No clipping on cards", "colour stands out", "works on iOS". |
+| **Not done** | You did not make the change, or a test for it fails. | |
+
+Tick only the **Done** criteria:
 
 ```bash
 backlog task edit <N> --check-ac <index> --check-ac <index>
 backlog task edit <N> --notes "<what you changed, which files, what you tested, what to check by hand>"
 ```
 
-If all criteria are checked and both checks pass: `backlog task edit <N> -s Done`. Otherwise keep `In Progress`.
+If all criteria are **Done** and both checks pass: `backlog task edit <N> -s Done`. Otherwise keep `In Progress`.
 
 ## Step 10: Commit, push, open the PR
 
@@ -218,7 +232,7 @@ First check that you did not edit the main checkout by mistake:
 git -C <REPO> status --porcelain
 ```
 
-Compare the output with `<BASELINE>` from step 1. If there are new lines, you edited files in `<REPO>`. For each new file:
+Compare the output with `<BASELINE>` from step 1. Ignore lines for `.worktrees/` and `.gitignore`: you made those in step 5, and they are not mistakes. **Never delete anything in `.worktrees/`.** If there are other new lines, you edited files in `<REPO>`. For each new file:
 
 1. Copy the change to the same path under `<WT>`.
 2. Undo it in `<REPO>`: `git -C <REPO> restore <path>` for a changed file, or delete a new file.
@@ -252,8 +266,9 @@ Closes #<ISSUE> · Backlog: task-<N>
 <2-5 bullets: what changed and why>
 
 ## Acceptance criteria
-- [x] <done criterion>
-- [ ] <not done criterion — say why>
+- [x] <Done criterion>
+- [ ] <Manual check criterion> — manual check, see below
+- [ ] <Not done criterion> — not done: <why>
 
 ## Tests
 - `npm test`: <pass/fail>
@@ -268,7 +283,15 @@ gh pr create --repo Winandvdb/koejon --base develop --head <BRANCH> --assignee @
   --title "task-<N>: <title>" --body-file <file>
 ```
 
-Add `--draft` if a check fails or a criterion is not done.
+Add flags to that command from this table. Use the first row that is true:
+
+| Situation | Add |
+|---|---|
+| `npm test` or `npm run build` fails, or a criterion is **Not done** | `--draft` |
+| All criteria are **Done** or **Manual check**, and at least one is **Manual check** | `--label "needs manual check"` |
+| All criteria are **Done** | nothing |
+
+A draft PR always means that something is wrong. A **Manual check** alone is not a reason for a draft.
 
 ## Step 11: Report to the user
 
@@ -276,7 +299,8 @@ Give, in short sentences:
 
 - Issue `#<ISSUE>` is assigned to `<ME>`.
 - Branch `<BRANCH>`, worktree `<WT>`.
-- PR link, and if it is a draft, why.
+- PR link. If it is a draft, why. If it has the label `needs manual check`, which criteria.
 - Result of `npm test` and `npm run build`.
 - What the user must check by hand.
+- If you added `.worktrees/` to `<REPO>/.gitignore` in step 5: the user must commit that.
 - After the merge, remove the worktree with `git worktree remove <WT>`.

@@ -80,3 +80,6 @@ ui-debug.log
 firestore-debug.log
 
 .idea/
+
+# Agent task worktrees (start-task skill)
+.worktrees/
