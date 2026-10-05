@@ -1,0 +1,42 @@
+---
+id: task-15
+title: Apply Lighthouse findings from the prod audit
+status: To Do
+assignee: []
+created_date: '2026-10-05 12:04'
+labels:
+  - performance
+  - seo
+dependencies: []
+priority: medium
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+A Lighthouse run on https://koejon.web.app (incognito, mobile, Slow 4G, 2026-10-05) gave Performance 91, Accessibility 100, Best Practices 100, SEO 82. FCP 1.6 s, LCP 3.4 s, total payload 286 KB.
+
+Findings and their cause:
+
+1. Longest request chain (1,637 ms): auth/iframe.js (93 KB, firebaseapp.com) -> getProjectConfig, plus apis.google.com/js/api.js and gapi (41 KB). getAuth(app) in src/lib/firebase.ts installs the popup/redirect resolver, but the app only uses anonymous sign-in. Fix: use initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] }) without a popupRedirectResolver. Check that tests and e2e (Node) still work with it.
+2. LCP 3.4 s on the home h1: App.svelte waits for signIn() before it shows the home screen. Fix 1 makes sign-in faster.
+3. SEO: index.html has no meta description. Add one in Dutch.
+4. SEO: robots.txt is invalid, because the ** rewrite in firebase.json returns index.html. Add public/robots.txt.
+5. Best practices (unscored): no COOP header and no frame control. Add X-Frame-Options: DENY, Content-Security-Policy: frame-ancestors 'none' and Cross-Origin-Opener-Policy: same-origin in firebase.json hosting headers. A full CSP is out of scope (Firestore, WebRTC and emulator need a careful allow-list).
+6. Optional: unused JS 108 KB of 146 KB in one bundle. Lazy-load marked (RulesDialog) and qrcode (Lobby) with dynamic import().
+
+Out of scope: source maps in prod, full CSP / Trusted Types, the non-composited colour transition on buttons.
+
+Note: task-14 (PWA) also adds public/ and changes index.html and the sign-in startup. Expect a small merge conflict.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Acceptance Criteria
+<!-- AC:BEGIN -->
+- [ ] #1 The app makes no request to firebaseapp.com/__/auth/iframe or apis.google.com on load
+- [ ] #2 Anonymous sign-in keeps the same uid after a reload
+- [ ] #3 index.html has a meta description
+- [ ] #4 /robots.txt is served as a valid robots.txt, not as HTML
+- [ ] #5 Hosting responses include X-Frame-Options, CSP frame-ancestors and Cross-Origin-Opener-Policy headers
+- [ ] #6 Lighthouse (incognito, mobile) on the dev channel gives SEO 100 and LCP below 3.4 s
+- [ ] #7 npm test, npm run build and npm run e2e pass
+<!-- AC:END -->
