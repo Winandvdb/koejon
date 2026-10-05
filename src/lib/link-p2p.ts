@@ -6,7 +6,7 @@ import {
   setDoc,
   updateDoc,
   type Unsubscribe,
-} from 'firebase/firestore'
+} from './fs'
 import { db } from './firebase'
 import { FirestoreGuestLink, FirestoreHostLink, HEARTBEAT_MS } from './link-firestore'
 import type { HandDoc, Intent, PeerMsg, RoomDoc, RtcDoc } from './net-types'

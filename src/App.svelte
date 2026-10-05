@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getDoc } from 'firebase/firestore'
+  import { getDoc, resetUsage, usage } from './lib/fs'
   import { signIn } from './lib/firebase'
   import {
     createRoom,
@@ -23,6 +23,9 @@
   import Lobby from './components/Lobby.svelte'
   import Table from './components/Table.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
+
+  /** Dev builds show this tab's Firestore reads/writes in the top bar. */
+  const DEV = !!(import.meta as { env?: { DEV?: boolean } }).env?.DEV
 
   let uid = $state('')
   let session = $state<RoomSession | null>(null)
@@ -264,6 +267,13 @@
   </div>
   {#if session && session.code !== SOLO_CODE}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
+  {#if DEV}
+    <button
+      class="room-chip usage"
+      title="Firestore reads / writes from this tab since load (click to reset). Excludes the rules' isHost reads on the server: about 1 per host write."
+      onclick={resetUsage}>R {$usage.reads} · W {$usage.writes}</button
+    >
+  {/if}
   <div class="settings-anchor">
     {#if view?.room}
       {@const r = view.room}

@@ -1,4 +1,6 @@
+import { get } from 'svelte/store'
 import { describe, expect, test } from 'vitest'
+import { usage } from '../src/lib/fs'
 import { botAction } from '../src/bots/bot'
 import { HostGame } from '../src/lib/host'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
@@ -81,5 +83,7 @@ describe('offline solo', () => {
     second.close()
     expect(localLinks(UID, storage)).toBeNull()
     expect(storage.getItem(`koejon-engine-${SOLO_CODE}`)).toBeNull()
+    // A whole solo match, reload included, never touched Firestore.
+    expect(get(usage)).toEqual({ reads: 0, writes: 0 })
   }, 60_000)
 })

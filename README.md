@@ -54,9 +54,8 @@ Open the printed Vite URL. The app detects the missing `VITE_FIREBASE_*` config 
 connects to the emulators automatically (Auth `127.0.0.1:9199`, Firestore
 `127.0.0.1:8180`, Emulator UI `http://127.0.0.1:4100`).
 
-> Port note: the spec defaults (auth 9099, firestore 8080) were occupied by other
-> processes on this machine, so this project uses 9199/8180 (see RULE_ASSUMPTIONS.md).
-> Change the ports in `firebase.json`, `.env.example`, `src/lib/firebase.ts` and
+> Port note: this project uses 9199/8180 instead of the Firebase defaults
+> (auth 9099, firestore 8080). Change the ports in `firebase.json`, `.env.example`, `src/lib/firebase.ts` and
 > `tests/e2e.emulator.test.ts` if you want the defaults back.
 
 ### Scripted end-to-end match

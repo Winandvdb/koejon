@@ -230,14 +230,8 @@ export class HostGame {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY') return
       if (this.seats.some((s) => s === null)) return
-      // Prefer a human seat as each team's drawing player.
-      const humans = this.seats.map((s, i) => ({ s, i })).filter((x) => x.s && !x.s.bot)
-      const drawerA = humans.find((x) => x.i % 2 === 0)?.i ?? 0
-      const drawerB = humans.find((x) => x.i % 2 === 1)?.i ?? 1
-      this.state.dealerDraw = { drawer: [drawerA, drawerB], draws: [], packetA: null, pending: 0, winnerSeat: null }
-      const hostSeat = this.seats.findIndex((s) => s?.uid === this.uid)
-      this.state = apply(this.state, { type: 'start', seat: Math.max(0, hostSeat) })
-      await this.commit()
+      // The lobby state is an untouched createMatch(seed): keep its seed.
+      await this.beginMatch(this.state.seed)
     })
   }
 
@@ -245,15 +239,21 @@ export class HostGame {
   newMatch(): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'GAME_OVER') return
-      const seed = (Math.random() * 2 ** 31) | 0
-      const humans = this.seats.map((s, i) => ({ s, i })).filter((x) => x.s && !x.s.bot)
-      const drawerA = humans.find((x) => x.i % 2 === 0)?.i ?? 0
-      const drawerB = humans.find((x) => x.i % 2 === 1)?.i ?? 1
-      this.state = createMatch(seed, [drawerA, drawerB])
-      const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
-      this.state = apply(this.state, { type: 'start', seat: hostSeat })
-      await this.commit()
+      await this.beginMatch((Math.random() * 2 ** 31) | 0)
     })
+  }
+
+  /** A fresh match, started into the dealer draw. Each team's drawing player
+   *  is a human seat when the team has one. */
+  private async beginMatch(seed: number): Promise<void> {
+    const humanSeat = (team: number) =>
+      this.seats.findIndex((s, i) => i % 2 === team && s !== null && !s.bot)
+    const drawerA = humanSeat(0)
+    const drawerB = humanSeat(1)
+    this.state = createMatch(seed, [drawerA >= 0 ? drawerA : 0, drawerB >= 0 ? drawerB : 1])
+    const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
+    this.state = apply(this.state, { type: 'start', seat: hostSeat })
+    await this.commit()
   }
 
   /** Drop a stuck human seat: cleared in the lobby, a bot takes over mid-game. */
@@ -264,7 +264,8 @@ export class HostGame {
       if (this.state.phase === 'LOBBY') {
         this.seats[seat] = null
       } else {
-        // The next publish drops the kicked player's hand.
+        // Unlike a voluntary leave, the seat gets a bot uid: a kicked player
+        // cannot reclaim it by rejoining. The next publish drops their hand.
         this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}`, name: s.name, bot: true }
       }
       await this.commit()

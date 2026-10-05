@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte'
   import { fly, scale } from 'svelte/transition'
   import { RANK_ORDER, SUITS } from '../engine'
-  import type { Action, Card, Suit } from '../engine'
+  import type { Action, Card } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { sortHand } from '../lib/prefs'
@@ -50,15 +50,11 @@
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
-    new Set(
-      view.legal
-        .filter((a) => a.type === 'play')
-        .map((a) => (a as { card: Card }).card.s + (a as { card: Card }).card.r),
-    ),
+    new Set(view.legal.flatMap((a) => (a.type === 'play' ? [a.card.s + a.card.r] : []))),
   )
   const has = (type: Action['type']) => view.legal.some((a) => a.type === type)
   const chooseSuits = $derived(
-    view.legal.filter((a) => a.type === 'choose' && a.suit !== null).map((a) => (a as { suit: Suit }).suit),
+    view.legal.flatMap((a) => (a.type === 'choose' && a.suit !== null ? [a.suit] : [])),
   )
   const choosePass = $derived(view.legal.some((a) => a.type === 'choose' && a.suit === null))
 
@@ -66,8 +62,8 @@
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
   )
   const dealerBlind = $derived(biddingPhase && my === pub.dealer)
-  /** The turned cards sit at the dealer's seat while bidding runs. */
-  // Turned cards stay at the dealer until all seats confirmed them at play start.
+  /** The turned cards sit at the dealer's seat while bidding runs, and until
+   *  all seats confirmed them at play start. */
   const showTurned = $derived(
     pub.turned !== null &&
       (biddingPhase ||

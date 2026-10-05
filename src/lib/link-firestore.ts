@@ -8,7 +8,7 @@ import {
   updateDoc,
   writeBatch,
   type Unsubscribe,
-} from 'firebase/firestore'
+} from './fs'
 import { db } from './firebase'
 import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
 import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from './transport'
