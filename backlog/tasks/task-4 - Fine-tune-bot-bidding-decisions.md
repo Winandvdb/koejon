@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@Winandvdb'
 created_date: '2026-09-30 19:43'
-updated_date: '2026-10-05 15:21'
+updated_date: '2026-10-05 16:20'
 labels: []
 dependencies: []
 priority: high
@@ -39,5 +39,13 @@ Bots almost always bid ('ik ga') on the first turned card. They do not consider 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Bidding in src/bots/bot.ts: no bid with 0 own trumps (also no knijpen or decisive bid); 1 trump only if it is K or A and rateHand >= 13 (LONE_TRUMP_MIN); BID_THRESHOLD_1 10 -> 11. Tests in tests/bot.test.ts (knijpen TRASH hand now has 2 low trumps). New scripts/bot-benchmark.mjs (npm run bench): 500 seeds x 2 sides vs origin/develop. Win rate: normal 61.0% +-3.0, easy 58.3% +-3.1, hard 60.8% +-3.0. Self-play (normal): 1st card bid rate 33.8% -> 19.5%, 2nd card bid rate 53.4% -> 42.5%, 2nd card turned 27.0% -> 51.0% of hands, bids with 0 trump 2.5% -> 0%, with 1 trump 22.5% -> 1.4%.
+Bidding in src/bots/bot.ts:
+- No bid with 0 own trumps (also no knijpen or decisive bid).
+- 1 trump only if it is K or A and rateHand >= 13 (LONE_TRUMP_MIN).
+- Threshold by stake, not by round: 1 line 11, 2 lines 8, 4+ lines 7. Reason: a loss also adds a koei, so break-even is (stake+1)/(2*stake+1). The 1st card after an all-pass now also uses 8.
+- 1st card with exactly 2 trumps: bid only with a K or A of trump (knijpen excepted).
+- 1st card (normal/hard): wait for the 2nd card when another suit rates 2+ higher, unless rating >= threshold + 3.
+Tests in tests/bot.test.ts. New scripts/bot-benchmark.mjs (npm run bench).
+Benchmark, 6000 matches per level vs origin/develop: easy 58.5% +-1.2, normal 61.4% +-1.2, hard 61.2% +-1.2. Vs first PR commit: easy 51.1%, normal 51.7%, hard 51.6% (+-1.3).
+Self-play normal: 1st card bid rate 34.6% -> 16.9%, 2nd card turned 26.4% -> 56.8% of hands, bids with 0 trump 2.4% -> 0%, 1 trump 22.2% -> 1.0%.
 <!-- SECTION:NOTES:END -->

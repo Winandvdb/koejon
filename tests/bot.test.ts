@@ -77,6 +77,33 @@ describe('bot bidding', () => {
     })
     expect(botAction(r2, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
   })
+
+  it('bids that hand on the 1st card too once the stake is doubled', () => {
+    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('C', '9')]
+    expect(botAction(bidState(hand, { multiplier: 2 }), 1, never)).toEqual({
+      type: 'bid',
+      seat: 1,
+      play: true,
+    })
+  })
+
+  it('two low trumps never go on the 1st card, aces or not', () => {
+    const hand = [C('H', 'J'), C('H', '9'), C('S', 'A'), C('D', 'A'), C('C', 'A'), C('C', '9')]
+    expect(botAction(bidState(hand), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+    const r2 = bidState(hand, {
+      phase: 'BIDDING_R2',
+      turned: { first: C('S', '9'), second: C('H', 'Q'), secondUp: true },
+    })
+    expect(botAction(r2, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
+  })
+
+  it('waits for the 2nd card when the hand fits another suit clearly better', () => {
+    // Good enough for hearts, much better for spades.
+    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('S', 'K'), C('S', 'Q'), C('D', 'A')]
+    expect(botAction(bidState(hand), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+    // Beginners do not weigh other suits.
+    expect(botAction(bidState(hand), 1, never, 'easy')).toEqual({ type: 'bid', seat: 1, play: true })
+  })
 })
 
 describe('bot troefke', () => {
