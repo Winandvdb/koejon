@@ -1,9 +1,11 @@
 ---
 id: task-6
 title: Improve bot trump play and trump counting
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 07:14'
+updated_date: '2026-10-05 14:17'
 labels:
   - bots
 dependencies: []
