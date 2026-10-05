@@ -76,7 +76,8 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - The issue number can differ from the task number. Find the issue by that first line.
 - An assigned issue is taken. Do not work on an issue that is assigned to someone else.
 - Edit task files with the `backlog` CLI (`backlog task edit <N> ...`) or the backlog MCP tools. Do not change the `<!-- SECTION -->` / `<!-- AC -->` markers by hand.
-- To start work on a task, use the `start-task` skill (`.agents/skills/start-task/SKILL.md`). It claims the issue and makes a worktree.
+- To start work on a task, use the `start-task` skill (`.agents/skills/start-task/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/task-<N>` (ignored by git).
+- A PR with the label `needs manual check` is complete, but a person must still check the UI or network behaviour. A draft PR means that something failed.
 
 ## Keep this file current
 
