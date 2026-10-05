@@ -30,8 +30,9 @@ export interface HostOptions {
   /** Min. pause after the dealer draw completes, so the drawn cards and the
    *  draw winner stay visible before dealing. Default 3 s. */
   drawLingerMs?: number
-  /** Min. pause after a bid ("Ik ga"/"Pas"/dealer choice) before the next
-   *  automatic action, so the announcement is readable. Default 2 s. */
+  /** Min. pause after a bid ("Ik ga"/"Pas"/dealer choice) or dealer draw
+   *  event before the next automatic action, so the announcement is readable.
+   *  Default 2 s. */
   bidLingerMs?: number
   /** Where the full engine state is kept for reload recovery. Only this
    *  browser (same anonymous uid) can be host, so it never leaves the device.
@@ -415,14 +416,17 @@ export class HostGame {
     if (seat === undefined) return
     // Announce the dealer for a moment before the cards go out.
     const drawLinger = this.state.phase === 'DEALING'
-    // A bid just got announced ("Ik ga"/"Pas"/dealer choice/second card):
-    // pause before the next automatic action so the bubble is readable.
+    // A bid or dealer draw just got announced:
+    // pause before the next automatic action so the announcement is readable.
     const lastEv = this.state.log[this.state.log.length - 1]?.t
     const bidLinger =
       lastEv === 'pass' ||
       lastEv === 'play-call' ||
       lastEv === 'dealer-pass' ||
-      lastEv === 'second-card'
+      lastEv === 'second-card' ||
+      lastEv === 'draw' ||
+      lastEv === 'draw-tie' ||
+      lastEv === 'draw-win'
     const wait = Math.max(
       this.botDelay(),
       drawLinger ? this.drawLingerMs : 0,

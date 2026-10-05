@@ -23,7 +23,7 @@ export const QUOTES = {
   /** The same seat led trump two tricks in a row. */
   easy: ['Zo ist gemakkelijk he'],
   /** A player just showed out of trump. */
-  noTrump: ['Ik heb al hele avond geen troef'],
+  noTrump: ['Ik heb al den hele avond geen troef'],
   /** A defender opened the hand with trump. */
   showEm: ['Laat ze maar is zien'],
   /** The hand opens with a low card. */
