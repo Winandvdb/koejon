@@ -264,9 +264,10 @@
   const send = (a: Action) => {
     // The host applies its own actions in place: no intent doc round trip.
     if (host) return host.submit({ kind: 'act', action: a })
+    err = ''
     session?.act(a).catch((e) => {
       console.error('[act]', e)
-      showErr(e, '', true)
+      showErr(e, (e as Error).message === 'act-lost' ? $t.actLost : '', true)
     })
   }
 

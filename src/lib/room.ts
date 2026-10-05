@@ -1,5 +1,5 @@
 import { getDoc, setDoc } from './fs'
-import { derived, writable, type Readable } from 'svelte/store'
+import { derived, get, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
@@ -10,11 +10,18 @@ import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
+/** How long a sent action may wait for the host's next state. The host
+ *  commits on receipt, so this covers only the network round trip. */
+export const ACT_ACK_MS = 8000
+
 export function makeCode(len = 5): string {
   const buf = new Uint8Array(len)
   crypto.getRandomValues(buf)
   return [...buf].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('')
 }
+
+/** Same action, whatever the key order of the objects. */
+const actionKey = (a: Action) => JSON.stringify(a, Object.keys(a).concat('s', 'r').sort())
 
 export function seatOf(room: RoomDoc | null, uid: string): number {
   if (!room) return -1
@@ -83,8 +90,30 @@ export class RoomSession {
     return this.link.send(intent)
   }
 
-  act(action: Action): Promise<void> {
-    return this.send({ kind: 'act', action })
+  /** Resolves once the host shows a newer state in which this move is no
+   *  longer open, so it landed. A message lost on a weak connection gives no
+   *  error of its own, so no such state in time rejects. */
+  async act(action: Action): Promise<void> {
+    const before = get(this.room)?.seq
+    await this.send({ kind: 'act', action })
+    // A host without seq (older build) cannot confirm.
+    if (before === undefined) return
+    const key = actionKey(action)
+    await new Promise<void>((resolve, reject) => {
+      let unsub = () => {}
+      const timer = setTimeout(() => {
+        unsub()
+        reject(new Error('act-lost'))
+      }, ACT_ACK_MS)
+      unsub = this.view.subscribe((v) => {
+        if ((v.room?.seq ?? 0) <= before) return
+        // Another seat's move also makes a newer state.
+        if (v.legal.some((a) => actionKey(a) === key)) return
+        clearTimeout(timer)
+        queueMicrotask(() => unsub())
+        resolve()
+      })
+    })
   }
 
   leave(): Promise<void> {
