@@ -1,10 +1,11 @@
 ---
 id: task-14
 title: Make the app an installable PWA
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@lab900-winand-vandenbergh'
 created_date: '2026-10-05 08:11'
-updated_date: '2026-10-05 08:25'
+updated_date: '2026-10-05 10:19'
 labels:
   - pwa
 dependencies: []
