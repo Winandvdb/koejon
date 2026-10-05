@@ -44,7 +44,11 @@ async function until(fn: () => boolean, timeout = 120_000): Promise<void> {
 
 describe('emulator e2e', () => {
   test('host + 3 bots play a full match to GAME_OVER', async (ctx) => {
-    if (!(await emulatorUp())) return ctx.skip()
+    if (!(await emulatorUp())) {
+      // CI sets this: there a missing emulator is a broken pipeline, not a skip.
+      if (process.env.E2E_REQUIRED === 'true') throw new Error('Firestore emulator not reachable')
+      return ctx.skip()
+    }
 
     const uid = await signIn()
     const session = await createRoom(uid, 'Host')
