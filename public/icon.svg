@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed background: the same file serves as a maskable icon. -->
+  <defs>
+    <radialGradient id="felt" cx="50%" cy="40%" r="75%">
+      <stop offset="0" stop-color="#2b8c5a"/>
+      <stop offset="0.6" stop-color="#1d6b45"/>
+      <stop offset="1" stop-color="#124530"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#felt)"/>
+  <g transform="rotate(-12 256 256)">
+    <rect x="132" y="146" width="150" height="214" rx="18" fill="#fffdf7" stroke="#0003" stroke-width="4"/>
+    <text x="207" y="290" font-family="Georgia, 'Times New Roman', serif" font-size="130" text-anchor="middle" fill="#1a1a1a">♠</text>
+  </g>
+  <g transform="rotate(12 256 256)">
+    <rect x="230" y="146" width="150" height="214" rx="18" fill="#fffdf7" stroke="#0003" stroke-width="4"/>
+    <text x="305" y="290" font-family="Georgia, 'Times New Roman', serif" font-size="130" text-anchor="middle" fill="#c62828">♥</text>
+  </g>
+</svg>
