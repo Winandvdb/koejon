@@ -35,8 +35,10 @@ export const BOT_PROFILES: Record<BotLevel, BotProfile> = {
 }
 
 /** The 2nd card doubles the stake, so the 1st card asks a stronger hand. */
-const BID_THRESHOLD_1 = 10
+const BID_THRESHOLD_1 = 11
 const BID_THRESHOLD_2 = 8
+/** A bid with one trump (K or A) asks at least this rating. */
+const LONE_TRUMP_MIN = 13
 /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
 const KNIJP_MIN = 4
 const KNIJP_CHANCE = 0.85
@@ -409,6 +411,12 @@ export function botAction(
     case 'bid': {
       const suit = s.phase === 'BIDDING_R1' ? s.turned!.first.s : s.turned!.second.s
       const rating = rateHand(s.hands[seat], suit)
+      const trumps = s.hands[seat].filter((c) => c.s === suit)
+      // Real players never go without trump, and with a lone trump only on a
+      // hand full of aces: a single trump is pulled at once.
+      if (trumps.length === 0) return { type: 'bid', seat, play: false }
+      if (trumps.length === 1 && (RANK_ORDER[trumps[0].r] < RANK_ORDER['K'] || rating < LONE_TRUMP_MIN))
+        return { type: 'bid', seat, play: false }
       const myTeam = teamOf(seat)
       const oppLines = s.lines[1 - myTeam]
       // Knijpen: squeeze the hand to level 1 while a level-1 loss stays

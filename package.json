@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "vitest run tests/e2e.emulator.test.ts",
+    "bench": "node scripts/bot-benchmark.mjs",
     "emulators": "firebase emulators:start"
   },
   "dependencies": {

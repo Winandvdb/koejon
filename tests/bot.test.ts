@@ -22,9 +22,31 @@ function bidState(hand: Card[], over: Partial<State> = {}): State {
   })
 }
 
-const TRASH = [C('S', '9'), C('S', '10'), C('C', '9'), C('C', '10'), C('D', '9'), C('D', '10')]
+// Two low hearts (trump of the first card), nothing else.
+const TRASH = [C('H', '9'), C('H', '10'), C('C', '9'), C('C', '10'), C('D', '9'), C('D', '10')]
+const NO_TRUMP = [C('S', 'A'), C('D', 'A'), C('C', 'A'), C('S', 'K'), C('D', 'K'), C('C', 'K')]
 
 describe('bot bidding', () => {
+  it('never bids without trump, not even to knijpen or to win the match', () => {
+    for (const lines of [[2, 13], [13, 1]] as [number, number][]) {
+      const s = bidState(NO_TRUMP, { lines })
+      expect(botAction(s, 1, smart)).toEqual({ type: 'bid', seat: 1, play: false })
+    }
+  })
+
+  it('a lone trump bids only with a high trump and a very strong hand', () => {
+    const aces = [C('S', 'A'), C('D', 'A'), C('C', 'A'), C('S', 'K'), C('D', 'K')]
+    // Lone queen of trump: pass, even with three aces and to knijpen.
+    const lowLone = bidState([C('H', 'Q'), ...aces], { lines: [2, 13] })
+    expect(botAction(lowLone, 1, smart)).toEqual({ type: 'bid', seat: 1, play: false })
+    // Lone ace of trump with three aces and two guarded kings: go.
+    const topLone = bidState([C('H', 'A'), ...aces])
+    expect(botAction(topLone, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
+    // Lone ace of trump with one side ace: pass.
+    const weak = [C('H', 'A'), C('S', 'A'), C('S', '9'), C('D', '9'), C('C', '9'), C('C', '10')]
+    expect(botAction(bidState(weak), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+  })
+
   it('knijpen: bids a trash hand when opponents sit at 2 lines', () => {
     const s = bidState(TRASH, { lines: [2, 13] }) // seat1 = team1, opp = team0
     expect(botAction(s, 1, smart)).toEqual({ type: 'bid', seat: 1, play: true })
