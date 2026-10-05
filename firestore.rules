@@ -31,8 +31,7 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['heartbeat']));
       allow delete: if isHost(code);
 
-      // Per-player hand documents. 'host' is a reserved doc id holding bot hands.
-      // Only the host writes hand docs — it deals the cards and must mask the
+      // Per-player hand documents. Only the host writes hand docs — it deals the cards and must mask the
       // dealer's hand during bidding. Players may read only their own doc;
       // the host may read all (it dealt them and cleans them up on teardown).
       match /hands/{uid} {
@@ -48,9 +47,19 @@ service cloud.firestore {
         allow delete: if signedIn() && (request.auth.uid == uid || isHost(code));
       }
 
-      // Full serialized engine state, host only (crash/reload recovery).
-      match /engine/{doc} {
-        allow read, write: if isHost(code);
+      // WebRTC signaling. A guest writes only the offer in its own doc, so the
+      // host knows which uid sits behind each data channel; only the host
+      // writes the answer.
+      match /rtc/{uid} {
+        allow read: if signedIn() && (request.auth.uid == uid || isHost(code));
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['offer', 'offerTs']);
+        allow update: if signedIn() && (
+          (request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['offer', 'offerTs'])) ||
+          (isHost(code)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer', 'answerFor'])));
+        allow delete: if signedIn() && (request.auth.uid == uid || isHost(code));
       }
     }
   }

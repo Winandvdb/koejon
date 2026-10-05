@@ -244,8 +244,8 @@ function startPlaying(s: State, trump: Suit, level: 1 | 2, bidder: number): void
 }
 
 function allPassed(s: State): void {
-  pushLog(s, { t: 'all-pass', n: s.multiplier * 2 })
-  s.multiplier *= 2
+  pushLog(s, { t: 'all-pass', n: 2 })
+  s.multiplier = 2
   s.dealer = leftOf(s.dealer)
   s.hands = [[], [], [], []]
   s.turned = null

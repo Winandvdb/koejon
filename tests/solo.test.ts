@@ -1,0 +1,89 @@
+import { get } from 'svelte/store'
+import { describe, expect, test } from 'vitest'
+import { usage } from '../src/lib/fs'
+import { botAction } from '../src/bots/bot'
+import { HostGame } from '../src/lib/host'
+import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
+import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
+
+const UID = 'me'
+
+/** What the UI hands over: Svelte `$state` wraps everything in proxies. */
+function deepProxy<T>(v: T): T {
+  if (typeof v !== 'object' || v === null) return v
+  const copy = Array.isArray(v) ? v.map(deepProxy) : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepProxy(x)]))
+  return new Proxy(copy, {}) as T
+}
+
+function memoryStore(): KeyValueStore {
+  const m = new Map<string, string>()
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+  }
+}
+
+async function open(storage: KeyValueStore, fresh: boolean) {
+  const links = localLinks(UID, storage, fresh ? newRoomDoc(SOLO_CODE, UID, 'Me') : undefined)!
+  const session = new RoomSession(SOLO_CODE, UID, links.guest, links.host)
+  const host = await HostGame.attach(SOLO_CODE, UID, links.host, {
+    storage,
+    botDelay: () => 0,
+    drawLingerMs: 0,
+    bidLingerMs: 0,
+  })
+  host.onError = (e) => {
+    throw e
+  }
+  // Drive our own seat with the bot policy whenever the table waits on us.
+  let latest: SessionView | null = null
+  const unsub = session.view.subscribe((v) => {
+    latest = v
+    const pub = v.room?.pub
+    if (!pub || !v.state || pub.phase === 'LOBBY' || pub.phase === 'GAME_OVER') return
+    if (pub.actionSeats.includes(v.mySeat)) host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat) }))
+  })
+  const close = () => {
+    unsub()
+    host.dispose()
+    session.dispose()
+  }
+  return { host, view: () => latest, close }
+}
+
+async function until(fn: () => boolean, timeout = 30_000): Promise<void> {
+  const t0 = Date.now()
+  while (!fn()) {
+    if (Date.now() - t0 > timeout) throw new Error('timeout')
+    await new Promise((r) => setTimeout(r, 5))
+  }
+}
+
+describe('offline solo', () => {
+  test('plays a full match, survives a reload mid-game', async () => {
+    const storage = memoryStore()
+    const first = await open(storage, true)
+    first.host.addBot(1)
+    first.host.addBot(2)
+    first.host.addBot(3)
+    first.host.startGame()
+    await until(() => (first.view()?.room?.pub?.handNumber ?? 0) >= 2)
+    first.close()
+
+    // Reload: resume from storage only.
+    const second = await open(storage, false)
+    expect(second.view()?.room?.pub?.handNumber).toBeGreaterThanOrEqual(2)
+    await until(() => second.view()?.room?.pub?.phase === 'GAME_OVER')
+    const pub = second.view()!.room!.pub!
+    expect(pub.winner).not.toBeNull()
+    expect(pub.lines[pub.winner!]).toBe(0)
+
+    await second.host.destroyRoom()
+    second.close()
+    expect(localLinks(UID, storage)).toBeNull()
+    expect(storage.getItem(`koejon-engine-${SOLO_CODE}`)).toBeNull()
+    // A whole solo match, reload included, never touched Firestore.
+    expect(get(usage)).toEqual({ reads: 0, writes: 0 })
+  }, 60_000)
+})

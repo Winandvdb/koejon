@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "vitest run tests/e2e.emulator.test.ts"
+    "e2e": "vitest run tests/e2e.emulator.test.ts",
+    "emulators": "firebase emulators:start"
   },
   "dependencies": {
     "firebase": "11.10.0",

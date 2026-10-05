@@ -1,15 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getDoc } from 'firebase/firestore'
+  import { getDoc, resetUsage, usage } from './lib/fs'
   import { signIn } from './lib/firebase'
   import {
     createRoom,
     joinRoom,
-    roomRef,
+    newRoomDoc,
     seatOf,
     RoomSession,
     type SessionView,
   } from './lib/room'
+  import { roomRef } from './lib/link-firestore'
+  import { localLinks, SOLO_CODE } from './lib/link-local'
+  import { appUrl, P2P_ENABLED } from './lib/link-p2p'
   import type { RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
@@ -21,6 +24,11 @@
   import Lobby from './components/Lobby.svelte'
   import Table from './components/Table.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
+
+  /** Dev builds, and builds with VITE_SHOW_USAGE=true (the develop preview
+   *  channel), show this tab's Firestore reads/writes in the top bar. */
+  const viteEnv = (import.meta as { env?: { DEV?: boolean; VITE_SHOW_USAGE?: string } }).env
+  const DEV = !!viteEnv?.DEV || viteEnv?.VITE_SHOW_USAGE === 'true'
 
   let uid = $state('')
   let session = $state<RoomSession | null>(null)
@@ -38,15 +46,25 @@
       err = $t.offline
       return
     }
-    const storedCode = localStorage.getItem('koejon-room')
     const name = localStorage.getItem('koejon-name') ?? ''
+    // This tab's URL decides first: it survives a refresh and, unlike
+    // localStorage, no other tab can change it. The stored code is the
+    // fallback for a fresh tab.
+    const urlCode = new URLSearchParams(location.search).get('room')?.trim().toUpperCase()
+    const code = urlCode || localStorage.getItem('koejon-room')
     try {
-      if (storedCode) {
-        // Return to a room in progress only when our seat is still ours.
-        const snap = await getDoc(roomRef(storedCode))
-        const room = snap.exists() ? (snap.data() as RoomDoc) : null
-        if (room && seatOf(room, uid) >= 0) attach(await joinRoom(storedCode, uid, name))
+      if (code === SOLO_CODE) {
+        // Offline solo: resume from this browser's storage, no Firestore.
+        const links = localLinks(uid, localStorage)
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
         else forgetRoom()
+      } else if (code) {
+        // Return to a room in progress only when our seat is still ours.
+        const snap = await getDoc(roomRef(code))
+        const room = snap.exists() ? (snap.data() as RoomDoc) : null
+        if (room && seatOf(room, uid) >= 0) attach(await joinRoom(code, uid, name))
+        // An invite to a room we are not in yet: Home shows its join view.
+        else if (!urlCode) forgetRoom()
       }
     } catch {
       forgetRoom()
@@ -57,7 +75,7 @@
   // the home screen doesn't fall back to a dead join page.
   function forgetRoom() {
     localStorage.removeItem('koejon-room')
-    history.replaceState(null, '', location.pathname)
+    history.replaceState(null, '', appUrl())
   }
 
   let unsubView: (() => void) | null = null
@@ -72,7 +90,19 @@
     })
     err = ''
     localStorage.setItem('koejon-room', s.code)
-    history.replaceState(null, '', `${location.pathname}?room=${s.code}`)
+    // A solo room has nothing to invite to.
+    if (s.code !== SOLO_CODE) history.replaceState(null, '', appUrl(s.code))
+    // The host tab's own view is fed by the host, so attach it right away
+    // (room creator, or reload recovery). Without a host it would only show a
+    // spinner: leave, and say why.
+    if (s.hostLink) {
+      ensureHost().catch((e) => {
+        if (session !== s) return
+        teardown()
+        const m = (e as Error).message
+        showErr(e, m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : '')
+      })
+    }
   }
 
   // The room doc vanished (host destroyed it): leave cleanly instead of
@@ -93,6 +123,9 @@
   function teardown() {
     unsubView?.()
     unsubView = null
+    // All tabs share localStorage: clear the stored room only if it is ours,
+    // never a room another tab is in.
+    if (session && localStorage.getItem('koejon-room') === session.code) localStorage.removeItem('koejon-room')
     session?.dispose()
     host?.dispose()
     session = null
@@ -102,16 +135,24 @@
     hadRoom = false
     soloStarting = false
     err = ''
-    localStorage.removeItem('koejon-room')
-    history.replaceState(null, '', location.pathname)
+    history.replaceState(null, '', appUrl())
   }
 
   let hostPromise: Promise<HostGame> | null = null
 
   function ensureHost(): Promise<HostGame> {
     if (!hostPromise) {
-      hostPromise = HostGame.attach(session!.code, uid)
-        .then((h) => (host = h))
+      const s = session!
+      hostPromise = HostGame.attach(s.code, uid, s.hostLink!)
+        .then((h) => {
+          // The user left while attaching: never keep hosting a room behind
+          // their back (it would answer that room's guests forever).
+          if (session !== s) {
+            h.dispose()
+            throw new Error('session-gone')
+          }
+          return (host = h)
+        })
         .catch((e) => {
           // A failed attach must not block retries.
           hostPromise = null
@@ -145,15 +186,16 @@
     }
   }
 
-  // Solo: create a room, fill it with bots and start right away.
+  // Solo: an offline room in this tab, filled with bots and started right away.
   // soloStarting hides the lobby flash until the first deal starts.
   let soloStarting = $state(false)
 
   async function onSolo(name: string, level: BotLevel) {
     err = ''
     try {
+      const links = localLinks(uid, localStorage, newRoomDoc(SOLO_CODE, uid, name))!
       // attach() runs teardown() which resets soloStarting — set it after.
-      attach(await createRoom(uid, name))
+      attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
       soloStarting = true
       const h = await ensureHost()
       h.addBot(1, level)
@@ -189,15 +231,9 @@
     }
   }
 
-  // Become host once the room says so (room creator, or reload recovery).
-  $effect(() => {
-    const r = view?.room
-    if (session && r && !host && r.hostUid === uid) {
-      ensureHost().catch(showErr)
-    }
-  })
-
   const send = (a: Action) => {
+    // The host applies its own actions in place: no intent doc round trip.
+    if (host) return host.submit({ kind: 'act', action: a })
     session?.act(a).catch((e) => {
       console.error('[act]', e)
       showErr(e, '', true)
@@ -232,8 +268,15 @@
     <span class="brand-suits" aria-hidden="true">♠<i>♥</i></span>
     <span class="brand-name">{$t.title}</span>
   </div>
-  {#if session}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
+  {#if session && session.code !== SOLO_CODE}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
+  {#if DEV}
+    <button
+      class="room-chip usage"
+      title="Firestore reads / writes from this tab since load (click to reset). Excludes the rules' isHost reads on the server: about 1 per host write."
+      onclick={resetUsage}>R {$usage.reads} · W {$usage.writes}{P2P_ENABLED ? '' : ' · P2P off'}</button
+    >
+  {/if}
   <div class="settings-anchor">
     {#if view?.room}
       {@const r = view.room}
@@ -301,6 +344,7 @@
   {:else if soloStarting && view.room.pub!.phase === 'LOBBY'}
     <div class="connecting"><span class="spinner"></span>{$t.connection}</div>
   {:else if view.room.pub!.phase === 'LOBBY'}
+    {#if view.hostStale}<div class="alert">{$t.hostLeft}</div>{/if}
     <Lobby
       room={view.room}
       isHost={view.room.hostUid === uid}

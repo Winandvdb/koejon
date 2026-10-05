@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition'
   import { t } from '../lib/i18n'
+  import { appUrl } from '../lib/link-p2p'
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
   import type { BotLevel } from '../bots/bot'
@@ -31,7 +32,7 @@
 
   function backToHome() {
     invited = false
-    history.replaceState(null, '', location.pathname)
+    history.replaceState(null, '', appUrl())
   }
 
   const HERO: Card[] = [

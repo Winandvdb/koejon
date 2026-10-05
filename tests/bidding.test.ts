@@ -58,7 +58,7 @@ describe('bidding round 1', () => {
     expect(s.bidder).toBe(0)
   })
 
-  it('dealer pass doubles the multiplier and passes the deal left', () => {
+  it('dealer pass sets the multiplier to 2 and passes the deal left', () => {
     let s = biddingState(C('H', 'A'), C('S', 'K'), 0)
     for (const seat of [1, 2, 3]) s = apply(s, bid(seat, false))
     for (const seat of [1, 2, 3]) s = apply(s, bid(seat, false))
@@ -68,7 +68,7 @@ describe('bidding round 1', () => {
     expect(s.multiplier).toBe(2)
   })
 
-  it('consecutive all-passes keep doubling (x2 -> x4)', () => {
+  it('consecutive all-passes do not exceed x2', () => {
     let s = biddingState(C('H', 'A'), C('H', 'K'), 3) // dealer 3
     for (const seat of [0, 1, 2]) s = apply(s, bid(seat, false))
     // same suit -> dealer choice directly
@@ -82,7 +82,7 @@ describe('bidding round 1', () => {
     for (const seat of [1, 2, 3]) s = apply(s, bid(seat, false))
     for (const seat of [1, 2, 3]) s = apply(s, bid(seat, false))
     s = apply(s, { type: 'choose', seat: 0, suit: null })
-    expect(s.multiplier).toBe(4)
+    expect(s.multiplier).toBe(2)
     expect(s.dealer).toBe(1)
   })
 
