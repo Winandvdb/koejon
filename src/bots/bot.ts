@@ -52,6 +52,8 @@ const CONTEST_MIN = 5
 const CHEAP_WIN = 6
 /** Max points to feed a trick the partner may still lose. */
 const VET_MAX_RISK = 2
+/** A suit with fewer cards than this outside our hand likely has a void. */
+const SHORT_SUIT = 3
 
 // ---- Small helpers -----------------------------------------------------------
 
@@ -90,6 +92,23 @@ function wouldWin(trick: TrickCard[], seat: number, card: Card, trump: Suit): bo
   return trickWinnerIndex(next, trump) === next.length - 1
 }
 
+/** Drop trumps that lose to a trump already down, while a plain card can go instead. */
+function noUndertrump(trick: TrickCard[], cards: Card[], trump: Suit): Card[] {
+  const top = Math.max(0, ...trick.filter((tc) => tc.card.s === trump).map((tc) => RANK_ORDER[tc.card.r]))
+  const keep = cards.filter((c) => c.s !== trump || RANK_ORDER[c.r] > top)
+  return keep.some((c) => c.s !== trump) ? keep : cards
+}
+
+/** Throw a card away: never overtake the partner, never waste a trump under a higher one. */
+function dump(trick: TrickCard[], seat: number, legal: Card[], trump: Suit): Card {
+  let pool = legal
+  if (trick.length > 0 && trick[trickWinnerIndex(trick, trump)].seat === partnerOf(seat)) {
+    const safe = legal.filter((c) => !wouldWin(trick, seat, c, trump))
+    if (safe.length) pool = safe
+  }
+  return cheapest(noUndertrump(trick, pool, trump), trump)
+}
+
 // ---- Hand reading ------------------------------------------------------------
 
 interface HandRead {
@@ -101,17 +120,21 @@ interface HandRead {
   bossOut: Rank | null
   /** 'seat:suit' — the seat has shown out of that suit this hand. */
   voids: Set<string>
+  /** Cards of each suit played this hand ('full' memory only, else 0). */
+  suitSeen: Record<Suit, number>
 }
 
 /**
  * Human-like memory rebuilt from the public log: which trumps are gone and who
- * has shown out of a suit. Side-suit ranks are deliberately not counted, so the
- * bot still misjudges some tricks — like a human does.
+ * has shown out of a suit. Side-suit ranks are deliberately not counted (only
+ * how many of a suit fell), so the bot still misjudges some tricks — like a
+ * human does.
  */
 function readHand(s: State, seat: number, memory: BotProfile['memory']): HandRead {
   const trump = s.trump!
   const trumpsGone = new Set<Rank>()
   const voids = new Set<string>()
+  const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
   if (memory !== 'none') {
     // Cards played this hand: 4 per finished trick plus the open one.
     const want = s.tricksPlayed * 4 + s.trick.length
@@ -134,6 +157,7 @@ function readHand(s: State, seat: number, memory: BotProfile['memory']): HandRea
       }
     }
     if (memory === 'full') {
+      for (const tc of played) suitSeen[tc.card.s]++
       // A sluff of a third suit, a trump under an existing trump, or any
       // non-trump under a trump lead means the led suit was missing.
       for (let t = 0; t + 1 < played.length; t += 4) {
@@ -161,7 +185,7 @@ function readHand(s: State, seat: number, memory: BotProfile['memory']): HandRea
       break
     }
   }
-  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids }
+  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen }
 }
 
 /** Highest trump of `cards` that still tops everything left outside our hand. */
@@ -170,6 +194,11 @@ function bossTrump(cards: Card[], read: HandRead): Card | null {
     (c) => read.bossOut === null || RANK_ORDER[c.r] > RANK_ORDER[read.bossOut],
   )
   return beat.length ? highest(beat) : null
+}
+
+/** False once the seat showed out of trump, or no trump is left outside our hand. */
+function mayHoldTrump(read: HandRead, seat: number, trump: Suit): boolean {
+  return read.trumpsOut > 0 && !read.voids.has(`${seat}:${trump}`)
 }
 
 // ---- Bidding -----------------------------------------------------------------
@@ -210,6 +239,16 @@ function leadCard(s: State, seat: number, legal: Card[], read: HandRead): Card {
   const myTeam = teamOf(seat)
   const trumps = legal.filter((c) => c.s === trump)
   const oppVoid = (suit: Suit) => oppSeatsOf(seat).some((o) => read.voids.has(`${o}:${suit}`))
+  // An opponent can trump a suit when they may still hold trump and either
+  // showed out of it or the suit ran short outside our hand.
+  const trumpable = (suit: Suit) => {
+    const outside = 6 - s.hands[seat].filter((c) => c.s === suit).length - read.suitSeen[suit]
+    return oppSeatsOf(seat).some(
+      (o) =>
+        mayHoldTrump(read, o, trump) &&
+        (read.voids.has(`${o}:${suit}`) || outside < SHORT_SUIT),
+    )
+  }
 
   // Honour the partner's troefke request: open with the best trump.
   if (
@@ -224,7 +263,7 @@ function leadCard(s: State, seat: number, legal: Card[], read: HandRead): Card {
   if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
     const boss = bossTrump(trumps, read)
     if (boss) return boss
-    const ace = legal.find((c) => c.r === 'A' && c.s !== trump && !oppVoid(c.s))
+    const ace = legal.find((c) => c.r === 'A' && c.s !== trump && !trumpable(c.s))
     if (ace) return ace
     return highest(legal)
   }
@@ -232,15 +271,15 @@ function leadCard(s: State, seat: number, legal: Card[], read: HandRead): Card {
   const boss = bossTrump(trumps, read)
   // Both opponents showed out of trump: whatever trumps are left belong to the
   // partner, and pulling only strips our own side.
-  const oppMayTrump = oppSeatsOf(seat).some((o) => !read.voids.has(`${o}:${trump}`))
+  const oppMayTrump = oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump))
   // Pull trumps when we hold the boss and others still hold trumps. Defenders
   // pull only when they hold the majority of what is left.
   if (boss && read.trumpsOut > 0 && oppMayTrump && (playing || trumps.length > read.trumpsOut))
     return boss
   // Length pull: with enough trumps a low one still draws enemy trumps.
   if (playing && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2) return lowest(trumps)
-  // Cash a safe ace — skip suits where an opponent has shown out.
-  const aces = legal.filter((c) => c.r === 'A' && c.s !== trump && !oppVoid(c.s))
+  // Cash an ace only where no opponent can trump it; else keep it for later.
+  const aces = legal.filter((c) => c.r === 'A' && c.s !== trump && !trumpable(c.s))
   if (aces.length) return highest(aces)
   // Otherwise a low card from a suit nobody is known void in.
   const plain = legal.filter((c) => c.s !== trump)
@@ -261,11 +300,15 @@ function followCard(s: State, seat: number, legal: Card[], read: HandRead): Card
   const antiKapot = s.tricksPlayed > 0 && s.tricksWon[1 - myTeam] === s.tricksPlayed
   // 21 points already settled the hand; only a live kapot still matters.
   const decided = s.points[0] >= 21 || s.points[1] >= 21
-  if (decided && !sweep && !antiKapot) return cheapest(legal, trump)
+  if (decided && !sweep && !antiKapot) return dump(s.trick, seat, legal, trump)
 
   if (partnerWinning) {
     // Vet the trick — never overtake, and mind who can still beat partner.
-    const safe = legal.filter((c) => !wouldWin(s.trick, seat, c, trump))
+    const safe = noUndertrump(
+      s.trick,
+      legal.filter((c) => !wouldWin(s.trick, seat, c, trump)),
+      trump,
+    )
     if (safe.length === 0) return cheapest(legal, trump) // forced to overtake
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
     if (pts.length === 0) return lowest(safe)
@@ -288,18 +331,27 @@ function followCard(s: State, seat: number, legal: Card[], read: HandRead): Card
 
   // Opponent winning: fight for rich tricks, duck the rest.
   const winners = legal.filter((c) => wouldWin(s.trick, seat, c, trump))
-  if (winners.length === 0) return cheapest(legal, trump)
+  if (winners.length === 0) return dump(s.trick, seat, legal, trump)
   const cheapestWin = winners.reduce((a, b) =>
     winCost(a, trump) <= winCost(b, trump) ? a : b,
   )
+  // Without the boss trump and outnumbered in trumps, ours get pulled later
+  // anyway — better spend one on a trick with points now.
+  const myTrumps = s.hands[seat].filter((c) => c.s === trump)
+  const doomed =
+    cheapestWin.s === trump &&
+    oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump)) &&
+    !bossTrump(myTrumps, read) &&
+    read.trumpsOut >= myTrumps.length
   const worthIt =
+    (tPts > 0 && doomed) ||
     s.points[myTeam] + tPts >= 21 || // win the hand outright
     s.points[1 - myTeam] + tPts >= 21 || // deny them the hand
     sweep ||
     antiKapot ||
     tPts >= CONTEST_MIN ||
     (tPts >= 3 && winCost(cheapestWin, trump) <= CHEAP_WIN)
-  return worthIt ? cheapestWin : cheapest(legal, trump)
+  return worthIt ? cheapestWin : dump(s.trick, seat, legal, trump)
 }
 
 function choosePlayCard(
@@ -314,7 +366,7 @@ function choosePlayCard(
   const smart =
     s.trick.length === 0 ? leadCard(s, seat, legal, read) : followCard(s, seat, legal, read)
   // Imperfect on purpose: sometimes fall back to a lazy dump.
-  return rand() < profile.skill ? smart : cheapest(legal, s.trump!)
+  return rand() < profile.skill ? smart : dump(s.trick, seat, legal, s.trump!)
 }
 
 // ---- Entry point -----------------------------------------------------------------
