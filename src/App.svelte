@@ -12,6 +12,7 @@
   } from './lib/room'
   import { roomRef } from './lib/link-firestore'
   import { localLinks, SOLO_CODE } from './lib/link-local'
+  import { appUrl, P2P_ENABLED } from './lib/link-p2p'
   import type { RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
@@ -72,7 +73,7 @@
   // the home screen doesn't fall back to a dead join page.
   function forgetRoom() {
     localStorage.removeItem('koejon-room')
-    history.replaceState(null, '', location.pathname)
+    history.replaceState(null, '', appUrl())
   }
 
   let unsubView: (() => void) | null = null
@@ -88,7 +89,7 @@
     err = ''
     localStorage.setItem('koejon-room', s.code)
     // A solo room has nothing to invite to.
-    if (s.code !== SOLO_CODE) history.replaceState(null, '', `${location.pathname}?room=${s.code}`)
+    if (s.code !== SOLO_CODE) history.replaceState(null, '', appUrl(s.code))
     // The host tab's own view is fed by the host, so attach it right away
     // (room creator, or reload recovery). Without a host it would only show a
     // spinner: leave, and say why.
@@ -132,7 +133,7 @@
     hadRoom = false
     soloStarting = false
     err = ''
-    history.replaceState(null, '', location.pathname)
+    history.replaceState(null, '', appUrl())
   }
 
   let hostPromise: Promise<HostGame> | null = null
@@ -271,7 +272,7 @@
     <button
       class="room-chip usage"
       title="Firestore reads / writes from this tab since load (click to reset). Excludes the rules' isHost reads on the server: about 1 per host write."
-      onclick={resetUsage}>R {$usage.reads} · W {$usage.writes}</button
+      onclick={resetUsage}>R {$usage.reads} · W {$usage.writes}{P2P_ENABLED ? '' : ' · P2P off'}</button
     >
   {/if}
   <div class="settings-anchor">

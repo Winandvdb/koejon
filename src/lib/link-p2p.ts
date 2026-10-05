@@ -43,6 +43,16 @@ function p2pFlag(): string | null {
 export const P2P_ENABLED = typeof RTCPeerConnection !== 'undefined' && p2pFlag() !== 'off'
 if (typeof RTCPeerConnection !== 'undefined') console.info(`[p2p] ${P2P_ENABLED ? 'on' : 'off'}`)
 
+/** This page's URL for a room (or none), keeping `p2p=off` visible so the
+ *  forced fallback shows in the address bar and survives copy-paste. */
+export function appUrl(room?: string): string {
+  const q = new URLSearchParams()
+  if (room) q.set('room', room)
+  if (!P2P_ENABLED && typeof RTCPeerConnection !== 'undefined') q.set('p2p', 'off')
+  const s = q.toString()
+  return s ? `${location.pathname}?${s}` : location.pathname
+}
+
 /** No channel within this window counts as a failed attempt. */
 const OPEN_TIMEOUT_MS = 10_000
 /** After this many failed attempts in a row the guest stays on Firestore. */
