@@ -4,8 +4,10 @@ title: Make card suit symbols bigger
 status: To Do
 assignee: []
 created_date: '2026-09-30 19:45'
+updated_date: '2026-10-05 08:32'
 labels: []
 dependencies: []
+priority: medium
 ---
 
 ## Description

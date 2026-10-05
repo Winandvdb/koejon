@@ -4,10 +4,11 @@ title: Randomize card order within each trick pile
 status: To Do
 assignee: []
 created_date: '2026-09-30 19:43'
-updated_date: '2026-09-30 19:43'
+updated_date: '2026-10-05 08:32'
 labels: []
 dependencies:
   - task-1
+priority: low
 ---
 
 ## Description

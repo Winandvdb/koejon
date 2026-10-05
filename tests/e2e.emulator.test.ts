@@ -8,6 +8,9 @@ import { describe, expect, test } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import { signIn } from '../src/lib/firebase'
 import { HostGame } from '../src/lib/host'
+import { getDoc } from 'firebase/firestore'
+import { handRef, roomRef } from '../src/lib/link-firestore'
+import type { RoomDoc } from '../src/lib/net-types'
 import { createRoom, type SessionView } from '../src/lib/room'
 
 function emulatorUp(): Promise<boolean> {
@@ -45,11 +48,19 @@ describe('emulator e2e', () => {
 
     const uid = await signIn()
     const session = await createRoom(uid, 'Host')
-    const host = await HostGame.attach(session.code, uid, {
+    const saved = new Map<string, string>()
+    let commits = 0
+    const host = await HostGame.attach(session.code, uid, session.hostLink!, {
       botDelay: () => 5,
       heartbeatMs: 60_000,
       drawLingerMs: 20,
       bidLingerMs: 20,
+      storage: {
+        getItem: (k) => saved.get(k) ?? null,
+        setItem: (k, v) => void saved.set(k, v),
+        removeItem: (k) => void saved.delete(k),
+      },
+      onCommit: () => commits++,
     })
 
     let latest: SessionView | null = null
@@ -75,7 +86,7 @@ describe('emulator e2e', () => {
       sentFor = v.room!.version
       lastTry = Date.now()
       console.log(`[e2e] seat ${v.mySeat} v${v.room!.version} sends`, JSON.stringify(a))
-      session.act(a).catch((e) => console.warn('[e2e] act failed:', e))
+      host.submit({ kind: 'act', action: a })
     }
     const unsub = session.view.subscribe((v) => {
       latest = v
@@ -106,8 +117,19 @@ describe('emulator e2e', () => {
       expect(pub.winner).not.toBeNull()
       expect(pub.lines[pub.winner!]).toBe(0)
       expect(pub.handNumber).toBeGreaterThan(0)
+      // Bot acks ride along in the commit that caused them: ~34 per hand, not ~55.
+      const perHand = commits / pub.handNumber
+      expect(perHand).toBeLessThan(42)
+      // Engine state stays on the host device; the write-only bot-hands doc is gone.
+      expect(saved.has(`koejon-engine-${session.code}`)).toBe(true)
+      expect((await getDoc(handRef(session.code, 'host'))).exists()).toBe(false)
+      // Host + bots only: the host's view is fed in-tab, so Firestore saw the
+      // lobby writes (3 bots, start) and nothing per card.
+      const fsRoom = (await getDoc(roomRef(session.code))).data() as RoomDoc
+      expect(fsRoom.version).toBeLessThan(10)
+      expect(fsRoom.pub?.phase).not.toBe('LOBBY')
       console.log(
-        `[e2e] match done: winner=team${pub.winner}, hands=${pub.handNumber}, lines=${pub.lines}`,
+        `[e2e] match done: winner=team${pub.winner}, hands=${pub.handNumber}, lines=${pub.lines}, commits/hand=${perHand.toFixed(1)}`,
       )
     } finally {
       clearInterval(progress)

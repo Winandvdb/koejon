@@ -53,7 +53,7 @@ describe('dealer rotation', () => {
     expect(s.dealer).toBe(1)
   })
 
-  it('moves to the left neighbour on an all-passed deal and keeps multiplier', () => {
+  it('moves to the left neighbour on an all-passed deal and sets multiplier to 2', () => {
     let s = {
       ...dealtState(5, 0),
       phase: 'DEALER_CHOICE' as const,
@@ -63,7 +63,7 @@ describe('dealer rotation', () => {
     s = apply(s, { type: 'choose', seat: 0, suit: null })
     expect(s.phase).toBe('DEALING')
     expect(s.dealer).toBe(1)
-    expect(s.multiplier).toBe(4)
+    expect(s.multiplier).toBe(2)
   })
 })
 

@@ -5,6 +5,18 @@ Anonymous Authentication + Firestore for rooms (no other backend). The room crea
 browser is the host: it runs the authoritative game engine, executes all bot turns, and
 writes every state transition. Other clients only send intents.
 
+Transport (`src/lib/transport.ts`):
+
+- **Solo** runs fully in the tab (`link-local.ts`) — no Firestore traffic; a reload resumes
+  from `localStorage`.
+- **Multiplayer**: each guest opens a WebRTC data channel to the host (`link-p2p.ts`); Firestore
+  carries only the lobby view and signaling (`rooms/{code}/rtc/{uid}`, ~2 writes per connect).
+  A guest whose channel does not open (strict NAT, no WebRTC) falls back to the Firestore path
+  (`link-firestore.ts`) automatically. Load the page with `?p2p=off` to force that fallback
+  for that tab (kept across refreshes; `?p2p=on` undoes it). The console logs `[p2p] on/off`.
+  Optional TURN relay: set `VITE_TURN_URL`, `VITE_TURN_USER`, `VITE_TURN_CRED`.
+- The host keeps the full engine state in its own `localStorage` for reload recovery.
+
 ## Install
 
 ```bash
@@ -42,9 +54,8 @@ Open the printed Vite URL. The app detects the missing `VITE_FIREBASE_*` config 
 connects to the emulators automatically (Auth `127.0.0.1:9199`, Firestore
 `127.0.0.1:8180`, Emulator UI `http://127.0.0.1:4100`).
 
-> Port note: the spec defaults (auth 9099, firestore 8080) were occupied by other
-> processes on this machine, so this project uses 9199/8180 (see RULE_ASSUMPTIONS.md).
-> Change the ports in `firebase.json`, `.env.example`, `src/lib/firebase.ts` and
+> Port note: this project uses 9199/8180 instead of the Firebase defaults
+> (auth 9099, firestore 8080). Change the ports in `firebase.json`, `.env.example`, `src/lib/firebase.ts` and
 > `tests/e2e.emulator.test.ts` if you want the defaults back.
 
 ### Scripted end-to-end match

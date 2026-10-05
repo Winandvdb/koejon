@@ -1,23 +1,12 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  setDoc,
-  type Unsubscribe,
-} from 'firebase/firestore'
+import { getDoc, setDoc } from './fs'
 import { derived, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
-import { db } from './firebase'
-import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
+import type { HandDoc, Intent, RoomDoc } from './net-types'
 import { DEFAULT_ROOM_OPTS } from './net-types'
-
-export const roomRef = (code: string) => doc(db, 'rooms', code)
-export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
-export const actionRef = (code: string, uid: string) => doc(db, 'rooms', code, 'actions', uid)
-export const actionsCol = (code: string) => collection(db, 'rooms', code, 'actions')
-export const engineRef = (code: string) => doc(db, 'rooms', code, 'engine', 'state')
+import { FirestoreGuestLink, roomRef } from './link-firestore'
+import { P2P_ENABLED, P2PGuestLink, P2PHostLink } from './link-p2p'
+import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
@@ -30,6 +19,19 @@ export function makeCode(len = 5): string {
 export function seatOf(room: RoomDoc | null, uid: string): number {
   if (!room) return -1
   return room.seats.findIndex((s) => s?.uid === uid)
+}
+
+/** A fresh lobby with the creator in seat 0. The host builds its own engine on attach. */
+export function newRoomDoc(code: string, uid: string, name: string): RoomDoc {
+  return {
+    code,
+    hostUid: uid,
+    seats: [{ uid, name, bot: false }, null, null, null],
+    pub: toPublic(createMatch(0)),
+    version: 1,
+    heartbeat: Date.now(),
+    opts: { ...DEFAULT_ROOM_OPTS },
+  }
 }
 
 export interface SessionView {
@@ -45,68 +47,26 @@ export interface SessionView {
   offline: boolean
 }
 
-const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-/** A hung write must not park the outbox forever. */
-const withTimeout = <T>(p: Promise<T>, ms = 10_000): Promise<T> =>
-  Promise.race([
-    p,
-    delay(ms).then(() => {
-      const e = new Error('firestore-write-timeout')
-      ;(e as Error & { code?: string }).code = 'unavailable'
-      throw e
-    }),
-  ])
-
 export class RoomSession {
   readonly room = writable<RoomDoc | null>(null)
   readonly handDoc = writable<HandDoc | null>(null)
   readonly hostStale = writable(false)
   readonly connLost = writable(false)
   readonly view: Readable<SessionView>
-  private unsubs: Unsubscribe[] = []
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
-  /** Intents queue behind the action doc: the next one is only written after
-   *  the host has processed (deleted) the previous one, so rapid actions can
-   *  never overwrite or be deleted unseen. */
-  private outbox: { intent: Intent; resolve: () => void; reject: (e: unknown) => void }[] = []
-  private sending = false
-  private actionDocGone = false
-  private disposed = false
 
   constructor(
     readonly code: string,
     readonly uid: string,
+    private link: GuestLink,
+    /** Set when this tab is the host: `link` is then fed in-tab by it. */
+    readonly hostLink?: HostLink,
   ) {
-    const lost = (label: string) => (err: unknown) => {
-      console.error(`[room] ${label} listener error`, err)
-      this.connLost.set(true)
-    }
-    this.unsubs.push(
-      onSnapshot(
-        roomRef(code),
-        (snap) => {
-          this.room.set(snap.exists() ? (snap.data() as RoomDoc) : null)
-        },
-        lost('room'),
-      ),
-      onSnapshot(
-        handRef(code, uid),
-        (snap) => {
-          this.handDoc.set(snap.exists() ? (snap.data() as HandDoc) : null)
-        },
-        lost('hand'),
-      ),
-      onSnapshot(
-        actionRef(code, uid),
-        (snap) => {
-          this.actionDocGone = !snap.exists()
-          void this.flush()
-        },
-        lost('action-doc'),
-      ),
-    )
-    this.heartbeatTimer = setInterval(() => this.checkHeartbeat(), 5000)
+    link.start({
+      room: (r) => this.room.set(r),
+      hand: (h) => this.handDoc.set(h),
+      lost: () => this.connLost.set(true),
+      hostStale: (s) => this.hostStale.set(s),
+    })
     this.view = derived(
       [this.room, this.handDoc, this.hostStale, this.connLost],
       ([room, hd, hostStale, connLost]) => {
@@ -119,44 +79,8 @@ export class RoomSession {
     )
   }
 
-  private checkHeartbeat(): void {
-    const room = get0(this.room)
-    if (!room) return
-    this.hostStale.set(Date.now() - room.heartbeat > 15000)
-  }
-
   send(intent: Intent): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (this.disposed) return reject(new Error('session-disposed'))
-      this.outbox.push({ intent, resolve, reject })
-      void this.flush()
-    })
-  }
-
-  private async flush(): Promise<void> {
-    if (this.sending) return
-    while (!this.disposed && this.outbox.length > 0 && this.actionDocGone) {
-      this.sending = true
-      const item = this.outbox.shift()!
-      // Mark the doc as present up front. The snapshot stream reports our own
-      // write and then the host's delete in order, so it owns the flag again
-      // from here — setting it after the await could clobber a delete that
-      // already landed.
-      this.actionDocGone = false
-      try {
-        await withTimeout(
-          setDoc(actionRef(this.code, this.uid), {
-            intent: item.intent,
-            ts: Date.now(),
-          } satisfies IntentDoc),
-        )
-        item.resolve()
-      } catch (e) {
-        this.actionDocGone = true // nothing was written
-        item.reject(e)
-      }
-      this.sending = false
-    }
+    return this.link.send(intent)
   }
 
   act(action: Action): Promise<void> {
@@ -168,19 +92,18 @@ export class RoomSession {
   }
 
   dispose(): void {
-    this.disposed = true
-    for (const it of this.outbox) it.reject(new Error('session-disposed'))
-    this.outbox = []
-    for (const u of this.unsubs) u()
-    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    this.link.dispose()
   }
 }
 
-function get0<T>(r: Readable<T>): T {
-  let v!: T
-  const u = r.subscribe((x) => (v = x))
-  u()
-  return v
+function hostSession(code: string, uid: string): RoomSession {
+  const link = new P2PHostLink(code, uid)
+  return new RoomSession(code, uid, link.guest, link)
+}
+
+function guestSession(code: string, uid: string): RoomSession {
+  const link = P2P_ENABLED ? new P2PGuestLink(code, uid) : new FirestoreGuestLink(code, uid)
+  return new RoomSession(code, uid, link)
 }
 
 /** Create a room and return a session. The caller becomes host seat 0. */
@@ -190,19 +113,8 @@ export async function createRoom(uid: string, name: string): Promise<RoomSession
     const ref = roomRef(code)
     const snap = await getDoc(ref)
     if (snap.exists()) continue
-    const engine = createMatch((Math.random() * 2 ** 31) | 0)
-    const room: RoomDoc = {
-      code,
-      hostUid: uid,
-      seats: [{ uid, name, bot: false }, null, null, null],
-      pub: toPublic(engine),
-      version: 1,
-      heartbeat: Date.now(),
-      opts: { ...DEFAULT_ROOM_OPTS },
-    }
-    await setDoc(ref, room)
-    await setDoc(engineRef(code), { json: JSON.stringify(engine) })
-    return new RoomSession(code, uid)
+    await setDoc(ref, newRoomDoc(code, uid, name))
+    return hostSession(code, uid)
   }
   throw new Error('could not allocate a room code')
 }
@@ -213,14 +125,16 @@ export async function joinRoom(code: string, uid: string, name: string): Promise
   const snap = await getDoc(roomRef(code))
   if (!snap.exists()) throw new Error('room-not-found')
   const room = snap.data() as RoomDoc
-  const session = new RoomSession(code, uid)
+  // Back to our own room (reload): this tab hosts it again.
+  if (room.hostUid === uid) return hostSession(code, uid)
   const si = seatOf(room, uid)
   const reclaim = si >= 0 && !!room.seats[si]!.bot
-  if (si >= 0 && !reclaim) return session // rejoin
+  if (si >= 0 && !reclaim) return guestSession(code, uid) // rejoin
   if (!reclaim) {
     if (room.pub && room.pub.phase !== 'LOBBY') throw new Error('room-started')
     if (room.seats.every((s) => s !== null)) throw new Error('room-full')
   }
+  const session = guestSession(code, uid)
   await session.send({ kind: 'join', name })
   return session
 }

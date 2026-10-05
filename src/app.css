@@ -176,6 +176,13 @@ h3 {
   background: var(--panel-2);
   border: 1px solid var(--border);
 }
+/* Dev-only Firestore usage counter in the top bar. */
+.room-chip.usage {
+  letter-spacing: 0;
+  color: inherit;
+  cursor: pointer;
+  margin-right: 8px;
+}
 
 .spacer {
   flex: 1;
