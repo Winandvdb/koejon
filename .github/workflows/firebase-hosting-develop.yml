@@ -6,12 +6,13 @@ on:
 jobs:
   build_and_preview:
     runs-on: ubuntu-latest
+    env:
+      # Show the Firestore read/write counter on the dev channel. Job-wide:
+      # the deploy step builds again (firebase.json predeploy) and overwrites dist.
+      VITE_SHOW_USAGE: 'true'
     steps:
       - uses: actions/checkout@v4
       - run: npm ci && npm run build && npm test
-        env:
-          # Show the Firestore read/write counter on the dev channel.
-          VITE_SHOW_USAGE: 'true'
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

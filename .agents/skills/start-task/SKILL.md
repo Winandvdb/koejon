@@ -53,7 +53,10 @@ cd <REPO>
 gh auth status
 gh api user --jq .login          # this is <ME>
 git fetch origin
+git status --porcelain           # save this output: it is <BASELINE>
 ```
+
+`<BASELINE>` lists the changes that were already in `<REPO>` before you started. You use it in step 10.
 
 Read `<REPO>/AGENTS.md`. It has the code map, commands and rules.
 
@@ -66,7 +69,13 @@ backlog task view <N> --plain
 Note: title, status, labels, priority, dependencies, description and acceptance criteria.
 
 - Status `Done` → STOP.
-- For each id in `dependencies`, run `backlog task view <dep> --plain`. If its status is not `Done`, also check its GitHub issue (step 3 query with the dep number). If the issue is not closed and the task is not `Done` → STOP.
+- For each id in `dependencies` (number `<D>`), read its status **from `origin/develop` only**. Do not use `backlog task view` for this: it also reads other branches, where a task can be `Done` before its PR is merged.
+
+  ```bash
+  git grep -h '^status:' origin/develop -- 'backlog/*/task-<D> - *'
+  ```
+
+  The output must be `status: Done`. If it is not, check the dependency's GitHub issue (step 3 query with `<D>`). If that issue is not closed either → STOP. The dependency is not merged yet.
 
 ## Step 3: Find the GitHub issue and check that it is free
 
@@ -133,7 +142,20 @@ npm ci
 
 **From now on, work only inside `<WT>`.** Every file you read or edit must be under `<WT>`. Every command runs in `<WT>`. Do not edit files in `<REPO>`.
 
+- File paths: always use the full path that starts with `<WT>/`. Example: `<WT>/src/lib/quotes.ts`, not `<REPO>/src/lib/quotes.ts` and not `src/lib/quotes.ts`.
+- Before every `git commit`, run the **checkout check**:
+
+  ```bash
+  cd <WT>
+  git rev-parse --show-toplevel    # must print <WT>
+  git branch --show-current        # must print <BRANCH>
+  ```
+
+  If one of them prints something else, do not commit. Run `cd <WT>` and check again.
+
 ## Step 6: Mark the task "In Progress" and push the branch
+
+Run the checkout check (step 5) first.
 
 ```bash
 cd <WT>
@@ -189,6 +211,21 @@ backlog task edit <N> --notes "<what you changed, which files, what you tested, 
 If all criteria are checked and both checks pass: `backlog task edit <N> -s Done`. Otherwise keep `In Progress`.
 
 ## Step 10: Commit, push, open the PR
+
+First check that you did not edit the main checkout by mistake:
+
+```bash
+git -C <REPO> status --porcelain
+```
+
+Compare the output with `<BASELINE>` from step 1. If there are new lines, you edited files in `<REPO>`. For each new file:
+
+1. Copy the change to the same path under `<WT>`.
+2. Undo it in `<REPO>`: `git -C <REPO> restore <path>` for a changed file, or delete a new file.
+
+Never undo a line that was already in `<BASELINE>`. That is the user's own work.
+
+Then run the checkout check (step 5) and look at the changes:
 
 ```bash
 cd <WT>
