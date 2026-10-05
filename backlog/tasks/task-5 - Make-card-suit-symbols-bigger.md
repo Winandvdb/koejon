@@ -1,10 +1,11 @@
 ---
 id: task-5
 title: Make card suit symbols bigger
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@lab900-winand-vandenbergh'
 created_date: '2026-09-30 19:45'
-updated_date: '2026-10-05 08:32'
+updated_date: '2026-10-05 09:40'
 labels: []
 dependencies: []
 priority: medium
