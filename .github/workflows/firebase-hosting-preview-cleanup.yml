@@ -1,0 +1,33 @@
+name: Delete preview channels of closed pull requests
+# Every PR gets its own preview channel, and the deploy action never removes
+# it: closed PRs would pile up until the site's channel limit. Sweep all of
+# them, not only the PR that closed, so a failed run heals on the next one.
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+concurrency: preview-cleanup
+jobs:
+  delete_preview_channels:
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Delete preview channels whose PR is not open
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KOEJON_3059E }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
+          fb="npx -y firebase-tools@15 --project koejon-3059e"
+          # Preview channels are named pr<number>-<branch>; dev and live are not touched.
+          for ch in $($fb hosting:channel:list --site koejon --json \
+              | jq -r '.result.channels[].name | split("/") | last | select(test("^pr[0-9]+-"))'); do
+            n=$(echo "$ch" | sed -E 's/^pr([0-9]+)-.*/\1/')
+            state=$(gh pr view "$n" --repo "$GITHUB_REPOSITORY" --json state --jq .state)
+            if [ "$state" != "OPEN" ]; then
+              echo "Deleting $ch (PR #$n is $state)"
+              $fb hosting:channel:delete "$ch" --site koejon --force || echo "::warning::Could not delete $ch"
+            fi
+          done
