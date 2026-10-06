@@ -31,7 +31,7 @@ export const QUOTES = {
   /** A player cannot follow suit and must pick something else. */
   forgot: ['Wat was ook alweer troef?'],
   /** A seat keeps the table waiting. */
-  hurry: ['Geeft hem is een nen duw', "'Tis uw beurt he"],
+  hurry: ['Geeft hem is nen duw', "'Tis uw beurt he"],
   /** A team reaches 20 points mid-hand by feeding fat cards. */
   there: ['We zijn er al se'],
   /** A trick worth more than 10 points. */
