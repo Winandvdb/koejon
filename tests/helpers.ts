@@ -52,6 +52,7 @@ export function playingState(over: Partial<State> = {}): State {
     troefkeAsked: false,
     tricksPlayed: 0,
     tricksWon: [0, 0],
+    piles: [[], []],
     points: [0, 0],
     lines,
     marks,
@@ -99,7 +100,7 @@ export function lastTrickState(opts: {
 
 /**
  * Drive a fresh match into BIDDING_R1 with `dealer`.
- * Uses fixed draws and the first legal chooseDealer.
+ * Uses fixed draws and cuts and the first legal chooseDealer.
  */
 export function dealtState(seed: number, dealer = 0): State {
   let s = createMatch(seed)
@@ -109,12 +110,17 @@ export function dealtState(seed: number, dealer = 0): State {
   while (s.dealerDraw && s.dealerDraw.pending !== 2 && guard-- > 0) {
     const dd = s.dealerDraw
     const seat = dd.drawer[dd.pending]
-    s = apply(s, { type: 'draw', seat })
+    s = apply(s, { type: 'draw', seat, n: 6 })
   }
   if (!s.dealerDraw || s.dealerDraw.pending !== 2) throw new Error('draw did not finish')
   s = apply(s, { type: 'chooseDealer', seat: s.dealerDraw.winnerSeat!, dealer })
-  s = apply(s, { type: 'deal', seat: dealer })
-  return s
+  return cutAndDeal(s)
+}
+
+/** From CUTTING: the dealer's right neighbour lifts `n` cards, then the dealer deals. */
+export function cutAndDeal(s: State, n = 10): State {
+  s = apply(s, { type: 'cut', seat: (s.dealer + 3) % 4, n })
+  return apply(s, { type: 'deal', seat: s.dealer })
 }
 
 /** A state in BIDDING_R1 with chosen turned cards (hand contents irrelevant). */

@@ -12,12 +12,16 @@ environment deviations. Each entry lists the chosen behavior.
   count increases by 1 (may exceed 13) and a separate `koeien` counter is incremented so
   the scoreboard can draw those lines crooked with hairs. On the boomke the Koei is
   drawn at the bottom, below the line ladder.
-- **Dealer-draw packets** — team B draws from the same shuffled deck minus team A's
-  packet ("the remaining deck"). Tie on rank → both players redraw on a fresh shuffle.
-  Packet sizes are picked by the engine: A ∈ [4, 16], B ∈ [4, remaining − 4].
-- **Dealer draw** — the packet draws need no input and resolve automatically.
-  The draw winner then chooses the first dealer interactively (bots pick a random
-  teammate). The chosen dealer is announced for at least 3 s before the deal.
+- **Dealer-draw packets** — the engine shuffles one deck per attempt and keeps it on
+  the host. Team B lifts from what team A left of that deck ("the remaining deck"),
+  with no reshuffle in between. Tie on rank → both players redraw on a fresh shuffle.
+  Packet sizes: A ∈ [4, 16], B ∈ [4, remaining − 4].
+- **Dealer draw** — each team's drawing player chooses the packet size (bots pick a
+  random allowed size). The draw winner then chooses the first dealer interactively
+  (bots pick a random teammate).
+- **Cut** — the `CUTTING` phase comes before every deal, the first one included. The
+  dealer's right neighbour chooses the packet size, 4..20 (bots pick a random allowed
+  size). The chosen dealer is announced during the cut and for at least 3 s after it.
 - **Dealer's hidden cards** — the engine always tracks the dealer's full 6-card hand;
   masking is a view concern. During bidding the dealer's hand doc contains
   `cards: null` and the UI renders card backs (4 hand cards + the face-down set-aside
@@ -34,6 +38,12 @@ environment deviations. Each entry lists the chosen behavior.
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
 - **20–20** — a draw: no lines erased, no Koei, and the next deal's level-1 stake
   doubles (playing team needs >20; defenders win at ≤19).
+- **Deck between hands** — no reshuffle. Each won trick goes on its team's pile; the
+  engine shuffles its 4 cards (seeded RNG), as a collected trick is rarely kept in
+  play order. For the next deal, team 0's pile is put on top of team 1's pile, then
+  the deck is cut once: the cutter's packet (4..20 cards) goes from the top to the bottom.
+  After an all-passed deal the hands are thrown in as they are (seat 0 first). Only
+  the first deal of a match uses a fresh shuffle.
 - **Dealing is automatic** — no deal prompt: the `DEALING` phase announces the dealer
   for ~3 s, then the host issues the deal itself (after the draw, after scoring and
   after all-passed hands).
@@ -43,8 +53,9 @@ environment deviations. Each entry lists the chosen behavior.
   automatically; other humans click "Gezien". This also keeps the
   first-two-tricks review window open as long as needed.
 - **Dealer's cards confirmation** — the same `ack` gate applies at the start of
-  PLAYING: the turned cards stay at the dealer's seat until all seats confirmed
-  them (the first leader auto-confirms), then the first lead is allowed.
+  PLAYING: all seats confirm the turned cards (the first leader auto-confirms),
+  then the first lead is allowed. The turned cards stay at the dealer's seat
+  until that first card is played, so the first leader can still look at them.
 - **Troefke** — when the bidder's partner leads the first trick, the bidder may
   ask for "Troefke" (please open with trump) during the dealer-card confirm
   window, next to "Gezien". Asking counts as the bidder's confirmation — no

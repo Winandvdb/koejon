@@ -19,6 +19,17 @@ export interface RoomOpts {
 
 export const DEFAULT_ROOM_OPTS: RoomOpts = { info: true, score: false }
 
+/** A table quote the host decided to show, carried on the room so every
+ *  client displays the same line at the same moment. */
+export interface QuoteEvent {
+  /** Monotonic counter per room; clients dedup on it. */
+  n: number
+  seat: number
+  text: string
+  /** Host clock, epoch ms. Clients skip entries that are too old. */
+  at: number
+}
+
 export interface RoomDoc {
   code: string
   hostUid: string
@@ -31,6 +42,8 @@ export interface RoomDoc {
   /** Host heartbeat, epoch ms. Clients flag "host left" when stale. */
   heartbeat: number
   opts?: RoomOpts
+  /** Quotes fired this match, newest last. Kept short; reset on a new match. */
+  quotes?: QuoteEvent[]
 }
 
 /** rooms/{code}/hands/{uid} */

@@ -1,17 +1,16 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
   import { fly, scale } from 'svelte/transition'
-  import { RANK_ORDER, SUITS } from '../engine'
   import type { Action, Card } from '../engine'
+  import { turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
-  import { sortHand } from '../lib/prefs'
-  import { activeQuotes, hurryQuote } from '../lib/quotes'
+  import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
+  import PacketLift from './PacketLift.svelte'
 
   let {
     view,
@@ -57,18 +56,17 @@
     view.legal.flatMap((a) => (a.type === 'choose' && a.suit !== null ? [a.suit] : [])),
   )
   const choosePass = $derived(view.legal.some((a) => a.type === 'choose' && a.suit === null))
+  /** Packet sizes I may lift now, in the dealer draw or the cut. */
+  const liftSizes = $derived(
+    view.legal.flatMap((a) => (a.type === 'draw' || a.type === 'cut' ? [a.n] : [])),
+  )
+  /** The cut of this deal, shown while the dealer deals. */
+  const lastCut = $derived(pub.log.findLast((ev) => ev.t === 'cut'))
 
   const biddingPhase = $derived(
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
   )
-  const dealerBlind = $derived(biddingPhase && my === pub.dealer)
-  /** The turned cards sit at the dealer's seat while bidding runs, and until
-   *  all seats confirmed them at play start. */
-  const showTurned = $derived(
-    pub.turned !== null &&
-      (biddingPhase ||
-        (pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trickAcks.length < 4)),
-  )
+  const showTurned = $derived(turnedVisible(pub))
 
   const playing = $derived(
     pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER',
@@ -121,15 +119,52 @@
 
   const acting = (i: number) => pub.actionSeats.includes(i)
 
-  /** Optional display sort: grouped by suit, high to low inside a suit. */
-  const suitIdx = (c: Card) => SUITS.indexOf(c.s)
+  /** Manual mode: the player's own card order, valid for one hand only. */
+  let manual = $state({ hand: -1, order: [] as string[] })
   const displayHand = $derived(
-    view.hand && $sortHand
-      ? [...view.hand].sort(
-          (a, b) => suitIdx(a) - suitIdx(b) || RANK_ORDER[b.r] - RANK_ORDER[a.r],
-        )
-      : view.hand,
+    view.hand &&
+      arrangeHand(view.hand, $sortMode, manual.hand === pub.handNumber ? manual.order : []),
   )
+  const manualSort = $derived($sortMode === 'manual')
+  /** Ask once, after the dealer is chosen and the cards are in the hand. */
+  const askSort = $derived(
+    $sortMode === null && !!view.hand?.length && (biddingPhase || pub.phase === 'PLAYING'),
+  )
+  const canPlay = (c: Card) => pub.phase === 'PLAYING' && legalPlays.has(cardKey(c))
+
+  /** Pointer drag (mouse and touch) to reorder in manual mode. Only a move
+   *  past a few pixels is a drag; a plain tap still plays the card. */
+  let drag: { key: string; x: number } | null = null
+  let dragKey = $state<string | null>(null)
+  let justDragged = false
+
+  function dragStart(e: PointerEvent) {
+    const el = (e.target as Element).closest<HTMLElement>('[data-card]')
+    if (manualSort && el) drag = { key: el.dataset.card!, x: e.clientX }
+  }
+  function dragMove(e: PointerEvent) {
+    if (!drag || !displayHand) return
+    if (dragKey === null) {
+      if (Math.abs(e.clientX - drag.x) < 8) return
+      dragKey = drag.key
+      ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    }
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-card]')
+    const keys = displayHand.map(cardKey)
+    const from = keys.indexOf(dragKey)
+    const to = over ? keys.indexOf(over.dataset.card!) : -1
+    if (from < 0 || to < 0 || from === to) return
+    manual = { hand: pub.handNumber, order: moveCard(keys, from, to) }
+  }
+  function dragEnd() {
+    if (dragKey !== null) {
+      // The click that follows the release must not play the card.
+      justDragged = true
+      setTimeout(() => (justDragged = false))
+    }
+    drag = null
+    dragKey = null
+  }
 
   /** One-shot confetti burst when the match ends. */
   const CONFETTI_COLORS = ['var(--gold)', 'var(--team-decl)', 'var(--team-def)', 'var(--accent)', '#fff']
@@ -141,9 +176,10 @@
     rot: Math.random() * 360,
   }))
 
-  /** Short-lived table talk, one bubble per seat. */
+  /** Short-lived table talk, one bubble per seat. The host picks the quotes;
+   *  `room.quotes` makes every client show the same line at the same moment. */
   let sayings = $state<Record<number, { key: string; text: string }>>({})
-  const firedQuotes = new Set<string>()
+  const firedQuotes = new Set<number>()
   const say = (seat: number, key: string, text: string) => {
     sayings = { ...sayings, [seat]: { key, text } }
     setTimeout(() => {
@@ -154,33 +190,22 @@
     }, 4000)
   }
   $effect(() => {
-    for (const q of activeQuotes(pub)) {
-      if (firedQuotes.has(q.key)) continue
-      firedQuotes.add(q.key)
-      say(q.seat, q.key, q.text)
+    const now = Date.now()
+    for (const q of room.quotes ?? []) {
+      if (firedQuotes.has(q.n)) continue
+      firedQuotes.add(q.n)
+      // A joining or reloading client may see old entries: skip them.
+      if (now - q.at > 30_000) continue
+      say(q.seat, `q${q.n}`, q.text)
     }
   })
 
-  /** Nag a seat that keeps the table waiting: one pending actor for > 9 s. */
-  let waitSeat = -1
-  let waitTimer: ReturnType<typeof setTimeout> | null = null
-  let waitN = 0
-  $effect(() => {
-    const pending = pub.actionSeats.length === 1 ? pub.actionSeats[0] : -1
-    if (pending === waitSeat) return
-    waitSeat = pending
-    if (waitTimer) clearTimeout(waitTimer)
-    waitTimer = null
-    if (pending < 0) return
-    waitTimer = setTimeout(() => {
-      waitTimer = null
-      const q = hurryQuote(pending)
-      say(q.seat, `w${waitN++}`, q.text)
-    }, 9000)
-  })
-  onDestroy(() => {
-    if (waitTimer) clearTimeout(waitTimer)
-  })
+  /** A bubble floats above my nameplate: the wait hint below must lift clear of it. */
+  const meBubble = $derived(
+    sayings[my] !== undefined ||
+      (showBids && lastBid.has(my)) ||
+      (pub.troefkeAsked && my === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0),
+  )
 
   $effect(() => {
     document.title = myTurn ? `● ${$t.yourTurn} — ${$t.title}` : $t.title
@@ -201,11 +226,13 @@
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
     {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
-    {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
-    {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
-    {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
-      <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
-    {/if}
+    <div class="bubbles" class:has-say={!!sayings[seat]}>
+      {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+      {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
+        <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
+      {/if}
+      {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
+    </div>
     {#if isHost && s && !s.bot && seat !== my}
       <button
         class="icon-btn tiny kick"
@@ -295,13 +322,32 @@
             </div>
             {#if dd.pending === 2 && !has('chooseDealer')}
               <div class="small">{name(dd.winnerSeat!)} {$t.picksDealer}</div>
+            {:else if liftSizes.length > 0}
+              <PacketLift
+                total={dd.pending === 0 ? 24 : 24 - dd.packetA!}
+                sizes={liftSizes}
+                onlift={(n) => send({ type: 'draw', seat: my, n })}
+              />
             {:else if dd.pending !== 2}
               <div class="small">{name(dd.drawer[dd.pending])} {$t.drawsNow}</div>
+            {/if}
+          </div>
+        {:else if pub.phase === 'CUTTING'}
+          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+            <strong>{name(pub.dealer)} {$t.isDealer}</strong>
+            {#if liftSizes.length > 0}
+              <h3>{$t.cutTitle}</h3>
+              <PacketLift total={24} sizes={liftSizes} onlift={(n) => send({ type: 'cut', seat: my, n })} />
+            {:else}
+              <div class="small">{name(pub.actionSeats[0])} {$t.cutsNow}</div>
             {/if}
           </div>
         {:else if pub.phase === 'DEALING'}
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
             <strong>{name(pub.dealer)} {$t.isDealer}</strong>
+            {#if lastCut}
+              <div class="small">{name(lastCut.seat!)} {$t.cutDid}</div>
+            {/if}
           </div>
         {:else if pub.phase === 'SCORED' && pub.lastResult}
           {@const r = pub.lastResult}
@@ -343,8 +389,21 @@
           </div>
         {/if}
 
-        <!-- Action buttons float on the felt, raised like table buttons. -->
-        {#if has('chooseDealer')}
+        <!-- Action buttons float on the felt, raised like table buttons.
+             On the first deal the sort question comes first: it holds
+             back the bid buttons until the player has chosen. -->
+        {#if askSort}
+          <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.sortAsk}</span>
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            {#each SORT_MODES as m (m)}
+              <button
+                class="fab"
+                title={m === 'manual' ? $t.sortManualHint : undefined}
+                onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button
+              >
+            {/each}
+          </div>
+        {:else if has('chooseDealer')}
           <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.chooseDealer}</span>
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
             {#each [0, 1, 2, 3] as d (d)}
@@ -399,7 +458,7 @@
 
         <!-- While the game waits on confirmations, say who we're waiting on. -->
         {#if pendingAcks.length > 0 && !has('ack')}
-          <span class="wait-hint" in:fly={{ y: 8, duration: 200 }}>
+          <span class="wait-hint" class:lifted={meBubble} in:fly={{ y: 8, duration: 200 }}>
             {$t.waitingFor} {pendingAcks.map((s) => name(s)).join(', ')}…
           </span>
         {/if}
@@ -417,21 +476,35 @@
     </div>
 
     <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
-      {#if dealerBlind}<div class="blind-hint">{$t.handHidden}</div>{/if}
-      <div class="my-hand">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="my-hand"
+        class:manual={manualSort}
+        onpointerdown={dragStart}
+        onpointermove={dragMove}
+        onpointerup={dragEnd}
+        onpointercancel={dragEnd}
+      >
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
             <div class="hand-card"><div class="card-back"></div></div>
           {/each}
         {:else}
           {#each displayHand ?? [] as c, i (`${pub.handNumber}-${c.s}${c.r}`)}
+            <!-- In manual mode cards stay enabled so they can be dragged;
+                 the click handler still only plays legal cards. -->
             <button
               class="hand-card"
-              class:playable={pub.phase === 'PLAYING' && legalPlays.has(c.s + c.r)}
-              class:dim={pub.phase === 'PLAYING' && myTurn && !legalPlays.has(c.s + c.r)}
-              disabled={pub.phase !== 'PLAYING' || !legalPlays.has(c.s + c.r)}
+              class:playable={canPlay(c)}
+              class:dim={pub.phase === 'PLAYING' && myTurn && !canPlay(c)}
+              class:dragging={dragKey === cardKey(c)}
+              data-card={cardKey(c)}
+              disabled={!manualSort && !canPlay(c)}
+              aria-disabled={!canPlay(c)}
               in:fly={{ y: -160, duration: 320, delay: 120 + i * 45 }}
-              onclick={() => send({ type: 'play', seat: my, card: c })}
+              onclick={() => {
+                if (canPlay(c) && !justDragged) send({ type: 'play', seat: my, card: c })
+              }}
             >
               <CardView card={c} />
             </button>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { botAction } from '../src/bots/bot'
-import { C, playingState } from './helpers'
+import { C, mulberry, playingState } from './helpers'
+import { apply, createMatch } from '../src/engine'
 import type { Card, State } from '../src/engine'
 
 const smart = () => 0 // rand < any threshold → deterministic smart path
@@ -432,5 +433,37 @@ describe('bot levels', () => {
     // HA is gone, so HK is boss — normal pulls it; easy assumes HA is still out.
     expect(botAction(s, 1, smart, 'normal')).toEqual({ type: 'play', seat: 1, card: C('H', 'K') })
     expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('S', '9') })
+  })
+})
+
+describe('bot packet lift', () => {
+  /** Packet sizes a bot picks over many rolls. */
+  const picks = (s: State, seat: number) =>
+    new Set(
+      Array.from({ length: 200 }, (_, i) => {
+        const a = botAction(s, seat, mulberry(i + 1))
+        if (a.type !== 'draw' && a.type !== 'cut') throw new Error(a.type)
+        return a.n
+      }),
+    )
+
+  it('lifts a valid packet in the dealer draw, for both teams', () => {
+    let s = apply(createMatch(3), { type: 'start', seat: 0 })
+    const a = picks(s, 0)
+    expect(Math.min(...a)).toBeGreaterThanOrEqual(4)
+    expect(Math.max(...a)).toBeLessThanOrEqual(16)
+    expect(a.size).toBeGreaterThan(5)
+    s = apply(s, { type: 'draw', seat: 0, n: 12 })
+    const b = picks(s, 1)
+    expect(Math.min(...b)).toBeGreaterThanOrEqual(4)
+    expect(Math.max(...b)).toBeLessThanOrEqual(8)
+  })
+
+  it('lifts a valid packet in the cut', () => {
+    const s = playingState({ phase: 'CUTTING', dealer: 2 })
+    const c = picks(s, 1)
+    expect(Math.min(...c)).toBeGreaterThanOrEqual(4)
+    expect(Math.max(...c)).toBeLessThanOrEqual(20)
+    expect(c.size).toBeGreaterThan(5)
   })
 })

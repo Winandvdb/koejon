@@ -27,7 +27,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 
 | Path | Contents | Rules |
 |---|---|---|
-| `src/engine/` | Pure game engine: cards, seeded RNG, dealer draw, deal, bidding, legal plays, tricks, scoring. Entry: `createMatch`, `legalActions`, `apply`, `toPublic`. | No Firebase, DOM or Svelte imports. Deterministic: use the seeded RNG in `rng.ts`, never `Math.random`. All game rules live here. |
+| `src/engine/` | Pure game engine: cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring. Entry: `createMatch`, `legalActions`, `apply`, `toPublic`. | No Firebase, DOM or Svelte imports. Deterministic: use the seeded RNG in `rng.ts`, never `Math.random`. All game rules live here. |
 | `src/bots/bot.ts` | Bot heuristics. Levels `easy`, `normal`, `hard` (`BOT_PROFILES`). Entry: `botAction`. | A bot only picks from `legalActions`. Never read other players' hands. |
 | `src/lib/host.ts` | `HostGame`: the authoritative loop on the host. Applies intents, runs bots, publishes state. | |
 | `src/lib/room.ts` | `RoomSession`: client side of a room (view, send intents). `createRoom`, `joinRoom`. | |
@@ -36,13 +36,13 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/link-p2p.ts` | Multiplayer over WebRTC. Firestore only for lobby and signaling. | |
 | `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
 | `src/lib/fs.ts`, `firebase.ts` | Firestore wrapper (counts reads and writes), Firebase init, emulator auto-connect. | |
-| `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives quotes from public state. | Quotes stay in Flemish dialect. Pick speaker and line with the deterministic `hash`, so all clients agree. |
+| `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
 | `src/app.css` | All styles and colour tokens. | |
-| `public/` | Web app manifest and app icons (`icon.svg` is the source of the PNGs). | Copied to `dist/` as is. |
-| `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. | The worker never caches other origins (Firebase). Registered in production builds only. |
+| `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |
+| `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. `devbrand.ts` + `dev/` hold the dev build name and icons; a plugin emits them only when `VITE_APP_VARIANT=dev` (the dev channel and previews of PRs into develop). | The worker never caches other origins (Firebase). Registered in production builds only. |
 | `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`. | Reuse the helpers. |
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
