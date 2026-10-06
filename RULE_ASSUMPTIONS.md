@@ -53,8 +53,9 @@ environment deviations. Each entry lists the chosen behavior.
   automatically; other humans click "Gezien". This also keeps the
   first-two-tricks review window open as long as needed.
 - **Dealer's cards confirmation** — the same `ack` gate applies at the start of
-  PLAYING: the turned cards stay at the dealer's seat until all seats confirmed
-  them (the first leader auto-confirms), then the first lead is allowed.
+  PLAYING: all seats confirm the turned cards (the first leader auto-confirms),
+  then the first lead is allowed. The turned cards stay at the dealer's seat
+  until that first card is played, so the first leader can still look at them.
 - **Troefke** — when the bidder's partner leads the first trick, the bidder may
   ask for "Troefke" (please open with trump) during the dealer-card confirm
   window, next to "Gezien". Asking counts as the bidder's confirmation — no
