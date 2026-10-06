@@ -22,8 +22,16 @@ jobs:
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KOEJON_3059E }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
           fb="npx -y firebase-tools@15 --project koejon-3059e"
+          # A failed list must fail the job and show why: inside the for list
+          # below an error would only print a jq message and end green.
+          list=$($fb hosting:channel:list --site koejon --json) || true
+          if [ "$(echo "$list" | jq -r '.status' 2>/dev/null)" != "success" ]; then
+            echo "::error::Could not list the preview channels"
+            echo "$list"
+            exit 1
+          fi
           # Preview channels are named pr<number>-<branch>; dev and live are not touched.
-          for ch in $($fb hosting:channel:list --site koejon --json \
+          for ch in $(echo "$list" \
               | jq -r '.result.channels[].name | split("/") | last | select(test("^pr[0-9]+-"))'); do
             n=$(echo "$ch" | sed -E 's/^pr([0-9]+)-.*/\1/')
             state=$(gh pr view "$n" --repo "$GITHUB_REPOSITORY" --json state --jq .state)
