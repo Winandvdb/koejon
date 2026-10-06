@@ -1171,6 +1171,80 @@ button.tag {
   height: 100%;
 }
 
+/* ---------- Packet lift (dealer draw and cut) ---------- */
+
+.lift {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The deck seen at an angle: the lifted packet on top, the rest below. Each
+   packet shows its top card's back, then one cream edge per card. */
+.lift-stack {
+  --cw: calc(var(--card) * 0.95);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 12px;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.lift-pack {
+  width: var(--cw);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+  transition: transform 0.15s;
+}
+
+.lift-pack.up {
+  transform: translateX(10px);
+}
+
+/* A card back tilted away: the far edge is narrower, like a real deck top. */
+.lift-top {
+  position: relative;
+  height: calc(var(--cw) * 0.5);
+  perspective: calc(var(--cw) * 5);
+}
+
+.lift-top > .card-back {
+  position: absolute;
+  bottom: 0;
+  height: calc(var(--cw) * 1.4);
+  transform-origin: bottom center;
+  transform: rotateX(68deg);
+  box-shadow: none;
+}
+
+/* 2px + 1px line per card keeps 24 cards short enough for a phone. */
+.lift-edge {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--card-bg) 82%, #000),
+    var(--card-bg) 12%,
+    var(--card-bg) 88%,
+    color-mix(in srgb, var(--card-bg) 82%, #000)
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--card-bg) 75%, #000);
+}
+
+.lift-edge:last-child {
+  border-radius: 0 0 4px 4px;
+}
+
+.lift-range {
+  width: min(220px, 70vw);
+  accent-color: var(--cta);
+}
+
+.lift-count {
+  font-variant-numeric: tabular-nums;
+}
+
 .area-me {
   grid-area: me;
   display: flex;

@@ -49,7 +49,7 @@ describe('dealer rotation', () => {
       winner: null,
     }
     s = apply(s, { type: 'next', seat: 0 })
-    expect(s.phase).toBe('DEALING')
+    expect(s.phase).toBe('CUTTING')
     expect(s.dealer).toBe(1)
   })
 
@@ -61,9 +61,41 @@ describe('dealer rotation', () => {
       multiplier: 2,
     }
     s = apply(s, { type: 'choose', seat: 0, suit: null })
-    expect(s.phase).toBe('DEALING')
+    expect(s.phase).toBe('CUTTING')
     expect(s.dealer).toBe(1)
     expect(s.multiplier).toBe(2)
+  })
+})
+
+describe('cut', () => {
+  /** A state in CUTTING with dealer 1, after a scored hand; all 24 cards on the piles. */
+  const cutting = (): State => {
+    const s = dealtState(5, 0)
+    const all = s.hands.flat()
+    const scored: State = { ...s, phase: 'SCORED', winner: null, piles: [all.slice(0, 12), all.slice(12)] }
+    return apply(scored, { type: 'next', seat: 0 })
+  }
+
+  it('the dealer\'s right neighbour lifts 4 to 20 cards (at least 4 stay)', () => {
+    const s = cutting()
+    expect(s.dealer).toBe(1)
+    const sizes = legalActions(s, 0).flatMap((a) => (a.type === 'cut' ? [a.n] : []))
+    expect(sizes).toEqual(Array.from({ length: 17 }, (_, i) => i + 4))
+    for (const seat of [1, 2, 3]) expect(legalActions(s, seat)).toHaveLength(0)
+    expect(() => apply(s, { type: 'cut', seat: 0, n: 3 })).toThrow()
+    expect(() => apply(s, { type: 'cut', seat: 0, n: 21 })).toThrow()
+    expect(() => apply(s, { type: 'cut', seat: 2, n: 8 })).toThrow()
+  })
+
+  it('applies the cut to the deck, then the dealer deals', () => {
+    const s = cutting()
+    const s2 = apply(s, { type: 'cut', seat: 0, n: 20 })
+    expect(s2.phase).toBe('DEALING')
+    expect(s2.log.at(-1)).toMatchObject({ t: 'cut', seat: 0, n: 20 })
+    expect(s2.piles[0]).toHaveLength(24)
+    const stacked = [...s.piles[0], ...s.piles[1]]
+    expect(s2.piles).toEqual([[...stacked.slice(20), ...stacked.slice(0, 20)], []])
+    expect(legalActions(s2, 1)).toEqual([{ type: 'deal', seat: 1 }])
   })
 })
 

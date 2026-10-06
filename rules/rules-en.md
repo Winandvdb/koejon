@@ -29,7 +29,7 @@
 
 ## Dealing
 
-- The dealer's right neighbour cuts the deck. (Online: the deck is shuffled only before the first deal. After that, the trick piles are stacked and the cut is random.)
+- The dealer's right neighbour cuts the deck: at least 4 cards lifted and at least 4 left. (Online: the deck is shuffled only before the first deal. After that, the trick piles are stacked.)
 - The dealer deals clockwise in batches of 2 cards. Each player receives 6 cards.
 - The dealer's last 2 cards stay separate: the second-to-last face down, the last one face
   up. The face-up card proposes the trump suit.
