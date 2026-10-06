@@ -4,40 +4,39 @@ title: Guest seat turns into a bot after the host minimizes the app
 status: To Do
 assignee: []
 created_date: '2026-10-06 18:27'
-updated_date: '2026-10-06 18:36'
+updated_date: '2026-10-06 19:23'
 labels:
   - bug
   - network
 dependencies: []
-priority: high
+priority: medium
 ---
 
 ## Description
 
 <!-- SECTION:DESCRIPTION:BEGIN -->
-Seen in a multiplayer game:
-1. The host minimized the app (phone). The guest lost the connection to the host. The guest's app went back to the start screen.
+Seen once in a multiplayer game. We could not reproduce it again.
+1. The host minimized the app (phone). The guest lost the connection to the host. The guest's app went back to the start screen. The guest did NOT press the leave button.
 2. Later the host opened the app again and refreshed. After that, a bot played for the guest. The guest still saw the table, but only the backs of her own cards.
 3. When the guest rejoined the room again, she got her seat back and could play.
 
-Expected: a host that goes to the background never causes a guest's seat to go to a bot. A guest who sees the table always sees her own cards and can play. A guest whose seat a bot holds gets it back without a manual rejoin.
+Expected: a host that goes to the background never causes a guest's seat to go to a bot. A guest who sees the table always sees her own cards and can play.
 
-Most likely sequence (from the code, not confirmed):
-- A minimized host tab stops: no heartbeat, the WebRTC channel drops, and the host does not handle intents. The guest sees "host left".
-- The guest goes to the start screen. In src/App.svelte only the leave button (`onLeave`, sends a `leave` intent) and the "room vanished" effect (around line 140) do that. Only `onLeave` sends an intent.
-- The `leave` intent waits in Firestore because the host is asleep. The guest rejoins. Her seat is still human, so `joinRoom` does a plain rejoin and sends no `join` intent (src/lib/room.ts, around line 160).
-- The host refreshes and reads the old `leave` intent. Mid-game leave puts a bot in the seat and keeps her uid (src/lib/host.ts, around line 349).
-- The host publishes hands only for human seats (host.ts, around line 429). Her session still finds her uid in the seat, so it shows the table without a hand.
-- A second rejoin sends `join`, which reclaims the bot seat with the same uid. That fits: a host kick (`kickSeat`) uses a new bot uid, so she could not have reclaimed it.
+What the code tells us (cause not found):
+- She could reclaim the seat by rejoining. So the seat held a bot with her own uid. Only a mid-game `leave` intent makes that (src/lib/host.ts, around line 349). `kickSeat` uses a new bot uid, and then a rejoin cannot reclaim the seat.
+- Only the leave button (`onLeave` in src/App.svelte) sends `leave`, and it was not pressed. So the bot seat came from somewhere else. Candidates to check:
+  - The reloaded host reads `seats` from the Firestore room doc (`load()` in host.ts). The P2P host writes the room doc only when the seats, options or lobby state change (`syncFirestore` in src/lib/link-p2p.ts), and a failed write while minimized is not retried until the next publish. A stale room doc can bring back old seats.
+  - An intent doc that a minimized host did not handle in time, handled after the refresh.
+- The start screen: only `onLeave` and the "room vanished" effect (src/App.svelte, around line 140) go there. The effect runs when `view.room` goes null after a room was shown. A Firestore fallback listener that gives no room for a moment on a bad connection can trigger it.
+- The card backs: the host publishes hands only for human seats (host.ts, around line 429). Her session still found her uid in the seat (`seatOf`), so it showed the table without a hand. Only `joinRoom` reclaims a bot seat (src/lib/room.ts, around line 160), so only a manual rejoin fixed it.
 
 Related: task-7 (rollback on bad connection).
 <!-- SECTION:DESCRIPTION:END -->
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A test reproduces the bug (a leave intent that the host reads after the guest rejoined) and fails before the fix
-- [ ] #2 A leave intent that is older than the guest's rejoin does not give the seat to a bot
-- [ ] #3 When the guest's own seat is held by a bot while she is at the table, she gets the seat back without a manual rejoin, or the UI clearly offers to take it back
-- [ ] #4 When the host is in the background, the guest sees that the host is away and is not pushed to the start screen while the room still exists
-- [ ] #5 The cause is written in the task notes
+- [ ] #1 When the guest's own seat is held by a bot with her uid while she is at the table, her session reclaims the seat by itself (sends join), with a test
+- [ ] #2 A short null room from a dropped listener does not send the guest to the start screen while the room still exists, with a test
+- [ ] #3 Check the two candidate causes (stale room doc seats after a host reload, late intent doc). Write what was found in the task notes. If a cause is confirmed, a test reproduces it and the fix makes it pass
+- [ ] #4 A console warning logs when a seat with a human uid turns into a bot, with the reason (leave intent or kick), so a next case can be traced
 <!-- AC:END -->
