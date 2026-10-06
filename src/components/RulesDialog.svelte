@@ -2,11 +2,15 @@
   import rulesNl from '../../rules/rules-nl.md?raw'
   import rulesEn from '../../rules/rules-en.md?raw'
   import { lang, t } from '../lib/i18n'
-  import { renderMd } from '../lib/md'
 
   let { onclose }: { onclose: () => void } = $props()
 
-  const html = $derived(renderMd($lang === 'nl' ? rulesNl : rulesEn))
+  // marked is only needed here, so keep it out of the start bundle.
+  let html = $state('')
+  $effect(() => {
+    const src = $lang === 'nl' ? rulesNl : rulesEn
+    import('../lib/md').then(({ renderMd }) => (html = renderMd(src)))
+  })
 </script>
 
 <div

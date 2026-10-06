@@ -1,5 +1,12 @@
 import { initializeApp, type FirebaseApp, type FirebaseOptions } from 'firebase/app'
-import { connectAuthEmulator, getAuth, signInAnonymously, type Auth } from 'firebase/auth'
+import {
+  browserLocalPersistence,
+  connectAuthEmulator,
+  indexedDBLocalPersistence,
+  initializeAuth,
+  signInAnonymously,
+  type Auth,
+} from 'firebase/auth'
 import { connectFirestoreEmulator, initializeFirestore, type Firestore } from 'firebase/firestore'
 
 // Works both under Vite (import.meta.env) and plain Node (process.env).
@@ -36,7 +43,12 @@ if (!USE_EMULATOR && !env('VITE_FIREBASE_API_KEY')) {
 }
 
 export const app: FirebaseApp = initializeApp(config)
-export const auth: Auth = getAuth(app)
+// Not getAuth: it adds the popup/redirect resolver, which loads auth/iframe.js
+// and gapi on start. Anonymous sign-in needs neither. In Node both
+// persistences are unavailable, so auth falls back to memory.
+export const auth: Auth = initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+})
 // Force long polling: ad blockers/proxies kill the WebChannel transport
 // (ERR_BLOCKED_BY_CLIENT on Listen/channel); plain XHR polling is reliable.
 export const db: Firestore = initializeFirestore(app, {
