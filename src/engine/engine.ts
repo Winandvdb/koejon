@@ -53,6 +53,7 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     troefkeAsked: false,
     tricksPlayed: 0,
     tricksWon: [0, 0],
+    piles: [[], []],
     points: [0, 0],
     lines: [START_LINES, START_LINES],
     marks: freshMarks(),
@@ -200,8 +201,21 @@ function actionIsLegal(s: State, a: Action): boolean {
   })
 }
 
+/**
+ * The deck is not reshuffled between hands: team 0's trick pile goes on
+ * team 1's, then the right neighbour cuts (lifts 4..20 cards, puts them under).
+ */
+function nextDeck(s: State): Card[] {
+  const stacked = [...s.piles[0], ...s.piles[1]]
+  s.piles = [[], []]
+  // First deal of the match: the cards come fresh out of the box.
+  if (stacked.length !== 24) return rngShuffle(s, fullDeck())
+  const k = rngRange(s, 4, 20)
+  return [...stacked.slice(k), ...stacked.slice(0, k)]
+}
+
 function doDeal(s: State): void {
-  const deck = rngShuffle(s, fullDeck())
+  const deck = nextDeck(s)
   const order = [leftOf(s.dealer), (s.dealer + 2) % 4, (s.dealer + 3) % 4, s.dealer]
   const hands: Card[][] = [[], [], [], []]
   let i = 0
@@ -247,6 +261,8 @@ function allPassed(s: State): void {
   pushLog(s, { t: 'all-pass', n: 2 })
   s.multiplier = 2
   s.dealer = leftOf(s.dealer)
+  // The hands are thrown in as they are and form the next deck.
+  s.piles = [s.hands.flat(), []]
   s.hands = [[], [], [], []]
   s.turned = null
   s.trump = null
@@ -265,6 +281,8 @@ function resolveTrick(s: State): void {
   const team = teamOf(winner)
   s.tricksWon[team]++
   s.points[team] += trickPoints(s.trick)
+  // A collected trick is rarely kept in play order.
+  s.piles[team].push(...rngShuffle(s, s.trick.map((tc) => tc.card)))
   s.tricksPlayed++
   s.prevTrick = s.lastTrick
   s.lastTrick = s.trick
@@ -346,6 +364,8 @@ export function apply(state: State, action: Action): State {
     throw new IllegalActionError(`illegal action ${action.type} for seat ${action.seat} in ${state.phase}`)
   }
   const s = structuredClone(state)
+  // A host may resume an engine state saved before piles existed.
+  s.piles ??= [[], []]
   switch (action.type) {
     case 'start':
       s.phase = 'DEALER_DRAW'

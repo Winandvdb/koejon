@@ -108,6 +108,8 @@ export interface State {
   troefkeAsked: boolean
   tricksPlayed: number
   tricksWon: [number, number]
+  /** Cards of the tricks each team won (each trick shuffled); stacked into the next deck. */
+  piles: [Card[], Card[]]
   points: [number, number]
   lines: [number, number]
   /** All marks on the boomke (crossed ones included), team 0 marks first, oldest first. */
