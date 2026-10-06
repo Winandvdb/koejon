@@ -1,10 +1,9 @@
 <script lang="ts">
   import { fly, scale } from 'svelte/transition'
-  import { RANK_ORDER, SUITS } from '../engine'
   import type { Action, Card } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
-  import { sortHand } from '../lib/prefs'
+  import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
   import CardView from './CardView.svelte'
@@ -118,15 +117,52 @@
 
   const acting = (i: number) => pub.actionSeats.includes(i)
 
-  /** Optional display sort: grouped by suit, high to low inside a suit. */
-  const suitIdx = (c: Card) => SUITS.indexOf(c.s)
+  /** Manual mode: the player's own card order, valid for one hand only. */
+  let manual = $state({ hand: -1, order: [] as string[] })
   const displayHand = $derived(
-    view.hand && $sortHand
-      ? [...view.hand].sort(
-          (a, b) => suitIdx(a) - suitIdx(b) || RANK_ORDER[b.r] - RANK_ORDER[a.r],
-        )
-      : view.hand,
+    view.hand &&
+      arrangeHand(view.hand, $sortMode, manual.hand === pub.handNumber ? manual.order : []),
   )
+  const manualSort = $derived($sortMode === 'manual')
+  /** Ask once, after the dealer is chosen and the cards are in the hand. */
+  const askSort = $derived(
+    $sortMode === null && !!view.hand?.length && (biddingPhase || pub.phase === 'PLAYING'),
+  )
+  const canPlay = (c: Card) => pub.phase === 'PLAYING' && legalPlays.has(cardKey(c))
+
+  /** Pointer drag (mouse and touch) to reorder in manual mode. Only a move
+   *  past a few pixels is a drag; a plain tap still plays the card. */
+  let drag: { key: string; x: number } | null = null
+  let dragKey = $state<string | null>(null)
+  let justDragged = false
+
+  function dragStart(e: PointerEvent) {
+    const el = (e.target as Element).closest<HTMLElement>('[data-card]')
+    if (manualSort && el) drag = { key: el.dataset.card!, x: e.clientX }
+  }
+  function dragMove(e: PointerEvent) {
+    if (!drag || !displayHand) return
+    if (dragKey === null) {
+      if (Math.abs(e.clientX - drag.x) < 8) return
+      dragKey = drag.key
+      ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
+    }
+    const over = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-card]')
+    const keys = displayHand.map(cardKey)
+    const from = keys.indexOf(dragKey)
+    const to = over ? keys.indexOf(over.dataset.card!) : -1
+    if (from < 0 || to < 0 || from === to) return
+    manual = { hand: pub.handNumber, order: moveCard(keys, from, to) }
+  }
+  function dragEnd() {
+    if (dragKey !== null) {
+      // The click that follows the release must not play the card.
+      justDragged = true
+      setTimeout(() => (justDragged = false))
+    }
+    drag = null
+    dragKey = null
+  }
 
   /** One-shot confetti burst when the match ends. */
   const CONFETTI_COLORS = ['var(--gold)', 'var(--team-decl)', 'var(--team-def)', 'var(--accent)', '#fff']
@@ -332,8 +368,21 @@
           </div>
         {/if}
 
-        <!-- Action buttons float on the felt, raised like table buttons. -->
-        {#if has('chooseDealer')}
+        <!-- Action buttons float on the felt, raised like table buttons.
+             On the first deal the sort question comes first: it holds
+             back the bid buttons until the player has chosen. -->
+        {#if askSort}
+          <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.sortAsk}</span>
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            {#each SORT_MODES as m (m)}
+              <button
+                class="fab"
+                title={m === 'manual' ? $t.sortManualHint : undefined}
+                onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button
+              >
+            {/each}
+          </div>
+        {:else if has('chooseDealer')}
           <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.chooseDealer}</span>
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
             {#each [0, 1, 2, 3] as d (d)}
@@ -406,20 +455,35 @@
     </div>
 
     <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
-      <div class="my-hand">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="my-hand"
+        class:manual={manualSort}
+        onpointerdown={dragStart}
+        onpointermove={dragMove}
+        onpointerup={dragEnd}
+        onpointercancel={dragEnd}
+      >
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
             <div class="hand-card"><div class="card-back"></div></div>
           {/each}
         {:else}
           {#each displayHand ?? [] as c, i (`${pub.handNumber}-${c.s}${c.r}`)}
+            <!-- In manual mode cards stay enabled so they can be dragged;
+                 the click handler still only plays legal cards. -->
             <button
               class="hand-card"
-              class:playable={pub.phase === 'PLAYING' && legalPlays.has(c.s + c.r)}
-              class:dim={pub.phase === 'PLAYING' && myTurn && !legalPlays.has(c.s + c.r)}
-              disabled={pub.phase !== 'PLAYING' || !legalPlays.has(c.s + c.r)}
+              class:playable={canPlay(c)}
+              class:dim={pub.phase === 'PLAYING' && myTurn && !canPlay(c)}
+              class:dragging={dragKey === cardKey(c)}
+              data-card={cardKey(c)}
+              disabled={!manualSort && !canPlay(c)}
+              aria-disabled={!canPlay(c)}
               in:fly={{ y: -160, duration: 320, delay: 120 + i * 45 }}
-              onclick={() => send({ type: 'play', seat: my, card: c })}
+              onclick={() => {
+                if (canPlay(c) && !justDragged) send({ type: 'play', seat: my, card: c })
+              }}
             >
               <CardView card={c} />
             </button>

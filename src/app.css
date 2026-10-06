@@ -1523,6 +1523,19 @@ button.tag {
   filter: brightness(0.72) saturate(0.6);
 }
 
+/* Manual sort: horizontal touch moves drag a card instead of panning. */
+.my-hand.manual .hand-card {
+  touch-action: none;
+  cursor: grab;
+}
+
+.hand-card.dragging {
+  position: relative;
+  z-index: 1;
+  cursor: grabbing;
+  transform: translateY(-14px);
+}
+
 .my-turn .hand-card.playable .card-face {
   box-shadow:
     0 0 0 2px var(--gold),
