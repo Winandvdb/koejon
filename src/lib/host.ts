@@ -4,7 +4,8 @@ import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
 import { HEARTBEAT_MS } from './link-firestore'
 import type { KeyValueStore } from './link-local'
-import type { HandDoc, Intent, RoomOpts, SeatInfo } from './net-types'
+import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-types'
+import { QuoteBook } from './quotes'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
 
@@ -38,12 +39,17 @@ export interface HostOptions {
    *  browser (same anonymous uid) can be host, so it never leaves the device.
    *  Default: localStorage when present; none in plain Node. */
   storage?: KeyValueStore
+  /** Random source for quote rolls. Default Math.random. */
+  quoteRand?: () => number
+  /** How long one pending seat may stall before a hurry nag. Default 9 s. */
+  hurryMs?: number
   /** Test hook: called after every landed commit. */
   onCommit?: () => void
 }
 
 const engineKey = (code: string) => `koejon-engine-${code}`
 const seqKey = (code: string) => `koejon-seq-${code}`
+const quotesKey = (code: string) => `koejon-quotes-${code}`
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -66,6 +72,14 @@ export class HostGame {
   private bidLingerMs: number
   private storage: HostOptions['storage']
   private onCommit: HostOptions['onCommit']
+  private quoteRand: () => number
+  private hurryMs: number
+  private quoteBook = new QuoteBook()
+  /** Quotes fired this match, newest last — published on every update. */
+  private quoteLog: QuoteEvent[] = []
+  /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
+  private waitSeat = -1
+  private waitTimer: ReturnType<typeof setTimeout> | null = null
 
   private constructor(
     private code: string,
@@ -79,6 +93,8 @@ export class HostGame {
     this.bidLingerMs = opts.bidLingerMs ?? 2000
     this.storage = opts.storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage)
     this.onCommit = opts.onCommit
+    this.quoteRand = opts.quoteRand ?? Math.random
+    this.hurryMs = opts.hurryMs ?? 9000
   }
 
   /** Load persisted engine state and room seats, then start listening. */
@@ -100,6 +116,7 @@ export class HostGame {
       h.link.heartbeat()
       // Watchdog: re-arm bot scheduling in case a wakeup was ever missed.
       h.scheduleBots()
+      h.armHurry()
     }, h.heartbeatMs)
     // After a reload: one publish gives this tab and every guest the current
     // state (own hand included) without waiting for the next move.
@@ -122,8 +139,10 @@ export class HostGame {
     // a saved one may be left over from an earlier solo match.
     const inLobby = !room.pub || room.pub.phase === 'LOBBY'
     const saved = inLobby ? null : this.readEngine()
-    if (saved) this.state = saved
-    else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
+    if (saved) {
+      this.state = saved
+      this.quoteBook = this.readQuotes() ?? this.quoteBook
+    } else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
   }
 
@@ -149,6 +168,7 @@ export class HostGame {
     this.releaseLock?.()
     this.releaseLock = null
     if (this.botTimer) clearTimeout(this.botTimer)
+    if (this.waitTimer) clearTimeout(this.waitTimer)
     if (this.hbTimer) clearInterval(this.hbTimer)
   }
 
@@ -258,6 +278,9 @@ export class HostGame {
     const drawerA = humanSeat(0)
     const drawerB = humanSeat(1)
     this.state = createMatch(seed, [drawerA >= 0 ? drawerA : 0, drawerB >= 0 ? drawerB : 1])
+    // A new match resets which lines were said.
+    this.quoteBook.reset()
+    this.quoteLog = []
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
     await this.commit()
@@ -287,6 +310,7 @@ export class HostGame {
     try {
       this.storage?.removeItem(engineKey(this.code))
       this.storage?.removeItem(seqKey(this.code))
+      this.storage?.removeItem(quotesKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -373,6 +397,24 @@ export class HostGame {
     }
   }
 
+  /** Said-lines bookkeeping survives a reload, like the engine state. */
+  private readQuotes(): QuoteBook | null {
+    try {
+      const json = this.storage?.getItem(quotesKey(this.code))
+      return json ? QuoteBook.fromJSON(JSON.parse(json)) : null
+    } catch {
+      return null
+    }
+  }
+
+  private writeQuotes(): void {
+    try {
+      this.storage?.setItem(quotesKey(this.code), JSON.stringify(this.quoteBook))
+    } catch {
+      // Storage full or blocked: quotes may repeat after a reload.
+    }
+  }
+
   private async commit(): Promise<void> {
     this.drainBotAcks()
     const seq = ++this.seq
@@ -386,14 +428,22 @@ export class HostGame {
     this.seats.forEach((seat, i) => {
       if (seat && !seat.bot) hands.set(seat.uid, { cards: visibleHand(this.state, i) })
     })
+    const pub = toPublic(this.state)
+    // The host decides which quotes fire: every client then shows the same.
+    const q = this.quoteBook.pick(pub, Date.now(), this.quoteRand)
+    if (q) {
+      this.quoteLog = [...this.quoteLog, q].slice(-12)
+      this.writeQuotes()
+    }
     // The version only moves forward when the publish lands.
     await this.link.publish(
-      { seats: this.seats, pub: toPublic(this.state), version: this.version + 1, seq, opts: this.opts },
+      { seats: this.seats, pub, version: this.version + 1, seq, opts: this.opts, quotes: this.quoteLog },
       hands,
     )
     this.version++
     this.onCommit?.()
     this.scheduleBots()
+    this.armHurry()
   }
 
   // ---- bots ----
@@ -457,5 +507,37 @@ export class HostGame {
         if (this.tryApply(this.botMove(seat))) await this.commit()
       })
     }, wait)
+  }
+
+  // ---- table talk ----
+
+  /** Nag a seat that keeps the table waiting: one pending actor for > 9 s.
+   *  The host fires it and commits, so all clients see the same nag. */
+  private armHurry(): void {
+    const pend = pendingSeats(this.state)
+    const seat = pend.length === 1 ? pend[0] : -1
+    if (seat !== this.waitSeat) {
+      this.waitSeat = seat
+      if (this.waitTimer) clearTimeout(this.waitTimer)
+      this.waitTimer = null
+    }
+    if (seat < 0 || this.waitTimer) return
+    this.waitTimer = setTimeout(() => {
+      this.waitTimer = null
+      this.enqueue(async () => {
+        const still = pendingSeats(this.state)
+        if (still.length !== 1 || still[0] !== seat) return
+        const q = this.quoteBook.hurry(seat, Date.now(), this.quoteRand)
+        if (q) {
+          this.quoteLog = [...this.quoteLog, q].slice(-12)
+          this.writeQuotes()
+          await this.commit() // publishes the nag and re-arms this timer
+        } else {
+          // Every bystander is on cooldown: try again later.
+          this.waitSeat = -1
+          this.armHurry()
+        }
+      })
+    }, this.hurryMs)
   }
 }

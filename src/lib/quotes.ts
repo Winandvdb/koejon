@@ -1,5 +1,6 @@
 import { RANK_ORDER, trickPoints } from '../engine'
 import type { PublicState, TrickCard } from '../engine'
+import type { QuoteEvent } from './net-types'
 
 export interface TableQuote {
   /** Stable id of this saying, so it fires once per moment. */
@@ -32,7 +33,7 @@ export const QUOTES = {
   forgot: ['Wat was ook alweer troef?'],
   /** A seat keeps the table waiting. */
   hurry: ['Geeft hem is nen duw', "'Tis uw beurt he"],
-  /** A team reaches 20 points mid-hand by feeding fat cards. */
+  /** A team reaches 21 points mid-hand by feeding fat cards. */
   there: ['We zijn er al se'],
   /** A trick worth more than 10 points. */
   goodTrick: ['Amai das ne goeie slag!'],
@@ -40,6 +41,14 @@ export const QUOTES = {
   noKapot: ['Hup se we zijn al niet kapot!'],
   /** Overtrumping right after the partner's ace got trumped. */
   notAce: ['Niet de aas van menne maat!'],
+  /** A player leads again the suit that just won them the trick. */
+  again: ['Dan zullen we dat nog eens proberen'],
+  /** The speaker's team just lost a trick. */
+  trickLost: ['Hier ben ik helemaal van slag van', 'Dat is een slag in het gezicht'],
+  /** A team only reaches 21 points on the last trick. */
+  madeIt: ['Wij zijn er nog denk', "'T is nog van ons, telt maar na"],
+  /** A team still has not crossed off a single mark. */
+  noMarks: ['Wanneer gaan de kaarten draaien?'],
 } as const
 
 /** Deterministic hash — all clients pick the same speaker and line. */
@@ -54,12 +63,81 @@ const teamSeat = (team: number, h: number) => team + 2 * (h % 2)
 
 const teamOf = (seat: number) => seat % 2
 
-/** A bystander nags the seat that keeps everyone waiting. Timing lives in the UI. */
-export function hurryQuote(slowSeat: number): { seat: number; text: string } {
-  const h = Math.floor(Math.random() * 1e9)
-  return {
-    seat: (slowSeat + 1 + (h % 3)) % 4,
-    text: QUOTES.hurry[h % QUOTES.hurry.length],
+/** A bystander nags the seat that keeps everyone waiting. `cool` marks seats
+ *  that spoke too recently; null when every bystander is on cooldown. */
+export function hurryQuote(
+  slowSeat: number,
+  rand: () => number = Math.random,
+  cool?: (seat: number) => boolean,
+): { seat: number; text: string } | null {
+  const free = [1, 2, 3].map((i) => (slowSeat + i) % 4).filter((s) => !cool?.(s))
+  if (free.length === 0) return null
+  const seat = free[Math.floor(rand() * free.length)]
+  return { seat, text: QUOTES.hurry[Math.floor(rand() * QUOTES.hurry.length)] }
+}
+
+/** A met condition produces a line only this often — table talk stays rare. */
+const QUOTE_CHANCE = 0.5
+/** One seat talks at most this often. */
+export const QUOTE_SEAT_GAP_MS = 60_000
+
+/**
+ * Per-match quote bookkeeping, owned by the host: it turns the candidates of
+ * `activeQuotes` into the few quotes that actually appear on the room. The
+ * counters survive a reload through the host's storage.
+ */
+export class QuoteBook {
+  /** Lines already spoken this match — a text never repeats, whoever said it. */
+  private said = new Set<string>()
+  /** Last time each seat spoke, epoch ms. */
+  private spokeAt = [0, 0, 0, 0]
+  /** Fired-quote counter; keeps climbing across matches so clients dedup. */
+  private n = 0
+
+  /** A fresh match: lines may be said again. */
+  reset(): void {
+    this.said.clear()
+    this.spokeAt = [0, 0, 0, 0]
+  }
+
+  /** A seat is quiet while its last line is less than a minute old;
+   *  0 means it never spoke. */
+  private cooling(seat: number, now: number): boolean {
+    return this.spokeAt[seat] !== 0 && now - this.spokeAt[seat] < QUOTE_SEAT_GAP_MS
+  }
+
+  /** At most one candidate fires per call: it must survive the chance roll,
+   *  its line must be new this match and its seat quiet for a minute. */
+  pick(pub: PublicState, now = Date.now(), rand: () => number = Math.random): QuoteEvent | null {
+    const ok = activeQuotes(pub).filter(
+      (q) => !this.said.has(q.text) && !this.cooling(q.seat, now),
+    )
+    if (ok.length === 0 || rand() >= QUOTE_CHANCE) return null
+    const q = ok[Math.floor(rand() * ok.length)]
+    this.said.add(q.text)
+    this.spokeAt[q.seat] = now
+    return { n: ++this.n, seat: q.seat, text: q.text, at: now }
+  }
+
+  /** A nag for a stalled seat: lines may repeat, the speaker still needs a
+   *  quiet minute. */
+  hurry(slowSeat: number, now = Date.now(), rand: () => number = Math.random): QuoteEvent | null {
+    const q = hurryQuote(slowSeat, rand, (s) => this.cooling(s, now))
+    if (!q) return null
+    this.spokeAt[q.seat] = now
+    return { n: ++this.n, seat: q.seat, text: q.text, at: now }
+  }
+
+  toJSON(): { said: string[]; spokeAt: number[]; n: number } {
+    return { said: [...this.said], spokeAt: this.spokeAt, n: this.n }
+  }
+
+  static fromJSON(d: { said: string[]; spokeAt: number[]; n: number }): QuoteBook {
+    const b = new QuoteBook()
+    b.said = new Set(d.said)
+    b.spokeAt = d.spokeAt
+    b.n = d.n
+    return b
   }
 }
 
@@ -101,6 +179,19 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
     }
     if (lead.card.s !== trump && (lead.card.r === '9' || lead.card.r === '10')) {
       out.push({ key: `h${hand}`, seat: lead.seat, text: QUOTES.herman[0] })
+    }
+  }
+
+  // The winner of the previous trick leads the same suit again — it worked
+  // once, so it is worth another try. `leader` is that winner.
+  if (pub.phase === 'PLAYING' && pub.trick.length === 1 && pub.lastTrick !== null) {
+    const wonWith = pub.lastTrick.find((tc) => tc.seat === pub.leader)?.card.s
+    if (wonWith !== undefined && pub.trick[0].card.s === wonWith) {
+      out.push({
+        key: `n${hand}-${pub.tricksPlayed}`,
+        seat: pub.trick[0].seat,
+        text: QUOTES.again[0],
+      })
     }
   }
 
@@ -219,11 +310,34 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.goodTrick[0],
       })
     }
-    // The points pile crosses 20 mid-hand.
+    // A loser of the trick grumbles.
+    {
+      const h = hash(hand, pub.tricksPlayed, 11)
+      out.push({
+        key: `x${hand}-${pub.tricksPlayed}`,
+        seat: teamSeat(1 - wt, h),
+        text: QUOTES.trickLost[(h >> 4) % QUOTES.trickLost.length],
+      })
+    }
+    // The points pile reaches 21 mid-hand.
     for (const t of [0, 1]) {
-      if (pub.points[t] >= 20) {
+      if (pub.points[t] >= 21) {
         const h = hash(hand, t, 10)
         out.push({ key: `2p${hand}-${t}`, seat: teamSeat(t, h), text: QUOTES.there[0] })
+      }
+    }
+    // The last trick only just pushed a team past 20 — a narrow escape.
+    if (pub.tricksPlayed === 6) {
+      const tp = trickPoints(last)
+      for (const t of [0, 1]) {
+        if (pub.points[t] >= 21 && pub.points[t] - tp < 21) {
+          const h = hash(hand, t, 12)
+          out.push({
+            key: `u${hand}-${t}`,
+            seat: teamSeat(t, h),
+            text: QUOTES.madeIt[(h >> 4) % QUOTES.madeIt.length],
+          })
+        }
       }
     }
   }
@@ -249,6 +363,21 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         seat: teamSeat(r.winnerTeam, hr),
         text: QUOTES.revenge[(hr >> 4) % QUOTES.revenge.length],
       })
+    }
+  }
+
+  // A hand is scored and a team still has not crossed off one mark — it asks
+  // when the cards will finally turn its way.
+  if (pub.phase === 'SCORED' || pub.phase === 'GAME_OVER') {
+    for (const t of [0, 1]) {
+      if (!pub.marks.some((m) => m.team === t && m.crossed)) {
+        const h = hash(hand, t, 13)
+        out.push({
+          key: `w${hand}-${t}`,
+          seat: teamSeat(t, h),
+          text: QUOTES.noMarks[0],
+        })
+      }
     }
   }
 
