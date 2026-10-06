@@ -1,9 +1,11 @@
 ---
 id: task-8
 title: Add and adjust table quotes
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 07:14'
+updated_date: '2026-10-06 06:48'
 labels:
   - quotes
 dependencies: []
