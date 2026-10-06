@@ -99,7 +99,9 @@ describe('table quotes', () => {
         lastResult: RESULT({ draw: true, erased: 0 }),
       }),
     )
-    expect(activeQuotes(draw)).toHaveLength(0)
+    const dqs = activeQuotes(draw)
+    expect(dqs.some((q) => q.key.startsWith('l'))).toBe(false)
+    expect(dqs.some((q) => q.key.startsWith('r'))).toBe(false)
   })
 
   it('winning right after a loss draws a revenge line', () => {
@@ -380,7 +382,7 @@ describe('table quotes', () => {
     expect(activeQuotes(playing).some((q) => q.key.startsWith('k'))).toBe(false)
   })
 
-  it('reaching 20 points mid-hand gets a "we zijn er al se"', () => {
+  it('reaching 21 points mid-hand gets a "we zijn er al se"', () => {
     const pub = toPublic(
       playingState({
         trump: 'H',
@@ -395,6 +397,141 @@ describe('table quotes', () => {
     expect(q).toBeDefined()
     expect(q!.seat % 2).toBe(0)
     expect(QUOTES.there).toContain(q!.text)
+
+    // 20 points is not enough anymore.
+    const short = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 4,
+        tricksWon: [2, 2],
+        leader: 0,
+        points: [20, 8],
+        lastTrick: TRICK,
+      }),
+    )
+    expect(activeQuotes(short).some((x) => x.key === '2p1-0')).toBe(false)
+  })
+
+  it('leading again the suit that just won the trick is worth another try', () => {
+    // Seat 0 took the previous trick with a spade and leads spades again.
+    const wonSpades: TrickCard[] = [
+      { seat: 0, card: C('S', 'A') },
+      { seat: 1, card: C('S', '9') },
+      { seat: 2, card: C('S', '10') },
+      { seat: 3, card: C('S', 'J') },
+    ]
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 1,
+        tricksWon: [1, 0],
+        leader: 0,
+        trick: [{ seat: 0, card: C('S', 'K') }],
+        lastTrick: wonSpades,
+      }),
+    )
+    const n = activeQuotes(pub).find((q) => q.key.startsWith('n'))
+    expect(n).toBeDefined()
+    expect(n!.seat).toBe(0)
+    expect(QUOTES.again).toContain(n!.text)
+
+    // A different suit is a different plan: quiet.
+    const other = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 1,
+        tricksWon: [1, 0],
+        leader: 0,
+        trick: [{ seat: 0, card: C('D', 'K') }],
+        lastTrick: wonSpades,
+      }),
+    )
+    expect(activeQuotes(other).some((q) => q.key.startsWith('n'))).toBe(false)
+  })
+
+  it('a lost trick draws a grumble from the losing team', () => {
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 3,
+        tricksWon: [2, 1],
+        leader: 0, // team 0 took the trick
+        lastTrick: TRICK,
+      }),
+    )
+    const x = activeQuotes(pub).find((q) => q.key.startsWith('x'))
+    expect(x).toBeDefined()
+    expect(x!.seat % 2).toBe(1) // a losing-team seat speaks
+    expect(QUOTES.trickLost).toContain(x!.text)
+  })
+
+  it('reaching 21 points only on the last trick gets a cheer', () => {
+    // Team 0 had 19 before the last 5-point trick: it makes 21+ on it.
+    const pub = toPublic(
+      playingState({
+        phase: 'SCORED',
+        trump: 'H',
+        tricksPlayed: 6,
+        tricksWon: [3, 3],
+        leader: 0,
+        points: [24, 16],
+        lastTrick: TRICK,
+        lastResult: RESULT({ winnerTeam: 0, playingTeam: 1, points: [24, 16] }),
+      }),
+    )
+    const u = activeQuotes(pub).find((q) => q.key.startsWith('u'))
+    expect(u).toBeDefined()
+    expect(u!.seat % 2).toBe(0)
+    expect(QUOTES.madeIt).toContain(u!.text)
+
+    // Already past 20 before the last trick: the cheer is stale.
+    const early = toPublic(
+      playingState({
+        phase: 'SCORED',
+        trump: 'H',
+        tricksPlayed: 6,
+        tricksWon: [3, 3],
+        leader: 0,
+        points: [26, 14],
+        lastTrick: TRICK,
+        lastResult: RESULT({ winnerTeam: 0, playingTeam: 1, points: [26, 14] }),
+      }),
+    )
+    expect(activeQuotes(early).some((q) => q.key.startsWith('u'))).toBe(false)
+
+    // 21 mid-hand is too early for "still ours".
+    const mid = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 5,
+        tricksWon: [3, 2],
+        leader: 0,
+        points: [21, 10],
+        lastTrick: TRICK,
+      }),
+    )
+    expect(activeQuotes(mid).some((q) => q.key.startsWith('u'))).toBe(false)
+  })
+
+  it('a team without a single crossed mark asks when the cards will turn', () => {
+    const pub = toPublic(
+      playingState({
+        phase: 'SCORED',
+        tricksPlayed: 6,
+        tricksWon: [2, 4],
+        leader: 1,
+        lastTrick: TRICK,
+        lastResult: RESULT(),
+        marks: [CROSSED(0, 1)],
+      }),
+    )
+    const qs = activeQuotes(pub)
+    const w = qs.find((q) => q.key === 'w1-1')
+    expect(w).toBeDefined()
+    expect(w!.seat % 2).toBe(1)
+    expect(QUOTES.noMarks).toContain(w!.text)
+    // Team 0 already crossed a mark: it stays quiet.
+    expect(qs.some((q) => q.key === 'w1-0')).toBe(false)
   })
 
   it('hurryQuote picks a bystander and a nag line', () => {

@@ -32,7 +32,7 @@ export const QUOTES = {
   forgot: ['Wat was ook alweer troef?'],
   /** A seat keeps the table waiting. */
   hurry: ['Geeft hem is een nen duw', "'Tis uw beurt he"],
-  /** A team reaches 20 points mid-hand by feeding fat cards. */
+  /** A team reaches 21 points mid-hand by feeding fat cards. */
   there: ['We zijn er al se'],
   /** A trick worth more than 10 points. */
   goodTrick: ['Amai das ne goeie slag!'],
@@ -40,6 +40,14 @@ export const QUOTES = {
   noKapot: ['Hup se we zijn al niet kapot!'],
   /** Overtrumping right after the partner's ace got trumped. */
   notAce: ['Niet de aas van menne maat!'],
+  /** A player leads again the suit that just won them the trick. */
+  again: ['Dan zullen we dat nog eens proberen'],
+  /** The speaker's team just lost a trick. */
+  trickLost: ['Hier ben ik helemaal van slag van', 'Dat is een slag in het gezicht'],
+  /** A team only reaches 21 points on the last trick. */
+  madeIt: ['Wij zijn er nog denk', "'T is nog van ons, telt maar na"],
+  /** A team still has not crossed off a single mark. */
+  noMarks: ['Wanneer gaan de kaarten draaien?'],
 } as const
 
 /** Deterministic hash — all clients pick the same speaker and line. */
@@ -101,6 +109,19 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
     }
     if (lead.card.s !== trump && (lead.card.r === '9' || lead.card.r === '10')) {
       out.push({ key: `h${hand}`, seat: lead.seat, text: QUOTES.herman[0] })
+    }
+  }
+
+  // The winner of the previous trick leads the same suit again — it worked
+  // once, so it is worth another try. `leader` is that winner.
+  if (pub.phase === 'PLAYING' && pub.trick.length === 1 && pub.lastTrick !== null) {
+    const wonWith = pub.lastTrick.find((tc) => tc.seat === pub.leader)?.card.s
+    if (wonWith !== undefined && pub.trick[0].card.s === wonWith) {
+      out.push({
+        key: `n${hand}-${pub.tricksPlayed}`,
+        seat: pub.trick[0].seat,
+        text: QUOTES.again[0],
+      })
     }
   }
 
@@ -219,11 +240,34 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.goodTrick[0],
       })
     }
-    // The points pile crosses 20 mid-hand.
+    // A loser of the trick grumbles.
+    {
+      const h = hash(hand, pub.tricksPlayed, 11)
+      out.push({
+        key: `x${hand}-${pub.tricksPlayed}`,
+        seat: teamSeat(1 - wt, h),
+        text: QUOTES.trickLost[(h >> 4) % QUOTES.trickLost.length],
+      })
+    }
+    // The points pile reaches 21 mid-hand.
     for (const t of [0, 1]) {
-      if (pub.points[t] >= 20) {
+      if (pub.points[t] >= 21) {
         const h = hash(hand, t, 10)
         out.push({ key: `2p${hand}-${t}`, seat: teamSeat(t, h), text: QUOTES.there[0] })
+      }
+    }
+    // The last trick only just pushed a team past 20 — a narrow escape.
+    if (pub.tricksPlayed === 6) {
+      const tp = trickPoints(last)
+      for (const t of [0, 1]) {
+        if (pub.points[t] >= 21 && pub.points[t] - tp < 21) {
+          const h = hash(hand, t, 12)
+          out.push({
+            key: `u${hand}-${t}`,
+            seat: teamSeat(t, h),
+            text: QUOTES.madeIt[(h >> 4) % QUOTES.madeIt.length],
+          })
+        }
       }
     }
   }
@@ -249,6 +293,21 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         seat: teamSeat(r.winnerTeam, hr),
         text: QUOTES.revenge[(hr >> 4) % QUOTES.revenge.length],
       })
+    }
+  }
+
+  // A hand is scored and a team still has not crossed off one mark — it asks
+  // when the cards will finally turn its way.
+  if (pub.phase === 'SCORED' || pub.phase === 'GAME_OVER') {
+    for (const t of [0, 1]) {
+      if (!pub.marks.some((m) => m.team === t && m.crossed)) {
+        const h = hash(hand, t, 13)
+        out.push({
+          key: `w${hand}-${t}`,
+          seat: teamSeat(t, h),
+          text: QUOTES.noMarks[0],
+        })
+      }
     }
   }
 
