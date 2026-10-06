@@ -29,6 +29,8 @@
   --trunk: #7b4a1f;
   --fab: #f5efe0;
   --fab-contrast: #17211c;
+  --cta: #1f6fc4;
+  --cta-contrast: #ffffff;
   --radius: 14px;
   --card: clamp(54px, 7vw, 94px);
   color-scheme: light;
@@ -59,6 +61,8 @@
   --trunk: #b08a5e;
   --fab: #38503f;
   --fab-contrast: #e4ebe7;
+  --cta: #5aa2e8;
+  --cta-contrast: #06121f;
   color-scheme: dark;
 }
 
@@ -1017,6 +1021,12 @@ button.tag {
   opacity: 0.9;
 }
 
+/* Bubbles above my nameplate reach into the overlay's bottom zone: lift the
+   hint past a two-line quote bubble (42px gap + bubble height). */
+.wait-hint.lifted {
+  margin-bottom: 96px;
+}
+
 /* ---------- Floating action buttons on the felt ---------- */
 
 .fab-caption {
@@ -1066,8 +1076,8 @@ button.tag {
 }
 
 .fab.primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--cta);
+  color: var(--cta-contrast);
   border-color: rgba(255, 255, 255, 0.4);
 }
 
@@ -1260,12 +1270,29 @@ button.tag {
   color: #1b1b1b;
 }
 
-/* The last bid floats above the nameplate like a speech bubble. */
-.bubble {
+/* All nameplate bubbles share one stack: a quote drops into the free low slot
+   once the bid or troefke bubble is gone, instead of floating at a fixed height. */
+.bubbles {
   position: absolute;
   bottom: calc(100% + 9px);
   left: 50%;
   translate: -50% 0;
+  display: flex;
+  /* First child sits nearest the nameplate. */
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 6px;
+  z-index: 8;
+}
+
+.seat-p2 .bubbles {
+  bottom: auto;
+  top: calc(100% + 9px);
+  flex-direction: column;
+}
+
+.bubble {
+  position: relative;
   background: var(--panel);
   color: var(--text);
   padding: 3px 11px;
@@ -1273,7 +1300,6 @@ button.tag {
   font-weight: 700;
   font-size: 0.85rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 8;
   white-space: nowrap;
 }
 
@@ -1296,9 +1322,9 @@ button.tag {
   border-top-color: var(--panel);
 }
 
-.seat-p2 .bubble {
-  bottom: auto;
-  top: calc(100% + 9px);
+/* Only the bubble next to the nameplate keeps a tail. */
+.bubbles > .bubble:not(:first-child)::after {
+  display: none;
 }
 
 .seat-p2 .bubble::after {
@@ -1308,16 +1334,13 @@ button.tag {
   border-bottom-color: var(--panel);
 }
 
-/* Table talk floats one row higher, so it clears a bid bubble. */
-.bubble.say {
-  bottom: calc(100% + 42px);
-  font-weight: 500;
-  font-style: italic;
+.seat-p2 .bubble.troef::after {
+  border-bottom-color: var(--gold);
 }
 
-.seat-p2 .bubble.say {
-  bottom: auto;
-  top: calc(100% + 42px);
+.bubble.say {
+  font-weight: 500;
+  font-style: italic;
 }
 
 .turn-hint {
@@ -1452,19 +1475,6 @@ button.tag {
   padding: 0 8px max(10px, env(safe-area-inset-bottom));
   z-index: 5;
   flex: none;
-}
-
-.blind-hint {
-  position: absolute;
-  top: -34px;
-  left: 50%;
-  translate: -50% 0;
-  white-space: nowrap;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  padding: 3px 12px;
-  border-radius: 999px;
-  font-size: 0.8rem;
 }
 
 .my-hand {
@@ -1933,13 +1943,6 @@ button.tag {
     font-size: 0.78rem;
   }
 
-  /* Long hints must wrap instead of running off the felt. */
-  .blind-hint {
-    white-space: normal;
-    text-align: center;
-    max-width: 78vw;
-  }
-
   /* Long info lines (e.g. the playing team) must wrap, not clip. */
   .iline {
     white-space: normal;
@@ -1970,8 +1973,7 @@ button.tag {
     max-width: 52px;
   }
 
-  /* Long table-talk lines must wrap. For side seats the bubble anchors to the
-     inner edge: centred on a 60 px nameplate it would run off the screen. */
+  /* Long table-talk lines must wrap. */
   .bubble.say {
     white-space: normal;
     text-align: center;
@@ -1979,24 +1981,28 @@ button.tag {
     max-width: min(220px, 62vw);
   }
 
-  .seat-p1 .bubble.say {
+  /* For side seats a stack with a quote anchors to the inner edge: centred on
+     a 60 px nameplate it would run off the screen. */
+  .seat-p1 .bubbles.has-say {
     left: 0;
     translate: none;
+    align-items: flex-start;
   }
 
-  .seat-p3 .bubble.say {
+  .seat-p3 .bubbles.has-say {
     left: auto;
     right: 0;
     translate: none;
+    align-items: flex-end;
   }
 
   /* The tail keeps pointing at the nameplate, ~30 px in from the edge. */
-  .seat-p1 .bubble.say::after {
+  .seat-p1 .bubbles.has-say > .bubble:first-child::after {
     left: 24px;
     margin-left: 0;
   }
 
-  .seat-p3 .bubble.say::after {
+  .seat-p3 .bubbles.has-say > .bubble:first-child::after {
     left: auto;
     right: 24px;
     margin-left: 0;
