@@ -1,9 +1,11 @@
 ---
 id: task-10
 title: 'Table UI fixes: button colours, troefke bubble, waiting text overlap'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 07:14'
+updated_date: '2026-10-06 06:46'
 labels:
   - ui
 dependencies: []
