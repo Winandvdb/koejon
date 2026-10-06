@@ -22,9 +22,31 @@ function bidState(hand: Card[], over: Partial<State> = {}): State {
   })
 }
 
-const TRASH = [C('S', '9'), C('S', '10'), C('C', '9'), C('C', '10'), C('D', '9'), C('D', '10')]
+// Two low hearts (trump of the first card), nothing else.
+const TRASH = [C('H', '9'), C('H', '10'), C('C', '9'), C('C', '10'), C('D', '9'), C('D', '10')]
+const NO_TRUMP = [C('S', 'A'), C('D', 'A'), C('C', 'A'), C('S', 'K'), C('D', 'K'), C('C', 'K')]
 
 describe('bot bidding', () => {
+  it('never bids without trump, not even to knijpen or to win the match', () => {
+    for (const lines of [[2, 13], [13, 1]] as [number, number][]) {
+      const s = bidState(NO_TRUMP, { lines })
+      expect(botAction(s, 1, smart)).toEqual({ type: 'bid', seat: 1, play: false })
+    }
+  })
+
+  it('a lone trump bids only with a high trump and a very strong hand', () => {
+    const aces = [C('S', 'A'), C('D', 'A'), C('C', 'A'), C('S', 'K'), C('D', 'K')]
+    // Lone queen of trump: pass, even with three aces and to knijpen.
+    const lowLone = bidState([C('H', 'Q'), ...aces], { lines: [2, 13] })
+    expect(botAction(lowLone, 1, smart)).toEqual({ type: 'bid', seat: 1, play: false })
+    // Lone ace of trump with three aces and two guarded kings: go.
+    const topLone = bidState([C('H', 'A'), ...aces])
+    expect(botAction(topLone, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
+    // Lone ace of trump with one side ace: pass.
+    const weak = [C('H', 'A'), C('S', 'A'), C('S', '9'), C('D', '9'), C('C', '9'), C('C', '10')]
+    expect(botAction(bidState(weak), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+  })
+
   it('knijpen: bids a trash hand when opponents sit at 2 lines', () => {
     const s = bidState(TRASH, { lines: [2, 13] }) // seat1 = team1, opp = team0
     expect(botAction(s, 1, smart)).toEqual({ type: 'bid', seat: 1, play: true })
@@ -54,6 +76,33 @@ describe('bot bidding', () => {
       turned: { first: C('S', '9'), second: C('H', 'Q'), secondUp: true },
     })
     expect(botAction(r2, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
+  })
+
+  it('bids that hand on the 1st card too once the stake is doubled', () => {
+    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('C', '9')]
+    expect(botAction(bidState(hand, { multiplier: 2 }), 1, never)).toEqual({
+      type: 'bid',
+      seat: 1,
+      play: true,
+    })
+  })
+
+  it('two low trumps never go on the 1st card, aces or not', () => {
+    const hand = [C('H', 'J'), C('H', '9'), C('S', 'A'), C('D', 'A'), C('C', 'A'), C('C', '9')]
+    expect(botAction(bidState(hand), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+    const r2 = bidState(hand, {
+      phase: 'BIDDING_R2',
+      turned: { first: C('S', '9'), second: C('H', 'Q'), secondUp: true },
+    })
+    expect(botAction(r2, 1, never)).toEqual({ type: 'bid', seat: 1, play: true })
+  })
+
+  it('waits for the 2nd card when the hand fits another suit clearly better', () => {
+    // Good enough for hearts, much better for spades.
+    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('S', 'K'), C('S', 'Q'), C('D', 'A')]
+    expect(botAction(bidState(hand), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
+    // Beginners do not weigh other suits.
+    expect(botAction(bidState(hand), 1, never, 'easy')).toEqual({ type: 'bid', seat: 1, play: true })
   })
 })
 
@@ -122,9 +171,10 @@ describe('bot card play', () => {
         { seat: 0, card: C('S', 'Q') },
         { seat: 3, card: C('S', '9') },
       ],
-      [C('H', '9'), C('D', '9'), C('D', '10'), C('C', '9'), C('C', '10'), C('D', 'J')],
+      [C('H', '9'), C('H', 'A'), C('D', '9'), C('D', '10'), C('C', '9'), C('D', 'J')],
     )
-    // H9 would trump it, but a 2-point trick is not worth a trump.
+    // H9 would trump it, but a 2-point trick is not worth a trump that the
+    // boss HA keeps safe.
     expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
   })
 
@@ -184,6 +234,119 @@ describe('bot card play', () => {
       { points: [19, 10] },
     )
     expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+  })
+
+  it('does not undertrump while a plain card can be discarded', () => {
+    // Opp seat2 trumps a spade lead with HQ; seat1 is void in spades and the
+    // cheap trick is not worth the HA. H9 would go under HQ — throw a plain card.
+    const s = followState(
+      [
+        { seat: 0, card: C('S', '10') },
+        { seat: 3, card: C('S', '9') },
+        { seat: 2, card: C('H', 'Q') },
+      ],
+      [C('H', 'A'), C('H', '9'), C('D', 'J'), C('D', 'Q'), C('C', 'K'), C('C', 'J')],
+    )
+    for (const rand of [smart, never]) {
+      expect(botAction(s, 1, rand)).toEqual({ type: 'play', seat: 1, card: C('D', 'J') })
+    }
+  })
+
+  it('does not undertrump on the 5th trick to keep a plain last card', () => {
+    const s = followState(
+      [
+        { seat: 0, card: C('S', '10') },
+        { seat: 3, card: C('S', '9') },
+        { seat: 2, card: C('H', 'J') },
+      ],
+      [C('H', '9'), C('D', 'Q')],
+      { tricksPlayed: 4, tricksWon: [2, 2] },
+    )
+    expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', 'Q') })
+  })
+
+  it("never trumps a trick the partner's ace already wins", () => {
+    // Partner seat3 leads SA; seat1 is void in spades and holds a last trump.
+    const s = followState(
+      [
+        { seat: 3, card: C('S', 'A') },
+        { seat: 0, card: C('S', '9') },
+      ],
+      [C('H', '9'), C('D', 'Q'), C('C', 'J')],
+      { tricksPlayed: 3, tricksWon: [1, 2] },
+    )
+    for (const level of ['easy', 'normal', 'hard'] as const) {
+      // Smart path vets cheap points; lazy dump and a decided hand dump low.
+      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'Q') })
+      expect(botAction(s, 1, never, level)).toEqual({ type: 'play', seat: 1, card: C('C', 'J') })
+      const decided = { ...s, points: [5, 21] as [number, number] }
+      expect(botAction(decided, 1, smart, level)).toEqual({
+        type: 'play',
+        seat: 1,
+        card: C('C', 'J'),
+      })
+    }
+  })
+
+  it('keeps an ace an opponent may trump; leads a low card instead', () => {
+    // Four spades in hand: only 2 are out, so an opponent is likely void.
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = [C('S', 'A'), C('S', 'K'), C('S', 'Q'), C('S', 'J'), C('D', '9'), C('D', '10')]
+    const s = playingState({ bidder: 0, turn: 1, leader: 1, hands })
+    expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
+  })
+
+  it('cashes the ace once both opponents showed out of trump', () => {
+    // Trick 1: partner led trump, both opponents sluffed → they hold no trump.
+    // Trick 2: opponents won a plain trick, so no sweep is live.
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = [C('S', 'A'), C('S', 'K'), C('S', 'Q'), C('S', 'J')]
+    const s = playingState({
+      bidder: 0,
+      turn: 1,
+      tricksPlayed: 2,
+      tricksWon: [1, 1],
+      hands,
+      log: [
+        { t: 'card', seat: 3, card: C('H', '9') },
+        { t: 'card', seat: 0, card: C('C', '9') },
+        { t: 'card', seat: 1, card: C('H', '10') },
+        { t: 'card', seat: 2, card: C('C', '10') },
+        { t: 'trick', seat: 1 },
+        { t: 'card', seat: 1, card: C('D', '10') },
+        { t: 'card', seat: 2, card: C('D', 'A') },
+        { t: 'card', seat: 3, card: C('D', '9') },
+        { t: 'card', seat: 0, card: C('D', 'J') },
+        { t: 'trick', seat: 2 },
+      ],
+    })
+    for (const level of ['normal', 'hard'] as const) {
+      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'A') })
+    }
+    // Easy remembers nothing: the short suit may still be trumped.
+    expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('S', 'J') })
+  })
+
+  it('trumps a scoring trick when its lone trump would be pulled anyway', () => {
+    // Same spot as the duck above, but H9 is the only trump: spend it now.
+    const hand = [C('H', '9'), C('D', '9'), C('D', '10'), C('C', '9'), C('C', '10'), C('D', 'J')]
+    const rich = followState(
+      [
+        { seat: 0, card: C('S', 'Q') },
+        { seat: 3, card: C('S', '9') },
+      ],
+      hand,
+    )
+    expect(botAction(rich, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+    // A trick with no points is still not worth it.
+    const empty = followState(
+      [
+        { seat: 0, card: C('S', '10') },
+        { seat: 3, card: C('S', '9') },
+      ],
+      hand,
+    )
+    expect(botAction(empty, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
   })
 })
 

@@ -1,19 +1,37 @@
-name: Deploy to Firebase Hosting dev channel on develop
+name: Test and deploy develop to dev channel
 on:
   push:
     branches:
       - develop
 jobs:
-  build_and_preview:
+  test_and_deploy:
+    name: Test, then deploy to dev channel
     runs-on: ubuntu-latest
     env:
       # Show the Firestore read/write counter on the dev channel. Job-wide:
       # the deploy step builds again (firebase.json predeploy) and overwrites dist.
       VITE_SHOW_USAGE: 'true'
     steps:
-      - uses: actions/checkout@v4
-      - run: npm ci && npm run build && npm test
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Check out code
+        uses: actions/checkout@v4
+      # The Firestore emulator (for the e2e test) needs Java.
+      - name: Set up Java for the Firestore emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Cache the Firestore emulator
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}-15
+      - name: Install and build
+        run: npm ci && npm run build
+      # Unit tests plus the e2e match against the emulator (E2E_REQUIRED: fail, never skip).
+      - name: Test (unit + e2e against the emulator)
+        run: npx -y firebase-tools@15 emulators:exec --only firestore,auth --project koejon-3059e "E2E_REQUIRED=true npm test"
+      - name: Deploy to Firebase Hosting dev channel
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KOEJON_3059E }}

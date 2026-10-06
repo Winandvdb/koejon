@@ -783,7 +783,7 @@ button.tag {
 
 .card-face .corner i {
   font-style: normal;
-  font-size: 0.9em;
+  font-size: 1.25em;
 }
 
 .card-face .tl {
@@ -802,7 +802,7 @@ button.tag {
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: calc(var(--cw, 60px) * 0.52);
+  font-size: calc(var(--cw, 60px) * 0.62);
 }
 
 .card-face.court .center::before {
@@ -817,7 +817,8 @@ button.tag {
 
 .card-face .court-letter {
   position: relative;
-  font-size: calc(var(--cw, 60px) * 0.44);
+  font-size: calc(var(--cw, 60px) * 0.4);
+  translate: 0 -0.28em; /* clear of the suit below */
   font-weight: 700;
   background: var(--card-bg);
   padding: 0 0.12em;
@@ -830,7 +831,7 @@ button.tag {
   left: 50%;
   bottom: 23%;
   translate: -50% 0;
-  font-size: calc(var(--cw, 60px) * 0.2);
+  font-size: calc(var(--cw, 60px) * 0.24);
   background: var(--card-bg);
   line-height: 1;
   padding: 0 2px;
@@ -1961,6 +1962,38 @@ button.tag {
   .seat-p1 .np-name,
   .seat-p3 .np-name {
     max-width: 52px;
+  }
+
+  /* Long table-talk lines must wrap. For side seats the bubble anchors to the
+     inner edge: centred on a 60 px nameplate it would run off the screen. */
+  .bubble.say {
+    white-space: normal;
+    text-align: center;
+    width: max-content;
+    max-width: min(220px, 62vw);
+  }
+
+  .seat-p1 .bubble.say {
+    left: 0;
+    translate: none;
+  }
+
+  .seat-p3 .bubble.say {
+    left: auto;
+    right: 0;
+    translate: none;
+  }
+
+  /* The tail keeps pointing at the nameplate, ~30 px in from the edge. */
+  .seat-p1 .bubble.say::after {
+    left: 24px;
+    margin-left: 0;
+  }
+
+  .seat-p3 .bubble.say::after {
+    left: auto;
+    right: 24px;
+    margin-left: 0;
   }
 
   .info-panel {

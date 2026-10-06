@@ -38,14 +38,42 @@
   let showRules = $state(false)
   let showSettings = $state(false)
 
-  onMount(async () => {
+  let authed = false
+
+  // Multiplayer needs a Firebase uid; solo does not. Retried on the
+  // multiplayer buttons when startup was offline.
+  async function ensureAuth(): Promise<boolean> {
+    if (authed) return true
     try {
       uid = await signIn()
+      authed = true
+      try {
+        localStorage.setItem('koejon-uid', uid)
+      } catch {
+        // Only the offline fallback below loses it.
+      }
+      return true
     } catch {
-      // No uid means no game anyway — show it instead of a stuck spinner.
-      err = $t.offline
-      return
+      return false
     }
+  }
+
+  // Offline start: solo still works. Reuse the last signed-in uid so a solo
+  // game saved online resumes offline.
+  function offlineUid(): string {
+    try {
+      const saved = localStorage.getItem('koejon-uid')
+      if (saved) return saved
+      const id = `local-${crypto.randomUUID()}`
+      localStorage.setItem('koejon-uid', id)
+      return id
+    } catch {
+      return `local-${crypto.randomUUID()}`
+    }
+  }
+
+  onMount(async () => {
+    if (!(await ensureAuth())) uid = offlineUid()
     const name = localStorage.getItem('koejon-name') ?? ''
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
@@ -58,7 +86,7 @@
         const links = localLinks(uid, localStorage)
         if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
         else forgetRoom()
-      } else if (code) {
+      } else if (code && authed) {
         // Return to a room in progress only when our seat is still ours.
         const snap = await getDoc(roomRef(code))
         const room = snap.exists() ? (snap.data() as RoomDoc) : null
@@ -179,6 +207,7 @@
 
   async function onCreate(name: string) {
     err = ''
+    if (!(await ensureAuth())) return void (err = $t.offline)
     try {
       attach(await createRoom(uid, name))
     } catch (e) {
@@ -215,6 +244,7 @@
 
   async function onJoin(code: string, name: string) {
     err = ''
+    if (!(await ensureAuth())) return void (err = $t.offline)
     try {
       attach(await joinRoom(code, uid, name))
     } catch (e) {
@@ -234,9 +264,10 @@
   const send = (a: Action) => {
     // The host applies its own actions in place: no intent doc round trip.
     if (host) return host.submit({ kind: 'act', action: a })
+    err = ''
     session?.act(a).catch((e) => {
       console.error('[act]', e)
-      showErr(e, '', true)
+      showErr(e, (e as Error).message === 'act-lost' ? $t.actLost : '', true)
     })
   }
 

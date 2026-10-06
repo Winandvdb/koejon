@@ -43,6 +43,7 @@ export interface HostOptions {
 }
 
 const engineKey = (code: string) => `koejon-engine-${code}`
+const seqKey = (code: string) => `koejon-seq-${code}`
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -53,6 +54,8 @@ export class HostGame {
   private seats: (SeatInfo | null)[] = [null, null, null, null]
   private opts: RoomOpts = { ...DEFAULT_ROOM_OPTS }
   private version = 0
+  /** Moves on every commit, landed or not: guests may already show that state. */
+  private seq = 0
   private busy: Promise<void> = Promise.resolve()
   private botTimer: ReturnType<typeof setTimeout> | null = null
   private hbTimer: ReturnType<typeof setInterval> | null = null
@@ -111,6 +114,9 @@ export class HostGame {
     if (room.hostUid !== this.uid) throw new Error('not-host')
     this.seats = room.seats
     this.version = room.version
+    // The room doc can trail what guests saw over a data channel: the stored
+    // counter keeps a reloaded host above it.
+    this.seq = Math.max(room.seq ?? 0, this.readSeq())
     this.opts = room.opts ?? { ...DEFAULT_ROOM_OPTS }
     // A lobby has no engine state worth keeping (seats live in the room), and
     // a saved one may be left over from an earlier solo match.
@@ -280,6 +286,7 @@ export class HostGame {
     await this.link.destroy(this.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
     try {
       this.storage?.removeItem(engineKey(this.code))
+      this.storage?.removeItem(seqKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -358,10 +365,20 @@ export class HostGame {
     }
   }
 
+  private readSeq(): number {
+    try {
+      return Number(this.storage?.getItem(seqKey(this.code)) ?? 0) || 0
+    } catch {
+      return 0
+    }
+  }
+
   private async commit(): Promise<void> {
     this.drainBotAcks()
+    const seq = ++this.seq
     try {
       this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
+      this.storage?.setItem(seqKey(this.code), String(seq))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
@@ -371,7 +388,7 @@ export class HostGame {
     })
     // The version only moves forward when the publish lands.
     await this.link.publish(
-      { seats: this.seats, pub: toPublic(this.state), version: this.version + 1, opts: this.opts },
+      { seats: this.seats, pub: toPublic(this.state), version: this.version + 1, seq, opts: this.opts },
       hands,
     )
     this.version++

@@ -19,6 +19,7 @@ Other browsers only send intents (play this card, bid, pass).
 | `npm run build` | `svelte-check` (type check) + production build. Must pass. |
 | `npm run dev` | Dev server. Needs `firebase emulators:start` in another shell for multiplayer. Solo play needs no emulator. |
 | `npm run e2e` | Full match against the Firestore emulator. Optional. |
+| `npm run bench -- [--base origin/develop] [--matches 500] [--level normal]` | Bot benchmark (`scripts/bot-benchmark.mjs`): this checkout's bot against the bot of a git ref. Prints win rate and bidding stats. Run it for every bot change: the win rate plus its ± margin must reach 50%. |
 
 Before you say a change is done, run `npm test` and `npm run build`. Both must pass.
 
@@ -40,6 +41,8 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
 | `src/app.css` | All styles and colour tokens. | |
+| `public/` | Web app manifest and app icons (`icon.svg` is the source of the PNGs). | Copied to `dist/` as is. |
+| `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. | The worker never caches other origins (Firebase). Registered in production builds only. |
 | `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`. | Reuse the helpers. |
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
@@ -76,7 +79,8 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - The issue number can differ from the task number. Find the issue by that first line.
 - An assigned issue is taken. Do not work on an issue that is assigned to someone else.
 - Edit task files with the `backlog` CLI (`backlog task edit <N> ...`) or the backlog MCP tools. Do not change the `<!-- SECTION -->` / `<!-- AC -->` markers by hand.
-- To start work on a task, use the `start-task` skill (`.agents/skills/start-task/SKILL.md`). It claims the issue and makes a worktree.
+- To start work on a task, use the `start-task` skill (`.agents/skills/start-task/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/task-<N>` (ignored by git).
+- A PR with the label `needs manual check` is complete, but a person must still check the UI or network behaviour. A draft PR means that something failed.
 
 ## Keep this file current
 
