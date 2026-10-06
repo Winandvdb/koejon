@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@Winandvdb'
 created_date: '2026-10-05 12:04'
-updated_date: '2026-10-06 08:33'
+updated_date: '2026-10-06 08:35'
 labels:
   - performance
   - seo
@@ -35,7 +35,7 @@ Note: task-14 (PWA) also adds public/ and changes index.html and the sign-in sta
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 The app makes no request to firebaseapp.com/__/auth/iframe or apis.google.com on load
-- [ ] #2 Anonymous sign-in keeps the same uid after a reload
+- [x] #2 Anonymous sign-in keeps the same uid after a reload
 - [x] #3 index.html has a meta description
 - [x] #4 /robots.txt is served as a valid robots.txt, not as HTML
 - [x] #5 Hosting responses include X-Frame-Options, CSP frame-ancestors and Cross-Origin-Opener-Policy headers
@@ -73,4 +73,6 @@ Tests: npm test pass, npm run build pass, npm run e2e pass (local emulators).
 Check by hand: AC2 (reload keeps the same uid in the browser) and AC6 (Lighthouse on the dev channel: SEO 100, LCP < 3.4 s, no requests to firebaseapp.com/__/auth/iframe or apis.google.com).
 
 Lighthouse on the PR 34 preview (2026-10-06, mobile, not incognito): Performance 98, Accessibility 100, Best Practices 100, SEO 63. FCP 1.6 s, LCP 2.2 s (was 3.4 s). Network: no auth/iframe.js, no apis.google.com; only identitytoolkit accounts:lookup (saved user restored from IndexedDB). meta-description and robots-txt pass; COOP and clickjacking audits report no issues. SEO 63 only from is-crawlable: Firebase preview channels send x-robots-tag: noindex. AC6 split into #7 (LCP on preview, done) and #8 (SEO 100 on live, check after merge to main). Still to check by hand: #2 same uid after reload.
+
+AC2 checked by hand on the PR 34 preview (2026-10-06): uid in IndexedDB firebaseLocalStorage stays the same after a reload.
 <!-- SECTION:NOTES:END -->
