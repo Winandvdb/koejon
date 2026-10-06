@@ -1,10 +1,11 @@
 ---
 id: task-9
 title: Make table quotes less frequent
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 07:14'
-updated_date: '2026-10-05 07:59'
+updated_date: '2026-10-06 07:03'
 labels:
   - quotes
 dependencies:
