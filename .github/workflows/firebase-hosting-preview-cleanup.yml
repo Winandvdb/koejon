@@ -14,6 +14,8 @@ jobs:
   delete_preview_channels:
     runs-on: ubuntu-latest
     steps:
+      # The channel commands refuse to run without firebase.json.
+      - uses: actions/checkout@v4
       - name: Delete preview channels whose PR is not open
         # Step-level env: the runner context does not exist at job level.
         env:
