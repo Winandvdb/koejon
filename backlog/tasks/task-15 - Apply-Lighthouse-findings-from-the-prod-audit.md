@@ -1,9 +1,11 @@
 ---
 id: task-15
 title: Apply Lighthouse findings from the prod audit
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 12:04'
+updated_date: '2026-10-06 08:20'
 labels:
   - performance
   - seo
