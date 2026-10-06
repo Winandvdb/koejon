@@ -1,9 +1,11 @@
 ---
 id: task-13
 title: 'Spike: personal statistics with anonymous login'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 07:15'
+updated_date: '2026-10-06 09:03'
 labels:
   - spike
 dependencies: []
