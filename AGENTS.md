@@ -41,7 +41,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
 | `src/app.css` | All styles and colour tokens. | |
-| `public/` | Web app manifest and app icons (`icon.svg` is the source of the PNGs). | Copied to `dist/` as is. |
+| `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |
 | `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. `devbrand.ts` + `dev/` hold the dev build name and icons; a plugin emits them only when `VITE_APP_VARIANT=dev` (the dev channel and previews of PRs into develop). | The worker never caches other origins (Firebase). Registered in production builds only. |
 | `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`. | Reuse the helpers. |
 | `rules/` | Game rules (NL, EN). Shown in the app. | |

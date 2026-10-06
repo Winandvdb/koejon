@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import QRCode from 'qrcode'
   import { t } from '../lib/i18n'
   import type { RoomDoc } from '../lib/net-types'
 
@@ -53,6 +52,8 @@
   let copied = $state(false)
 
   onMount(async () => {
+    // Loaded on demand: qrcode is only needed in the lobby.
+    const QRCode = (await import('qrcode')).default
     qr = await QRCode.toDataURL(inviteUrl, { margin: 1, width: 132 })
   })
 

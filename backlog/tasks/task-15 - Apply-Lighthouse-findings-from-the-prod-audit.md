@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@Winandvdb'
 created_date: '2026-10-05 12:04'
-updated_date: '2026-10-06 08:20'
+updated_date: '2026-10-06 08:22'
 labels:
   - performance
   - seo
@@ -34,11 +34,39 @@ Note: task-14 (PWA) also adds public/ and changes index.html and the sign-in sta
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The app makes no request to firebaseapp.com/__/auth/iframe or apis.google.com on load
+- [x] #1 The app makes no request to firebaseapp.com/__/auth/iframe or apis.google.com on load
 - [ ] #2 Anonymous sign-in keeps the same uid after a reload
-- [ ] #3 index.html has a meta description
-- [ ] #4 /robots.txt is served as a valid robots.txt, not as HTML
-- [ ] #5 Hosting responses include X-Frame-Options, CSP frame-ancestors and Cross-Origin-Opener-Policy headers
+- [x] #3 index.html has a meta description
+- [x] #4 /robots.txt is served as a valid robots.txt, not as HTML
+- [x] #5 Hosting responses include X-Frame-Options, CSP frame-ancestors and Cross-Origin-Opener-Policy headers
 - [ ] #6 Lighthouse (incognito, mobile) on the dev channel gives SEO 100 and LCP below 3.4 s
-- [ ] #7 npm test, npm run build and npm run e2e pass
+- [x] #7 npm test, npm run build and npm run e2e pass
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. firebase.ts: initializeAuth with indexedDB + local persistence, no popupRedirectResolver (AC1, AC2) -> check: build output has no apis.google.com / auth/iframe strings; npm test and e2e pass; manual reload keeps uid
+2. index.html: Dutch meta description (AC3) -> check: unit test reads index.html
+3. public/robots.txt (AC4) -> check: unit test; file lands in dist/
+4. firebase.json hosting headers X-Frame-Options, CSP frame-ancestors, COOP (AC5) -> check: unit test reads firebase.json
+5. Lazy-load marked (RulesDialog) and qrcode (Lobby) with import() -> check: build shows separate chunks
+6. AC6 Lighthouse on dev channel -> manual check after merge
+7. npm test, npm run build, npm run e2e (AC7)
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Changes:
+- src/lib/firebase.ts: initializeAuth with [indexedDBLocalPersistence, browserLocalPersistence], no popupRedirectResolver. The built bundle no longer has apis.google.com/js/api.js, __/auth/iframe or gapi code.
+- index.html: Dutch meta description.
+- public/robots.txt (also precached by the service worker).
+- firebase.json: X-Frame-Options DENY, CSP frame-ancestors none, COOP same-origin on all hosting responses.
+- RulesDialog.svelte and Lobby.svelte: dynamic import() for marked and qrcode (own chunks md-*.js 44 KB and browser-*.js 23 KB).
+- tests/hosting.test.ts: meta description, robots.txt, headers.
+
+Tests: npm test pass, npm run build pass, npm run e2e pass (local emulators).
+
+Check by hand: AC2 (reload keeps the same uid in the browser) and AC6 (Lighthouse on the dev channel: SEO 100, LCP < 3.4 s, no requests to firebaseapp.com/__/auth/iframe or apis.google.com).
+<!-- SECTION:NOTES:END -->
