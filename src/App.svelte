@@ -25,10 +25,11 @@
   import Table from './components/Table.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
 
-  /** Dev builds, and builds with VITE_SHOW_USAGE=true (the develop preview
-   *  channel), show this tab's Firestore reads/writes in the top bar. */
-  const viteEnv = (import.meta as { env?: { DEV?: boolean; VITE_SHOW_USAGE?: string } }).env
-  const DEV = !!viteEnv?.DEV || viteEnv?.VITE_SHOW_USAGE === 'true'
+  /** Dev builds (the vite dev server, or VITE_APP_VARIANT=dev: the dev
+   *  channel and previews of PRs into develop) show a DEV chip and this
+   *  tab's Firestore reads/writes in the top bar. */
+  const viteEnv = (import.meta as { env?: { DEV?: boolean; VITE_APP_VARIANT?: string } }).env
+  const DEV = !!viteEnv?.DEV || viteEnv?.VITE_APP_VARIANT === 'dev'
 
   let uid = $state('')
   let session = $state<RoomSession | null>(null)
@@ -299,6 +300,7 @@
     <span class="brand-suits" aria-hidden="true">♠<i>♥</i></span>
     <span class="brand-name">{$t.title}</span>
   </div>
+  {#if DEV}<span class="room-chip dev">DEV</span>{/if}
   {#if session && session.code !== SOLO_CODE}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
   {#if DEV}
