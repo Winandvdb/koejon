@@ -17,13 +17,22 @@
   let picked = $state<number | null>(null)
   const n = $derived(Math.min(max, Math.max(min, picked ?? Math.round((min + max) / 2))))
 
-  /** Pointer drag over the deck (mouse and touch): the card under the pointer
-   *  is the bottom card of the packet. */
+  /** Pointer drag over the deck (mouse and touch): the card edge under the
+   *  pointer is the bottom card of the packet. */
   let stack: HTMLElement
   let dragging = false
   function pick(e: PointerEvent) {
-    const r = stack.getBoundingClientRect()
-    picked = Math.ceil(((e.clientY - r.top) / r.height) * total)
+    const [lifted, rest] = stack.querySelectorAll<HTMLElement>('.lift-pack')
+    const first = lifted.querySelector<HTMLElement>('.lift-edge')!
+    const eh = first.offsetHeight
+    const y = e.clientY - first.getBoundingClientRect().top
+    if (y <= n * eh) {
+      picked = Math.ceil(y / eh)
+      return
+    }
+    // Below the gap and the top card of the rest: count on from the packet.
+    const y2 = e.clientY - rest.querySelector<HTMLElement>('.lift-edge')!.getBoundingClientRect().top
+    if (y2 > 0) picked = n + Math.ceil(y2 / eh)
   }
   function down(e: PointerEvent) {
     dragging = true
@@ -47,8 +56,13 @@
     onpointercancel={() => (dragging = false)}
     aria-hidden="true"
   >
-    {#each Array(total) as _, i (i)}
-      <div class="lift-layer" class:up={i < n}></div>
+    {#each [n, total - n] as count, p (p)}
+      <div class="lift-pack" class:up={p === 0}>
+        <div class="lift-top"><div class="card-back"></div></div>
+        {#each Array(count) as _, i (i)}
+          <div class="lift-edge"></div>
+        {/each}
+      </div>
     {/each}
   </div>
   <input

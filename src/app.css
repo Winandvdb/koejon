@@ -1180,32 +1180,60 @@ button.tag {
   gap: 8px;
 }
 
-/* The deck seen from the side: one layer per card, top card first. */
+/* The deck seen at an angle: the lifted packet on top, the rest below. Each
+   packet shows its top card's back, then one cream edge per card. */
 .lift-stack {
+  --cw: calc(var(--card) * 0.95);
   display: flex;
   flex-direction: column;
-  width: calc(var(--card) * 1.1);
-  padding: 12px 10px 0 0;
+  gap: 12px;
+  padding: 0 12px;
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
 }
 
-.lift-layer {
-  height: 5px;
-  background: var(--back-1);
-  border: 1px solid var(--card-bg);
-  border-top-width: 0;
-  border-radius: 2px;
-  transition: transform 0.12s;
+.lift-pack {
+  width: var(--cw);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.35));
+  transition: transform 0.15s;
 }
 
-.lift-layer:nth-child(even) {
-  background: var(--back-2);
+.lift-pack.up {
+  transform: translateX(10px);
 }
 
-.lift-layer.up {
-  transform: translate(8px, -10px);
+/* A card back tilted away: the far edge is narrower, like a real deck top. */
+.lift-top {
+  position: relative;
+  height: calc(var(--cw) * 0.5);
+  perspective: calc(var(--cw) * 5);
+}
+
+.lift-top > .card-back {
+  position: absolute;
+  bottom: 0;
+  height: calc(var(--cw) * 1.4);
+  transform-origin: bottom center;
+  transform: rotateX(68deg);
+  box-shadow: none;
+}
+
+/* 2px + 1px line per card keeps 24 cards short enough for a phone. */
+.lift-edge {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--card-bg) 82%, #000),
+    var(--card-bg) 12%,
+    var(--card-bg) 88%,
+    color-mix(in srgb, var(--card-bg) 82%, #000)
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--card-bg) 75%, #000);
+}
+
+.lift-edge:last-child {
+  border-radius: 0 0 4px 4px;
 }
 
 .lift-range {
