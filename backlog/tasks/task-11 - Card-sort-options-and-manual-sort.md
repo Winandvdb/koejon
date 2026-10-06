@@ -1,9 +1,11 @@
 ---
 id: task-11
 title: Card sort options and manual sort
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-05 07:14'
+updated_date: '2026-10-06 06:44'
 labels:
   - ui
 dependencies: []
