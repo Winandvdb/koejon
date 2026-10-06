@@ -17,30 +17,18 @@
   let picked = $state<number | null>(null)
   const n = $derived(Math.min(max, Math.max(min, picked ?? Math.round((min + max) / 2))))
 
-  /** Pointer drag over the deck (mouse and touch): the card edge under the
-   *  pointer is the bottom card of the packet. */
+  /** Pointer drag over the deck (mouse and touch): relative to where the drag
+   *  started, one card per card edge, so it moves at once in either direction. */
   let stack: HTMLElement
-  let dragging = false
-  function pick(e: PointerEvent) {
-    const [lifted, rest] = stack.querySelectorAll<HTMLElement>('.lift-pack')
-    const first = lifted.querySelector<HTMLElement>('.lift-edge')!
-    const eh = first.offsetHeight
-    const y = e.clientY - first.getBoundingClientRect().top
-    if (y <= n * eh) {
-      picked = Math.ceil(y / eh)
-      return
-    }
-    // Below the gap and the top card of the rest: count on from the packet.
-    const y2 = e.clientY - rest.querySelector<HTMLElement>('.lift-edge')!.getBoundingClientRect().top
-    if (y2 > 0) picked = n + Math.ceil(y2 / eh)
-  }
+  let drag: { y: number; n: number; step: number } | null = null
   function down(e: PointerEvent) {
-    dragging = true
     stack.setPointerCapture(e.pointerId)
-    pick(e)
+    drag = { y: e.clientY, n, step: stack.querySelector<HTMLElement>('.lift-edge')!.offsetHeight }
   }
   function move(e: PointerEvent) {
-    if (dragging) pick(e)
+    if (!drag) return
+    const next = drag.n + Math.round((e.clientY - drag.y) / drag.step)
+    picked = Math.min(max, Math.max(min, next))
   }
 </script>
 
@@ -52,8 +40,8 @@
     bind:this={stack}
     onpointerdown={down}
     onpointermove={move}
-    onpointerup={() => (dragging = false)}
-    onpointercancel={() => (dragging = false)}
+    onpointerup={() => (drag = null)}
+    onpointercancel={() => (drag = null)}
     aria-hidden="true"
   >
     {#each [n, total - n] as count, p (p)}
