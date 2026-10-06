@@ -161,6 +161,13 @@
     }
   })
 
+  /** A bubble floats above my nameplate: the wait hint below must lift clear of it. */
+  const meBubble = $derived(
+    sayings[my] !== undefined ||
+      (showBids && lastBid.has(my)) ||
+      (pub.troefkeAsked && my === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0),
+  )
+
   /** Nag a seat that keeps the table waiting: one pending actor for > 9 s. */
   let waitSeat = -1
   let waitTimer: ReturnType<typeof setTimeout> | null = null
@@ -203,7 +210,7 @@
     {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
     {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
     {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
-    {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
+    {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
       <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
     {/if}
     {#if isHost && s && !s.bot && seat !== my}
@@ -399,7 +406,7 @@
 
         <!-- While the game waits on confirmations, say who we're waiting on. -->
         {#if pendingAcks.length > 0 && !has('ack')}
-          <span class="wait-hint" in:fly={{ y: 8, duration: 200 }}>
+          <span class="wait-hint" class:lifted={meBubble} in:fly={{ y: 8, duration: 200 }}>
             {$t.waitingFor} {pendingAcks.map((s) => name(s)).join(', ')}…
           </span>
         {/if}

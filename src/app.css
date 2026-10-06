@@ -29,6 +29,8 @@
   --trunk: #7b4a1f;
   --fab: #f5efe0;
   --fab-contrast: #17211c;
+  --cta: #1f6fc4;
+  --cta-contrast: #ffffff;
   --radius: 14px;
   --card: clamp(54px, 7vw, 94px);
   color-scheme: light;
@@ -59,6 +61,8 @@
   --trunk: #b08a5e;
   --fab: #38503f;
   --fab-contrast: #e4ebe7;
+  --cta: #5aa2e8;
+  --cta-contrast: #06121f;
   color-scheme: dark;
 }
 
@@ -1011,6 +1015,12 @@ button.tag {
   opacity: 0.9;
 }
 
+/* Bubbles above my nameplate reach into the overlay's bottom zone: lift the
+   hint past a two-line quote bubble (42px gap + bubble height). */
+.wait-hint.lifted {
+  margin-bottom: 96px;
+}
+
 /* ---------- Floating action buttons on the felt ---------- */
 
 .fab-caption {
@@ -1060,8 +1070,8 @@ button.tag {
 }
 
 .fab.primary {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--cta);
+  color: var(--cta-contrast);
   border-color: rgba(255, 255, 255, 0.4);
 }
 
