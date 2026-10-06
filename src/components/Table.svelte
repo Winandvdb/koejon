@@ -351,7 +351,7 @@
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
             <strong>{name(pub.dealer)} {$t.isDealer}</strong>
             {#if lastCut}
-              <div class="small">{name(lastCut.seat!)} {$t.cutDid} {lastCut.n} {$t.cutCards}</div>
+              <div class="small">{name(lastCut.seat!)} {$t.cutDid}</div>
             {/if}
           </div>
         {:else if pub.phase === 'SCORED' && pub.lastResult}
