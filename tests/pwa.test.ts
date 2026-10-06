@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
+import { DEV_FILES, devFiles, devIndexHtml, devManifest } from '../pwa/devbrand'
 import { precache, swSource } from '../pwa/precache'
 
 const BUILD = {
@@ -46,5 +47,39 @@ describe('web app manifest', () => {
 
   test('every icon file exists', () => {
     for (const i of m.icons) expect(() => readFileSync(`public${i.src}`)).not.toThrow()
+  })
+})
+
+describe('dev channel branding', () => {
+  const m = devManifest(JSON.parse(readFileSync('public/manifest.webmanifest', 'utf8')))
+
+  test('manifest gets a dev name, colour and dev icons', () => {
+    expect(m.name).toContain('DEV')
+    expect(m.short_name).toContain('DEV')
+    expect(m.theme_color).not.toBe('#1d6b45')
+    expect(m.background_color).toBe(m.theme_color)
+    for (const i of m.icons as { src: string }[]) expect(i.src).toContain('-dev')
+  })
+
+  test('every emitted dev file has content', () => {
+    const files = devFiles()
+    expect(Object.keys(files).sort()).toEqual(Object.keys(DEV_FILES).sort())
+    for (const content of Object.values(files)) expect(content.length).toBeGreaterThan(0)
+  })
+
+  test('every dev icon in the manifest maps to an emitted file', () => {
+    const emitted = Object.keys(DEV_FILES)
+    for (const i of m.icons as { src: string }[]) expect(emitted).toContain(i.src.slice(1))
+  })
+
+  test('index.html points at the dev manifest, icons and name', () => {
+    const html = devIndexHtml(readFileSync('index.html', 'utf8'))
+    expect(html).toContain('href="/manifest-dev.webmanifest"')
+    expect(html).toContain('href="/icon-dev.svg"')
+    expect(html).toContain('href="/apple-touch-icon-dev.png"')
+    expect(html).toContain('<title>Koejon DEV</title>')
+    expect(html).toContain('content="Koejon DEV"')
+    expect(html).not.toContain('#1d6b45')
+    expect(html).not.toContain('href="/manifest.webmanifest"')
   })
 })

@@ -59,7 +59,6 @@
   const biddingPhase = $derived(
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
   )
-  const dealerBlind = $derived(biddingPhase && my === pub.dealer)
   /** The turned cards sit at the dealer's seat while bidding runs, and until
    *  all seats confirmed them at play start. */
   const showTurned = $derived(
@@ -163,6 +162,13 @@
     }
   })
 
+  /** A bubble floats above my nameplate: the wait hint below must lift clear of it. */
+  const meBubble = $derived(
+    sayings[my] !== undefined ||
+      (showBids && lastBid.has(my)) ||
+      (pub.troefkeAsked && my === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0),
+  )
+
   $effect(() => {
     document.title = myTurn ? `● ${$t.yourTurn} — ${$t.title}` : $t.title
     return () => {
@@ -182,11 +188,13 @@
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
     {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
-    {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
-    {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
-    {#if pub.troefkeAsked && seat === pub.turn && pub.tricksPlayed === 0 && pub.trick.length === 0}
-      <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
-    {/if}
+    <div class="bubbles" class:has-say={!!sayings[seat]}>
+      {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+      {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
+        <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
+      {/if}
+      {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
+    </div>
     {#if isHost && s && !s.bot && seat !== my}
       <button
         class="icon-btn tiny kick"
@@ -380,7 +388,7 @@
 
         <!-- While the game waits on confirmations, say who we're waiting on. -->
         {#if pendingAcks.length > 0 && !has('ack')}
-          <span class="wait-hint" in:fly={{ y: 8, duration: 200 }}>
+          <span class="wait-hint" class:lifted={meBubble} in:fly={{ y: 8, duration: 200 }}>
             {$t.waitingFor} {pendingAcks.map((s) => name(s)).join(', ')}…
           </span>
         {/if}
@@ -398,7 +406,6 @@
     </div>
 
     <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
-      {#if dealerBlind}<div class="blind-hint">{$t.handHidden}</div>{/if}
       <div class="my-hand">
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
