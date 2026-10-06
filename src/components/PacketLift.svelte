@@ -63,6 +63,5 @@
     oninput={(e) => (picked = Number(e.currentTarget.value))}
     aria-label={$t.liftHint}
   />
-  <div class="lift-count"><b>{n}</b> {$t.liftUp} · {total - n} {$t.liftStay}</div>
   <button class="fab primary" onclick={() => onlift(n)}>{$t.liftDo}</button>
 </div>
