@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { apply, toPublic } from '../src/engine'
 import type { Card, State } from '../src/engine'
-import { C, dealtState, lastTrickState, playingState } from './helpers'
+import { C, cutAndDeal, dealtState, lastTrickState, playingState } from './helpers'
 
 const key = (c: Card) => `${c.s}${c.r}`
 
@@ -52,7 +52,7 @@ describe('trick piles', () => {
     for (let i = 1; i <= 10; i++) expect(pileOrder(i)).toBe(pileOrder(i))
   })
 
-  it('builds the next deck from both piles, team 0 on top, with only a cut', () => {
+  it('builds the next deck from both piles, team 0 on top, with only the chosen cut', () => {
     const first = dealtState(42).hands.flat()
     const piles: [Card[], Card[]] = [first.slice(0, 8), first.slice(8, 20)]
     // The last trick (4 cards) is still to play; seat 0 wins it for team 0.
@@ -73,12 +73,8 @@ describe('trick piles', () => {
     expect(s.piles[winner].slice(0, piles[winner].length)).toEqual(piles[winner])
     expect(s.piles[winner].slice(-4).map(key).sort()).toEqual(first.slice(20).map(key).sort())
     const stacked = [...s.piles[0], ...s.piles[1]]
-    s = apply(apply(s, { type: 'next', seat: 0 }), { type: 'deal', seat: 1 })
-    const deck = dealtDeck(s)
-    const k = [...Array(25).keys()].filter((i) => cut(stacked, i).every((c, j) => key(c) === key(deck[j])))
-    expect(k).toHaveLength(1)
-    expect(k[0]).toBeGreaterThanOrEqual(4)
-    expect(k[0]).toBeLessThanOrEqual(20)
+    s = cutAndDeal(apply(s, { type: 'next', seat: 0 }), 7)
+    expect(dealtDeck(s)).toEqual(cut(stacked, 7))
     expect(s.piles).toEqual([[], []])
   })
 
@@ -91,10 +87,8 @@ describe('trick piles', () => {
     const thrownIn = s.hands.flat()
     s = apply(s, { type: 'choose', seat: 0, suit: null })
     expect(s.piles).toEqual([thrownIn, []])
-    s = apply(s, { type: 'deal', seat: 1 })
-    const deck = dealtDeck(s).map(key)
-    const ok = [...Array(17).keys()].some((i) => cut(thrownIn, i + 4).map(key).join() === deck.join())
-    expect(ok).toBe(true)
+    s = cutAndDeal(s, 9)
+    expect(dealtDeck(s)).toEqual(cut(thrownIn, 9))
   })
 
   it('keeps the piles private', () => {

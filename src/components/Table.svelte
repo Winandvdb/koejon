@@ -9,6 +9,7 @@
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
+  import PacketLift from './PacketLift.svelte'
 
   let {
     view,
@@ -54,6 +55,12 @@
     view.legal.flatMap((a) => (a.type === 'choose' && a.suit !== null ? [a.suit] : [])),
   )
   const choosePass = $derived(view.legal.some((a) => a.type === 'choose' && a.suit === null))
+  /** Packet sizes I may lift now, in the dealer draw or the cut. */
+  const liftSizes = $derived(
+    view.legal.flatMap((a) => (a.type === 'draw' || a.type === 'cut' ? [a.n] : [])),
+  )
+  /** The cut of this deal, shown while the dealer deals. */
+  const lastCut = $derived(pub.log.findLast((ev) => ev.t === 'cut'))
 
   const biddingPhase = $derived(
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
@@ -320,13 +327,32 @@
             </div>
             {#if dd.pending === 2 && !has('chooseDealer')}
               <div class="small">{name(dd.winnerSeat!)} {$t.picksDealer}</div>
+            {:else if liftSizes.length > 0}
+              <PacketLift
+                total={dd.pending === 0 ? 24 : 24 - dd.packetA!}
+                sizes={liftSizes}
+                onlift={(n) => send({ type: 'draw', seat: my, n })}
+              />
             {:else if dd.pending !== 2}
               <div class="small">{name(dd.drawer[dd.pending])} {$t.drawsNow}</div>
+            {/if}
+          </div>
+        {:else if pub.phase === 'CUTTING'}
+          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+            <strong>{name(pub.dealer)} {$t.isDealer}</strong>
+            {#if liftSizes.length > 0}
+              <h3>{$t.cutTitle}</h3>
+              <PacketLift total={24} sizes={liftSizes} onlift={(n) => send({ type: 'cut', seat: my, n })} />
+            {:else}
+              <div class="small">{name(pub.actionSeats[0])} {$t.cutsNow}</div>
             {/if}
           </div>
         {:else if pub.phase === 'DEALING'}
           <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
             <strong>{name(pub.dealer)} {$t.isDealer}</strong>
+            {#if lastCut}
+              <div class="small">{name(lastCut.seat!)} {$t.cutDid} {lastCut.n} {$t.cutCards}</div>
+            {/if}
           </div>
         {:else if pub.phase === 'SCORED' && pub.lastResult}
           {@const r = pub.lastResult}

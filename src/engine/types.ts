@@ -9,6 +9,7 @@ export interface Card {
 export type Phase =
   | 'LOBBY'
   | 'DEALER_DRAW'
+  | 'CUTTING'
   | 'DEALING'
   | 'BIDDING_R1'
   | 'BIDDING_R2'
@@ -29,6 +30,8 @@ export interface DealerDraw {
   draws: TrickCard[]
   /** How many cards team A lifted (kept so B draws from the remainder). */
   packetA: number | null
+  /** The shuffled deck both teams lift from this attempt. Host only. */
+  deck: Card[] | null
   /** 0: team A draws, 1: team B draws, 2: done, winner picks dealer. */
   pending: 0 | 1 | 2
   winnerSeat: number | null
@@ -123,7 +126,8 @@ export interface State {
 
 export type Action =
   | { type: 'start'; seat: number }
-  | { type: 'draw'; seat: number }
+  | { type: 'draw'; seat: number; n: number }
+  | { type: 'cut'; seat: number; n: number }
   | { type: 'chooseDealer'; seat: number; dealer: number }
   | { type: 'deal'; seat: number }
   | { type: 'bid'; seat: number; play: boolean }

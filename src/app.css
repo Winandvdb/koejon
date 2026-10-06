@@ -1171,6 +1171,52 @@ button.tag {
   height: 100%;
 }
 
+/* ---------- Packet lift (dealer draw and cut) ---------- */
+
+.lift {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The deck seen from the side: one layer per card, top card first. */
+.lift-stack {
+  display: flex;
+  flex-direction: column;
+  width: calc(var(--card) * 1.1);
+  padding: 12px 10px 0 0;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.lift-layer {
+  height: 5px;
+  background: var(--back-1);
+  border: 1px solid var(--card-bg);
+  border-top-width: 0;
+  border-radius: 2px;
+  transition: transform 0.12s;
+}
+
+.lift-layer:nth-child(even) {
+  background: var(--back-2);
+}
+
+.lift-layer.up {
+  transform: translate(8px, -10px);
+}
+
+.lift-range {
+  width: min(220px, 70vw);
+  accent-color: var(--cta);
+}
+
+.lift-count {
+  font-variant-numeric: tabular-nums;
+}
+
 .area-me {
   grid-area: me;
   display: flex;

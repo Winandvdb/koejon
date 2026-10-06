@@ -399,8 +399,11 @@ export function botAction(
 
   const first = legal[0]
   switch (first.type) {
-    case 'start':
     case 'draw':
+    case 'cut':
+      // Any packet size in the allowed range, as a real hand would.
+      return legal[Math.floor(rand() * legal.length)]
+    case 'start':
     case 'deal':
     case 'next':
     case 'troefke':

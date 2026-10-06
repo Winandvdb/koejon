@@ -12,12 +12,16 @@ environment deviations. Each entry lists the chosen behavior.
   count increases by 1 (may exceed 13) and a separate `koeien` counter is incremented so
   the scoreboard can draw those lines crooked with hairs. On the boomke the Koei is
   drawn at the bottom, below the line ladder.
-- **Dealer-draw packets** — team B draws from the same shuffled deck minus team A's
-  packet ("the remaining deck"). Tie on rank → both players redraw on a fresh shuffle.
-  Packet sizes are picked by the engine: A ∈ [4, 16], B ∈ [4, remaining − 4].
-- **Dealer draw** — the packet draws need no input and resolve automatically.
-  The draw winner then chooses the first dealer interactively (bots pick a random
-  teammate). The chosen dealer is announced for at least 3 s before the deal.
+- **Dealer-draw packets** — the engine shuffles one deck per attempt and keeps it on
+  the host. Team B lifts from what team A left of that deck ("the remaining deck"),
+  with no reshuffle in between. Tie on rank → both players redraw on a fresh shuffle.
+  Packet sizes: A ∈ [4, 16], B ∈ [4, remaining − 4].
+- **Dealer draw** — each team's drawing player chooses the packet size (bots pick a
+  random allowed size). The draw winner then chooses the first dealer interactively
+  (bots pick a random teammate).
+- **Cut** — the `CUTTING` phase comes before every deal, the first one included. The
+  dealer's right neighbour chooses the packet size, 4..20 (bots pick a random allowed
+  size). The chosen dealer is announced during the cut and for at least 3 s after it.
 - **Dealer's hidden cards** — the engine always tracks the dealer's full 6-card hand;
   masking is a view concern. During bidding the dealer's hand doc contains
   `cards: null` and the UI renders card backs (4 hand cards + the face-down set-aside
@@ -37,7 +41,7 @@ environment deviations. Each entry lists the chosen behavior.
 - **Deck between hands** — no reshuffle. Each won trick goes on its team's pile; the
   engine shuffles its 4 cards (seeded RNG), as a collected trick is rarely kept in
   play order. For the next deal, team 0's pile is put on top of team 1's pile, then
-  the deck is cut once: the engine lifts 4..20 cards from the top and puts them under.
+  the deck is cut once: the cutter's packet (4..20 cards) goes from the top to the bottom.
   After an all-passed deal the hands are thrown in as they are (seat 0 first). Only
   the first deal of a match uses a fresh shuffle.
 - **Dealing is automatic** — no deal prompt: the `DEALING` phase announces the dealer
