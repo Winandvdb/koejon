@@ -108,7 +108,7 @@ export interface State {
   troefkeAsked: boolean
   tricksPlayed: number
   tricksWon: [number, number]
-  /** Cards of the tricks each team won, in play order; stacked into the next deck. */
+  /** Cards of the tricks each team won (each trick shuffled); stacked into the next deck. */
   piles: [Card[], Card[]]
   points: [number, number]
   lines: [number, number]

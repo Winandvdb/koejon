@@ -281,7 +281,8 @@ function resolveTrick(s: State): void {
   const team = teamOf(winner)
   s.tricksWon[team]++
   s.points[team] += trickPoints(s.trick)
-  s.piles[team].push(...s.trick.map((tc) => tc.card))
+  // A collected trick is rarely kept in play order.
+  s.piles[team].push(...rngShuffle(s, s.trick.map((tc) => tc.card)))
   s.tricksPlayed++
   s.prevTrick = s.lastTrick
   s.lastTrick = s.trick

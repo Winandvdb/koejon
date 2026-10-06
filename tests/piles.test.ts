@@ -27,7 +27,29 @@ describe('trick piles', () => {
       hands: [[C('S', '9')], [C('S', 'A')], [C('S', '10')], [C('S', 'K')]],
     })
     for (const seat of [1, 2, 3, 0]) s = apply(s, { type: 'play', seat, card: s.hands[seat][0] })
-    expect(s.piles).toEqual([[], [C('S', 'A'), C('S', '10'), C('S', 'K'), C('S', '9')]])
+    expect(s.piles[0]).toEqual([])
+    expect(s.piles[1].map(key).sort()).toEqual(['S10', 'S9', 'SA', 'SK'])
+  })
+
+  /** Play one fixed trick with RNG `rng` and return the order on the pile. */
+  const pileOrder = (rng: number) => {
+    let s = playingState({
+      rng,
+      trump: 'H',
+      turn: 1,
+      hands: [[C('S', '9')], [C('S', 'A')], [C('S', '10')], [C('S', 'K')]],
+    })
+    for (const seat of [1, 2, 3, 0]) s = apply(s, { type: 'play', seat, card: s.hands[seat][0] })
+    return s.piles[1].map(key).join()
+  }
+
+  it('shuffles the 4 cards of a collected trick', () => {
+    const orders = new Set(Array.from({ length: 40 }, (_, i) => pileOrder(i + 1)))
+    expect(orders.size).toBeGreaterThan(10)
+  })
+
+  it('shuffles a trick the same way for the same seeded RNG', () => {
+    for (let i = 1; i <= 10; i++) expect(pileOrder(i)).toBe(pileOrder(i))
   })
 
   it('builds the next deck from both piles, team 0 on top, with only a cut', () => {
@@ -46,10 +68,12 @@ describe('trick piles', () => {
     s = { ...s, trump: first[23].s, piles }
     s = apply(s, { type: 'play', seat: 0, card: first[23] })
     expect(s.phase).toBe('SCORED')
-    s = apply(apply(s, { type: 'next', seat: 0 }), { type: 'deal', seat: 1 })
+    // The last trick lies on its winner's pile, in shuffled order.
     const winner = [...s.log].reverse().find((e) => e.t === 'trick')!.seat! % 2
-    const stacked = [...piles[0], ...piles[1]]
-    stacked.splice(winner === 0 ? 8 : 20, 0, first[20], first[21], first[22], first[23])
+    expect(s.piles[winner].slice(0, piles[winner].length)).toEqual(piles[winner])
+    expect(s.piles[winner].slice(-4).map(key).sort()).toEqual(first.slice(20).map(key).sort())
+    const stacked = [...s.piles[0], ...s.piles[1]]
+    s = apply(apply(s, { type: 'next', seat: 0 }), { type: 'deal', seat: 1 })
     const deck = dealtDeck(s)
     const k = [...Array(25).keys()].filter((i) => cut(stacked, i).every((c, j) => key(c) === key(deck[j])))
     expect(k).toHaveLength(1)
