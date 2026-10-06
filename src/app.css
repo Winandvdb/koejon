@@ -1241,10 +1241,6 @@ button.tag {
   accent-color: var(--cta);
 }
 
-.lift-count {
-  font-variant-numeric: tabular-nums;
-}
-
 .area-me {
   grid-area: me;
   display: flex;
