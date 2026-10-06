@@ -100,7 +100,12 @@ const dict = {
     darkMode: 'Donker',
     lightMode: 'Licht',
     trickN: 'Slag',
-    sortHand: 'Sorteer kaarten op kleur',
+    sortHand: 'Kaarten sorteren',
+    sortAsk: 'Hoe wil je je kaarten sorteren?',
+    sortHigh: 'Hoog → laag',
+    sortLow: 'Laag → hoog',
+    sortManual: 'Zelf schikken',
+    sortManualHint: 'Sleep je kaarten in je eigen volgorde',
   },
   en: {
     title: 'Koejonnen',
@@ -198,7 +203,12 @@ const dict = {
     darkMode: 'Dark',
     lightMode: 'Light',
     trickN: 'Trick',
-    sortHand: 'Sort cards by suit',
+    sortHand: 'Sort cards',
+    sortAsk: 'How do you want to sort your cards?',
+    sortHigh: 'High → low',
+    sortLow: 'Low → high',
+    sortManual: 'My own order',
+    sortManualHint: 'Drag your cards into your own order',
   },
 } as const
 
