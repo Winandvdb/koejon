@@ -5,6 +5,7 @@ import {
   RANK_ORDER,
   RANK_POINTS,
   RANKS,
+  SUITS,
   trickPoints,
   trickWinnerIndex,
 } from '../engine'
@@ -34,9 +35,20 @@ export const BOT_PROFILES: Record<BotLevel, BotProfile> = {
   hard: { skill: 0.95, memory: 'full', tactics: true },
 }
 
-/** The 2nd card doubles the stake, so the 1st card asks a stronger hand. */
-const BID_THRESHOLD_1 = 10
+/**
+ * Bid threshold by stake in lines. A win erases the stake, a loss gives the
+ * stake away plus a koei, so the break-even win chance is
+ * (stake + 1) / (2 * stake + 1): a higher stake asks a weaker hand.
+ */
+const BID_THRESHOLD_1 = 11
 const BID_THRESHOLD_2 = 8
+const BID_THRESHOLD_4 = 7
+/** 1st card: wait for the 2nd card when another suit rates this much higher… */
+const BETTER_SUIT = 2
+/** …unless the turned suit clears the threshold by this margin. */
+const CLEAR_BID = 3
+/** A bid with one trump (K or A) asks at least this rating. */
+const LONE_TRUMP_MIN = 13
 /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
 const KNIJP_MIN = 4
 const KNIJP_CHANCE = 0.85
@@ -407,22 +419,38 @@ export function botAction(
       return { type: 'chooseDealer', seat, dealer: rand() < 0.5 ? seat : mate }
     }
     case 'bid': {
-      const suit = s.phase === 'BIDDING_R1' ? s.turned!.first.s : s.turned!.second.s
-      const rating = rateHand(s.hands[seat], suit)
+      const r1 = s.phase === 'BIDDING_R1'
+      const suit = r1 ? s.turned!.first.s : s.turned!.second.s
+      const hand = s.hands[seat]
+      const rating = rateHand(hand, suit)
+      const trumps = hand.filter((c) => c.s === suit)
+      // Real players never go without trump, and with a lone trump only on a
+      // hand full of aces: a single trump is pulled at once.
+      if (trumps.length === 0) return { type: 'bid', seat, play: false }
+      if (trumps.length === 1 && (RANK_ORDER[trumps[0].r] < RANK_ORDER['K'] || rating < LONE_TRUMP_MIN))
+        return { type: 'bid', seat, play: false }
       const myTeam = teamOf(seat)
       const oppLines = s.lines[1 - myTeam]
       // Knijpen: squeeze the hand to level 1 while a level-1 loss stays
       // survivable — pointless at 1 opponent line, where any loss kills.
-      const knijpen = s.phase === 'BIDDING_R1' && oppLines <= 2 && oppLines > s.multiplier
+      const knijpen = r1 && oppLines <= 2 && oppLines > s.multiplier
       // A hand worth all remaining lines deserves a looser bid.
-      const stakes = s.phase === 'BIDDING_R1' ? s.multiplier : 2
-      const decisive = s.lines[myTeam] <= stakes || (s.phase === 'BIDDING_R2' && oppLines <= 2)
-      const threshold = s.phase === 'BIDDING_R1' ? BID_THRESHOLD_1 : BID_THRESHOLD_2
+      const stakes = r1 ? s.multiplier : 2
+      const decisive = s.lines[myTeam] <= stakes || (!r1 && oppLines <= 2)
+      const threshold =
+        stakes >= 4 ? BID_THRESHOLD_4 : stakes >= 2 ? BID_THRESHOLD_2 : BID_THRESHOLD_1
+      // On the 1st card two low trumps are pulled at once: ask a K or A.
+      const solid =
+        !r1 || trumps.length !== 2 || trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K'])
+      // A hand that fits another suit clearly better waits for the 2nd card.
+      const otherBest = Math.max(...SUITS.filter((x) => x !== suit).map((x) => rateHand(hand, x)))
+      const waits =
+        r1 && profile.tactics && otherBest >= rating + BETTER_SUIT && rating < threshold + CLEAR_BID
       const play =
-        rating >= threshold ||
+        (solid && !waits && rating >= threshold) ||
         (profile.tactics &&
           ((knijpen && (rating >= KNIJP_MIN || rand() < KNIJP_CHANCE)) ||
-            (decisive && rating >= threshold - 2)))
+            (decisive && solid && rating >= threshold - 2)))
       return { type: 'bid', seat, play }
     }
     case 'choose': {
