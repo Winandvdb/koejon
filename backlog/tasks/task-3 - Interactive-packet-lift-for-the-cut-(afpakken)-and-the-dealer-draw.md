@@ -24,7 +24,7 @@ The cut only has an effect once the deck is no longer reshuffled each deal (task
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A player can lift a packet of cards from the deck by touch or mouse, and sees how many cards they lift before they confirm
+- [ ] #1 A player can lift a packet of cards from the deck by touch or mouse, and sees the packet before they confirm; no card count is shown
 - [x] #2 Dealer draw, team A: at least 4 cards lifted and at least 8 left; the bottom card of the packet is shown to all players
 - [x] #3 Dealer draw, team B: lifts from the cards team A left, at least 4 lifted and at least 4 left; the deck is not reshuffled between the two draws
 
