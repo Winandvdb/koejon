@@ -176,6 +176,12 @@ h3 {
   background: var(--panel-2);
   border: 1px solid var(--border);
 }
+/* Dev channel marker in the top bar, only on dev builds. */
+.room-chip.dev {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
 /* Dev-only Firestore usage counter in the top bar. */
 .room-chip.usage {
   letter-spacing: 0;

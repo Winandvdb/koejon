@@ -8,9 +8,10 @@ jobs:
     name: Test, then deploy to dev channel
     runs-on: ubuntu-latest
     env:
-      # Show the Firestore read/write counter on the dev channel. Job-wide:
-      # the deploy step builds again (firebase.json predeploy) and overwrites dist.
-      VITE_SHOW_USAGE: 'true'
+      # Dev build: DEV branding plus the Firestore read/write counter in the
+      # top bar. Job-wide: the deploy step builds again (firebase.json
+      # predeploy) and overwrites dist.
+      VITE_APP_VARIANT: 'dev'
     steps:
       - name: Check out code
         uses: actions/checkout@v4
