@@ -1,6 +1,7 @@
 <script lang="ts">
   import { fly, scale } from 'svelte/transition'
   import type { Action, Card } from '../engine'
+  import { turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
@@ -65,13 +66,7 @@
   const biddingPhase = $derived(
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
   )
-  /** The turned cards sit at the dealer's seat while bidding runs, and until
-   *  all seats confirmed them at play start. */
-  const showTurned = $derived(
-    pub.turned !== null &&
-      (biddingPhase ||
-        (pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trickAcks.length < 4)),
-  )
+  const showTurned = $derived(turnedVisible(pub))
 
   const playing = $derived(
     pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER',

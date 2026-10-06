@@ -84,6 +84,17 @@ export function toPublic(s: State): PublicState {
   }
 }
 
+/** The turned cards sit at the dealer's seat while bidding runs, and until
+ *  the first card of the hand falls — not only until all four confirmed:
+ *  the first leader is auto-confirmed and bots confirm at once, so a human
+ *  leader would otherwise never get to see the second card. */
+export function turnedVisible(pub: PublicState): boolean {
+  if (pub.turned === null) return false
+  if (pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE')
+    return true
+  return pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0
+}
+
 const PLACEHOLDER: Card = { s: 'S', r: '9' }
 
 /**
