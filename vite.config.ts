@@ -3,7 +3,30 @@ import { join } from 'node:path'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import type { Plugin } from 'vite'
 import { defineConfig } from 'vitest/config'
+import { devFiles, devIndexHtml } from './pwa/devbrand.ts'
 import { swSource } from './pwa/precache.ts'
+
+/**
+ * Dev channel builds (VITE_SHOW_USAGE=true, set by the develop deploy
+ * workflow) get their own manifest, name and icons so an installed dev app
+ * stands apart from the live one. Runs before serviceWorker so the emitted
+ * files land in the precache list.
+ */
+function devBranding(): Plugin {
+  const dev = process.env.VITE_SHOW_USAGE === 'true'
+  return {
+    name: 'koejon-dev-brand',
+    apply: 'build',
+    enforce: 'post',
+    transformIndexHtml: dev ? (html) => devIndexHtml(html) : undefined,
+    generateBundle() {
+      if (!dev) return
+      for (const [name, content] of Object.entries(devFiles())) {
+        this.emitFile({ type: 'asset', fileName: name, source: content })
+      }
+    },
+  }
+}
 
 /** Emits dist/sw.js with the list of every built file (installable PWA). */
 function serviceWorker(): Plugin {
@@ -26,7 +49,7 @@ function serviceWorker(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte(), serviceWorker()],
+  plugins: [svelte(), devBranding(), serviceWorker()],
   test: {
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
     environment: 'node',

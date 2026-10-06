@@ -299,6 +299,7 @@
     <span class="brand-suits" aria-hidden="true">♠<i>♥</i></span>
     <span class="brand-name">{$t.title}</span>
   </div>
+  {#if DEV}<span class="room-chip dev">DEV</span>{/if}
   {#if session && session.code !== SOLO_CODE}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
   {#if DEV}
