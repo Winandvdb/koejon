@@ -1,10 +1,11 @@
 ---
 id: task-2
 title: Randomize card order within each trick pile
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-09-30 19:43'
-updated_date: '2026-10-05 08:32'
+updated_date: '2026-10-06 08:49'
 labels: []
 dependencies:
   - task-1
