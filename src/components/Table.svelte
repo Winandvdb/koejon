@@ -383,16 +383,15 @@
              On the first deal the sort question comes first: it holds
              back the bid buttons until the player has chosen. -->
         {#if askSort}
-          <div class="panel overlay-panel sort-ask" in:scale={{ duration: 200 }}>
-            <span>{$t.sortAsk}</span>
-            <div class="segmented" role="group" aria-label={$t.sortHand}>
-              {#each SORT_MODES as m (m)}
-                <button
-                  title={m === 'manual' ? $t.sortManualHint : undefined}
-                  onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button
-                >
-              {/each}
-            </div>
+          <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.sortAsk}</span>
+          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+            {#each SORT_MODES as m (m)}
+              <button
+                class="fab"
+                title={m === 'manual' ? $t.sortManualHint : undefined}
+                onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button
+              >
+            {/each}
           </div>
         {:else if has('chooseDealer')}
           <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.chooseDealer}</span>

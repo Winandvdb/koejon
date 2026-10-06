@@ -1520,15 +1520,6 @@ button.tag {
   transform: translateY(-14px);
 }
 
-.sort-ask {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
 .my-turn .hand-card.playable .card-face {
   box-shadow:
     0 0 0 2px var(--gold),
