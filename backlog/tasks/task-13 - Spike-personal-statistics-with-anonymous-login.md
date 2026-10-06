@@ -5,7 +5,7 @@ status: Done
 assignee:
   - '@Winandvdb'
 created_date: '2026-10-05 07:15'
-updated_date: '2026-10-06 09:07'
+updated_date: '2026-10-06 09:18'
 labels:
   - spike
 dependencies: []
@@ -37,5 +37,5 @@ Find out if we can track per-player statistics (games played, games won, bids ma
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Write-up in backlog/docs/doc-1 (Spike: personal statistics with anonymous login). Identity lasts as long as browser storage of one origin; Safari drops it after 7 days without a visit; other devices/browsers get a new uid. Cost: 1 write per human per match, ~4% of the free write quota at 200 matches/day. Recommendation: build on the anonymous uid, label as 'on this device', keep anonymous auto clean-up off, make account linking a follow-up. No code changes. Check by hand: Firebase console setting for anonymous automatic clean-up.
+Write-up in backlog/docs/doc-1 (Spike: personal statistics with anonymous login). The anonymous uid and localStorage live in the same browser storage and are lost in the same cases (cleared data, other browser/device, Safari 7-day cap). Anonymous auto clean-up (Identity Platform) deletes uids 30 days after creation. Installed PWA: iOS keeps its own storage separate from Safari; Android/desktop share it with the browser. Recommendation: keep stats in localStorage (zero Firestore cost), label 'on this device', call navigator.storage.persist(); Firestore only together with a real account (follow-up). No code changes. Check by hand: Firebase console setting for anonymous automatic clean-up.
 <!-- SECTION:NOTES:END -->
