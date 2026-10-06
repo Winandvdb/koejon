@@ -127,6 +127,10 @@
       arrangeHand(view.hand, $sortMode, manual.hand === pub.handNumber ? manual.order : []),
   )
   const manualSort = $derived($sortMode === 'manual')
+  /** Ask once, after the dealer is chosen and the cards are in the hand. */
+  const askSort = $derived(
+    $sortMode === null && !!view.hand?.length && (biddingPhase || pub.phase === 'PLAYING'),
+  )
   const canPlay = (c: Card) => pub.phase === 'PLAYING' && legalPlays.has(cardKey(c))
 
   /** Pointer drag (mouse and touch) to reorder in manual mode. Only a move
@@ -375,8 +379,22 @@
           </div>
         {/if}
 
-        <!-- Action buttons float on the felt, raised like table buttons. -->
-        {#if has('chooseDealer')}
+        <!-- Action buttons float on the felt, raised like table buttons.
+             On the first deal the sort question comes first: it holds
+             back the bid buttons until the player has chosen. -->
+        {#if askSort}
+          <div class="panel overlay-panel sort-ask" in:scale={{ duration: 200 }}>
+            <span>{$t.sortAsk}</span>
+            <div class="segmented" role="group" aria-label={$t.sortHand}>
+              {#each SORT_MODES as m (m)}
+                <button
+                  title={m === 'manual' ? $t.sortManualHint : undefined}
+                  onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button
+                >
+              {/each}
+            </div>
+          </div>
+        {:else if has('chooseDealer')}
           <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.chooseDealer}</span>
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
             {#each [0, 1, 2, 3] as d (d)}
@@ -450,20 +468,6 @@
 
     <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
       {#if dealerBlind}<div class="blind-hint">{$t.handHidden}</div>{/if}
-      {#if $sortMode === null && view.hand !== null}
-        <!-- First deal: ask once how to sort; settings can change it later. -->
-        <div class="panel sort-ask" in:scale={{ duration: 200 }}>
-          <span>{$t.sortAsk}</span>
-          <div class="segmented" role="group" aria-label={$t.sortHand}>
-            {#each SORT_MODES as m (m)}
-              <button
-                title={m === 'manual' ? $t.sortManualHint : undefined}
-                onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button
-              >
-            {/each}
-          </div>
-        </div>
-      {/if}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="my-hand"
