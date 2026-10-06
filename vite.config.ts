@@ -7,13 +7,13 @@ import { devFiles, devIndexHtml } from './pwa/devbrand.ts'
 import { swSource } from './pwa/precache.ts'
 
 /**
- * Dev channel builds (VITE_SHOW_USAGE=true, set by the develop deploy
- * workflow) get their own manifest, name and icons so an installed dev app
+ * Dev builds (VITE_APP_VARIANT=dev: the dev channel and previews of PRs into
+ * develop) get their own manifest, name and icons so an installed dev app
  * stands apart from the live one. Runs before serviceWorker so the emitted
  * files land in the precache list.
  */
 function devBranding(): Plugin {
-  const dev = process.env.VITE_SHOW_USAGE === 'true'
+  const dev = process.env.VITE_APP_VARIANT === 'dev'
   return {
     name: 'koejon-dev-brand',
     apply: 'build',

@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@Winandvdb'
 created_date: '2026-10-06 07:25'
-updated_date: '2026-10-06 07:29'
+updated_date: '2026-10-06 07:40'
 labels:
   - pwa
 dependencies: []
@@ -41,5 +41,5 @@ Make the dev build distinguishable: a different app name and icon in the manifes
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
-Dev builds (VITE_SHOW_USAGE=true, already set job-wide in the develop deploy workflow) emit pwa/dev/ icons + manifest-dev.webmanifest and rewrite index.html (manifest link, icons, title, theme color, apple-mobile-web-app-title) via a new devBranding plugin in vite.config.ts; pure logic lives in pwa/devbrand.ts. A "DEV" chip shows in the top bar on dev builds (same flag as the usage counter). manifest-dev.webmanifest added to the no-cache header in firebase.json. Verified: VITE_SHOW_USAGE=true vite build produces dist/manifest-dev.webmanifest (name "Koejonnen DEV", amber theme, dev icons) and transformed index.html; dev files are in the sw precache list; a plain build is unchanged. Manual check: install both the dev channel app and the live app on a phone and confirm different icon + name on the home screen.
+Dev builds are selected by VITE_APP_VARIANT=dev: set job-wide in the develop deploy workflow, and in the PR preview workflow for PRs into develop (PRs into main get prod). Local vite dev server also counts via import.meta.env.DEV. The devBranding plugin in vite.config.ts emits pwa/dev/ icons + manifest-dev.webmanifest and rewrites index.html (manifest link, icons, title, theme color, apple-mobile-web-app-title); pure logic in pwa/devbrand.ts. A "DEV" chip + the Firestore usage counter show in the top bar on dev builds (App.svelte DEV flag, was VITE_SHOW_USAGE). manifest-dev.webmanifest added to the no-cache header in firebase.json. Verified: VITE_APP_VARIANT=dev vite build produces dist/manifest-dev.webmanifest (name "Koejonnen DEV", amber theme, dev icons) and transformed index.html; dev files are in the sw precache list; a plain build is unchanged. Manual check: install both the dev channel app and the live app on a phone and confirm different icon + name on the home screen.
 <!-- SECTION:NOTES:END -->

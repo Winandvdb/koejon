@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 
 /**
- * Dev channel branding: a build with VITE_SHOW_USAGE=true (the develop
- * deploy workflow sets it job-wide) swaps the app name and icons so an
- * installed dev app stands apart from the live one.
+ * Dev build branding: a build with VITE_APP_VARIANT=dev (the dev channel and
+ * previews of PRs into develop) swaps the app name and icons so an installed
+ * dev app stands apart from the live one.
  */
 
 /** Splash/status-bar colour of the dev build (amber, live is #1d6b45). */
