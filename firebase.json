@@ -26,7 +26,7 @@
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
       {
-        "source": "/@(sw.js|manifest.webmanifest)",
+        "source": "/@(sw.js|manifest.webmanifest|manifest-dev.webmanifest)",
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
       {

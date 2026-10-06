@@ -12,6 +12,11 @@ jobs:
     name: Test, then deploy a preview channel
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    env:
+      # Previews of PRs into main get the prod build; everything else (PRs
+      # into develop) gets the dev build. Job-wide so the firebase.json
+      # predeploy rebuild in the deploy step sees it too.
+      VITE_APP_VARIANT: ${{ github.event.pull_request.base.ref == 'main' && 'prod' || 'dev' }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
