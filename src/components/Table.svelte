@@ -61,7 +61,6 @@
   const biddingPhase = $derived(
     pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
   )
-  const dealerBlind = $derived(biddingPhase && my === pub.dealer)
   /** The turned cards sit at the dealer's seat while bidding runs, and until
    *  all seats confirmed them at play start. */
   const showTurned = $derived(
@@ -426,7 +425,6 @@
     </div>
 
     <div class="my-hand-wrap" class:my-turn={myTurn && pub.phase === 'PLAYING'}>
-      {#if dealerBlind}<div class="blind-hint">{$t.handHidden}</div>{/if}
       <div class="my-hand">
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}

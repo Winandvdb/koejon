@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@Winandvdb'
 created_date: '2026-10-05 07:14'
-updated_date: '2026-10-06 06:50'
+updated_date: '2026-10-06 07:22'
 labels:
   - ui
 dependencies: []
@@ -41,4 +41,6 @@ Small visual issues on the table screen from player feedback.
 
 <!-- SECTION:NOTES:BEGIN -->
 Changed: new --cta/--cta-contrast tokens (light + dark) in app.css; .fab.primary now uses them so Ik ga/Gezien/next-hand/new-match share one colour that contrasts the felt. Table.svelte: troefke bubble now shows on pub.bidder (engine sets turn=(bidder+2)%4). i18n troefWanted: nl 'Troefke', en 'Trump!'. wait-hint gets class 'lifted' (+96px margin) when any bubble shows on my nameplate. Verified: npm test (113 pass), npm run build (svelte-check 0 errors). Check by hand: button colour stands out on the felt in both themes; wait-hint clears quote bubbles; troefke bubble rides on the bidder.
+
+Extra fix (player feedback): nameplate bubbles are now one .bubbles flex stack instead of fixed slots — a quote bubble drops next to the nameplate when no bid/troefke bubble is present. Only the lowest bubble keeps a tail; side-seat phone anchoring moved to the stack.
 <!-- SECTION:NOTES:END -->
