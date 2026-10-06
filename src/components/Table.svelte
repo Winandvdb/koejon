@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
   import { fly, scale } from 'svelte/transition'
   import type { Action, Card } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
-  import { activeQuotes, hurryQuote } from '../lib/quotes'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
   import CardView from './CardView.svelte'
@@ -176,9 +174,10 @@
     rot: Math.random() * 360,
   }))
 
-  /** Short-lived table talk, one bubble per seat. */
+  /** Short-lived table talk, one bubble per seat. The host picks the quotes;
+   *  `room.quotes` makes every client show the same line at the same moment. */
   let sayings = $state<Record<number, { key: string; text: string }>>({})
-  const firedQuotes = new Set<string>()
+  const firedQuotes = new Set<number>()
   const say = (seat: number, key: string, text: string) => {
     sayings = { ...sayings, [seat]: { key, text } }
     setTimeout(() => {
@@ -189,10 +188,13 @@
     }, 4000)
   }
   $effect(() => {
-    for (const q of activeQuotes(pub)) {
-      if (firedQuotes.has(q.key)) continue
-      firedQuotes.add(q.key)
-      say(q.seat, q.key, q.text)
+    const now = Date.now()
+    for (const q of room.quotes ?? []) {
+      if (firedQuotes.has(q.n)) continue
+      firedQuotes.add(q.n)
+      // A joining or reloading client may see old entries: skip them.
+      if (now - q.at > 30_000) continue
+      say(q.seat, `q${q.n}`, q.text)
     }
   })
 
@@ -202,27 +204,6 @@
       (showBids && lastBid.has(my)) ||
       (pub.troefkeAsked && my === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0),
   )
-
-  /** Nag a seat that keeps the table waiting: one pending actor for > 9 s. */
-  let waitSeat = -1
-  let waitTimer: ReturnType<typeof setTimeout> | null = null
-  let waitN = 0
-  $effect(() => {
-    const pending = pub.actionSeats.length === 1 ? pub.actionSeats[0] : -1
-    if (pending === waitSeat) return
-    waitSeat = pending
-    if (waitTimer) clearTimeout(waitTimer)
-    waitTimer = null
-    if (pending < 0) return
-    waitTimer = setTimeout(() => {
-      waitTimer = null
-      const q = hurryQuote(pending)
-      say(q.seat, `w${waitN++}`, q.text)
-    }, 9000)
-  })
-  onDestroy(() => {
-    if (waitTimer) clearTimeout(waitTimer)
-  })
 
   $effect(() => {
     document.title = myTurn ? `● ${$t.yourTurn} — ${$t.title}` : $t.title

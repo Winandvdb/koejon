@@ -36,7 +36,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/link-p2p.ts` | Multiplayer over WebRTC. Firestore only for lobby and signaling. | |
 | `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
 | `src/lib/fs.ts`, `firebase.ts` | Firestore wrapper (counts reads and writes), Firebase init, emulator auto-connect. | |
-| `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives quotes from public state. | Quotes stay in Flemish dialect. Pick speaker and line with the deterministic `hash`, so all clients agree. |
+| `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
