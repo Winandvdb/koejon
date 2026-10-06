@@ -208,11 +208,13 @@
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
     {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
-    {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
-    {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
-    {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
-      <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
-    {/if}
+    <div class="bubbles" class:has-say={!!sayings[seat]}>
+      {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
+      {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
+        <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
+      {/if}
+      {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
+    </div>
     {#if isHost && s && !s.bot && seat !== my}
       <button
         class="icon-btn tiny kick"
