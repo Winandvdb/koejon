@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { toPublic } from '../src/engine'
 import type { BoomkeMark, HandResult, TrickCard } from '../src/engine'
-import { activeQuotes, hurryQuote, QUOTES } from '../src/lib/quotes'
+import { activeQuotes, hurryQuote, QUOTES, QUOTE_SEAT_GAP_MS, QuoteBook } from '../src/lib/quotes'
 import { C, playingState } from './helpers'
 
 const TRICK: TrickCard[] = [
@@ -536,7 +536,113 @@ describe('table quotes', () => {
 
   it('hurryQuote picks a bystander and a nag line', () => {
     const q = hurryQuote(0)
-    expect(q.seat).not.toBe(0)
-    expect(QUOTES.hurry).toContain(q.text)
+    expect(q!.seat).not.toBe(0)
+    expect(QUOTES.hurry).toContain(q!.text)
+  })
+})
+
+describe('quote book', () => {
+  // PLAYING just started: the "Ik ga" comment is the only candidate.
+  const called = toPublic(playingState({ bidder: 2 }))
+
+  it('a met condition fires only when the roll passes', () => {
+    const book = new QuoteBook()
+    expect(book.pick(called, 1_000, () => 0.99)).toBeNull()
+    const q = book.pick(called, 2_000, () => 0)
+    expect(q).not.toBeNull()
+    expect(q!.seat).toBe(2)
+    expect(QUOTES.play).toContain(q!.text)
+    expect(q!.n).toBe(1)
+    expect(q!.at).toBe(2_000)
+  })
+
+  it('a line is spoken at most once per match, whichever seat would say it', () => {
+    const book = new QuoteBook()
+    const first = book.pick(
+      toPublic(
+        playingState({
+          trump: 'H',
+          tricksPlayed: 1,
+          trick: [
+            { seat: 0, card: C('S', 'K') },
+            { seat: 2, card: C('D', '9') }, // seat 2 cannot follow
+          ],
+        }),
+      ),
+      1_000,
+      () => 0,
+    )
+    expect(first!.text).toBe(QUOTES.forgot[0])
+
+    // Same line, would-be speaker is seat 3 this time: still blocked.
+    const again = book.pick(
+      toPublic(
+        playingState({
+          trump: 'H',
+          tricksPlayed: 1,
+          trick: [
+            { seat: 0, card: C('S', 'K') },
+            { seat: 3, card: C('D', '9') }, // seat 3 cannot follow
+          ],
+        }),
+      ),
+      2_000,
+      () => 0,
+    )
+    expect(again).toBeNull()
+  })
+
+  it('a seat stays quiet for a minute after speaking', () => {
+    const book = new QuoteBook()
+    book.pick(called, 1_000, () => 0) // seat 2 speaks
+
+    // Seat 2 leads low right after: too soon for another line.
+    const low2 = toPublic(
+      playingState({ bidder: 1, trump: 'H', trick: [{ seat: 2, card: C('S', '10') }] }),
+    )
+    expect(book.pick(low2, 30_000, () => 0)).toBeNull()
+    const later = book.pick(low2, 1_000 + QUOTE_SEAT_GAP_MS, () => 0)
+    expect(later!.seat).toBe(2)
+    expect(later!.text).toBe(QUOTES.herman[0])
+
+    // Another seat was never on cooldown: it may speak whenever.
+    const void0 = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 1,
+        trick: [
+          { seat: 1, card: C('H', 'A') },
+          { seat: 0, card: C('S', '9') }, // seat 0 is out of trump
+        ],
+      }),
+    )
+    expect(book.pick(void0, 5_000, () => 0)!.seat).toBe(0)
+  })
+
+  it('hurry lines may repeat — they never enter the once-per-match list', () => {
+    const book = new QuoteBook()
+    const a = book.hurry(0, 1_000, () => 0)
+    expect(a).not.toBeNull()
+    expect(QUOTES.hurry).toContain(a!.text)
+    const b = book.hurry(0, 1_000 + QUOTE_SEAT_GAP_MS, () => 0)
+    expect(b).not.toBeNull()
+    expect(b!.n).toBe(2)
+  })
+
+  it('a nag skips bystanders still on cooldown', () => {
+    const book = new QuoteBook()
+    expect(book.hurry(0, 1_000, () => 0)!.seat).toBe(1)
+    expect(book.hurry(0, 31_000, () => 0)!.seat).toBe(2) // seat 1 cooling down
+    expect(book.hurry(0, 46_000, () => 0)!.seat).toBe(3) // seats 1+2 cooling down
+    // All bystanders spoke within the minute: nobody left to nag.
+    expect(book.hurry(0, 50_000, () => 0)).toBeNull()
+  })
+
+  it('bookkeeping survives a storage round trip', () => {
+    const book = new QuoteBook()
+    book.pick(called, 1_000, () => 0)
+    const back = QuoteBook.fromJSON(JSON.parse(JSON.stringify(book)))
+    // The 'play' line was already said: the same state stays quiet.
+    expect(back.pick(called, 2_000, () => 0)).toBeNull()
   })
 })

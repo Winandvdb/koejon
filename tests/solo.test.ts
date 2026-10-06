@@ -2,7 +2,8 @@ import { get } from 'svelte/store'
 import { describe, expect, test } from 'vitest'
 import { usage } from '../src/lib/fs'
 import { botAction } from '../src/bots/bot'
-import { HostGame } from '../src/lib/host'
+import { HostGame, type HostOptions } from '../src/lib/host'
+import { QUOTES } from '../src/lib/quotes'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 
@@ -24,7 +25,12 @@ function memoryStore(): KeyValueStore {
   }
 }
 
-async function open(storage: KeyValueStore, fresh: boolean) {
+async function open(
+  storage: KeyValueStore,
+  fresh: boolean,
+  hostOpts: HostOptions = {},
+  drive = true,
+) {
   const links = localLinks(UID, storage, fresh ? newRoomDoc(SOLO_CODE, UID, 'Me') : undefined)!
   const session = new RoomSession(SOLO_CODE, UID, links.guest, links.host)
   const host = await HostGame.attach(SOLO_CODE, UID, links.host, {
@@ -32,6 +38,7 @@ async function open(storage: KeyValueStore, fresh: boolean) {
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,
+    ...hostOpts,
   })
   host.onError = (e) => {
     throw e
@@ -42,7 +49,7 @@ async function open(storage: KeyValueStore, fresh: boolean) {
     latest = v
     const pub = v.room?.pub
     if (!pub || !v.state || pub.phase === 'LOBBY' || pub.phase === 'GAME_OVER') return
-    if (pub.actionSeats.includes(v.mySeat)) host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat) }))
+    if (drive && pub.actionSeats.includes(v.mySeat)) host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat) }))
   })
   const close = () => {
     unsub()
@@ -86,4 +93,34 @@ describe('offline solo', () => {
     // A whole solo match, reload included, never touched Firestore.
     expect(get(usage)).toEqual({ reads: 0, writes: 0 })
   }, 60_000)
+
+  test('fired quotes ride on the room doc, so every client sees the same', async () => {
+    const g = await open(memoryStore(), true, { quoteRand: () => 0 })
+    g.host.addBot(1)
+    g.host.addBot(2)
+    g.host.addBot(3)
+    g.host.startGame()
+    // With the roll pinned at 0 the first met condition fires at once.
+    await until(() => (g.view()?.room?.quotes?.length ?? 0) > 0)
+    const q = g.view()!.room!.quotes!.at(-1)!
+    expect(q.n).toBeGreaterThan(0)
+    expect(q.seat).toBeGreaterThanOrEqual(0)
+    expect(q.at).toBeGreaterThan(0)
+    await g.host.destroyRoom()
+    g.close()
+  }, 30_000)
+
+  test('a stalled seat gets nagged through the room doc', async () => {
+    // drive=false: our seat never acts, so the table stalls on it.
+    const g = await open(memoryStore(), true, { quoteRand: () => 0, hurryMs: 50 }, false)
+    g.host.addBot(1)
+    g.host.addBot(2)
+    g.host.addBot(3)
+    g.host.startGame()
+    await until(
+      () => (g.view()?.room?.quotes ?? []).some((q) => QUOTES.hurry.includes(q.text)),
+    )
+    await g.host.destroyRoom()
+    g.close()
+  }, 30_000)
 })
