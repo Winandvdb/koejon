@@ -13,11 +13,12 @@ concurrency: preview-cleanup
 jobs:
   delete_preview_channels:
     runs-on: ubuntu-latest
-    env:
-      GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Delete preview channels whose PR is not open
+        # Step-level env: the runner context does not exist at job level.
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_KOEJON_3059E }}' > "$GOOGLE_APPLICATION_CREDENTIALS"
           fb="npx -y firebase-tools@15 --project koejon-3059e"
