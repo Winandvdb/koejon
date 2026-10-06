@@ -34,6 +34,11 @@ environment deviations. Each entry lists the chosen behavior.
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
 - **20–20** — a draw: no lines erased, no Koei, and the next deal's level-1 stake
   doubles (playing team needs >20; defenders win at ≤19).
+- **Deck between hands** — no reshuffle. Each won trick goes on its team's pile in
+  play order. For the next deal, team 0's pile is put on top of team 1's pile, then
+  the deck is cut once: the engine lifts 4..20 cards from the top and puts them under.
+  After an all-passed deal the hands are thrown in as they are (seat 0 first). Only
+  the first deal of a match uses a fresh shuffle.
 - **Dealing is automatic** — no deal prompt: the `DEALING` phase announces the dealer
   for ~3 s, then the host issues the deal itself (after the draw, after scoring and
   after all-passed hands).

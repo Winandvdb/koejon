@@ -127,6 +127,7 @@ export function clientState(
     troefkeAsked: pub.troefkeAsked,
     tricksPlayed: pub.tricksPlayed,
     tricksWon: pub.tricksWon,
+    piles: [[], []],
     points: pub.points,
     lines: pub.lines,
     marks: pub.marks,

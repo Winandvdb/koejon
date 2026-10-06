@@ -52,6 +52,7 @@ export function playingState(over: Partial<State> = {}): State {
     troefkeAsked: false,
     tricksPlayed: 0,
     tricksWon: [0, 0],
+    piles: [[], []],
     points: [0, 0],
     lines,
     marks,

@@ -29,7 +29,7 @@
 
 ## Delen
 
-- De rechterbuur van de deler pakt de kaarten af. (Online: de stapel wordt geschud.)
+- De rechterbuur van de deler pakt de kaarten af. (Online: de stapel wordt alleen voor het eerste delen geschud. Daarna worden de slagen op elkaar gelegd en is het afpakken willekeurig.)
 - De deler deelt met de klok mee, in beurten van 2 kaarten. Elke speler krijgt 6 kaarten.
 - De laatste 2 kaarten van de deler blijven apart liggen: de voorlaatste gedekt, de laatste
   open. De open kaart stelt de troefkleur voor.

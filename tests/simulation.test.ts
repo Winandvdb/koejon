@@ -42,6 +42,10 @@ function runMatch(seed: number): { state: State; steps: number; hands: number } 
     }
     s = apply(s, a)
 
+    // Deal invariant: the deck rebuilt from the trick piles is still all 24 cards.
+    if (a.type === 'deal') {
+      expect(new Set(s.hands.flat().map((c) => c.s + c.r)).size, `deal in match ${seed}`).toBe(24)
+    }
     // Per-trick invariant: the recorded winner really won the trick.
     if (s.lastTrick && s.lastTrick.length === 4 && s.tricksPlayed !== lastTrickSeen) {
       lastTrickSeen = s.tricksPlayed
