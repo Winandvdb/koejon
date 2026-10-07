@@ -78,13 +78,30 @@ A player who uses two devices, or Safari and the iOS app, has two stat sets.
 Keep the statistics in `localStorage`, in the style of `src/lib/prefs.ts`:
 
 ```
-localStorage['koejon-stats'] = { played, won, bidsMade, bidsWon }
+localStorage['koejon-stats'] = { played, won, score, triples, doubles, bidsMade, bidsWon }
 ```
 
+The statistics, per player. A team value counts for both players of the team.
+
+| Statistic | Rule |
+|---|---|
+| Games played, games won | |
+| Total score | Per game: the winning team gets 13. The losing team gets the meetjes it crossed minus its koeien, minimum 0. That is `max(0, 13 − lines left)`. |
+| Triple crosses | Hands in which the own team crossed 3 lines: doubled first card + kapot, or second card + kapot. |
+| Double crosses | Hands in which the own team crossed 2 lines: first card at a doubled stake, second card, or first card + kapot. |
+| Bids made, bids won | Hands in which the player said "ik ga" or chose trump as dealer, and of those the hands that the own team won. |
+
+A hand crosses at most 3 lines: the stake only doubles on the first card, and only to ×2.
+The engine can still go higher after a 20-20 draw at a doubled stake; task-17 fixes that.
+
+Score, triple crosses and double crosses are also the tournament ranking (after games won):
+5 games, ranked by games won, total score, triple crosses, double crosses.
+
 - **Where the numbers come from:** the engine already knows `bidder` and
-  `lastResult` (`playingTeam`, `winnerTeam`) per hand, and `winner` per match. Add
-  per-seat counters to the engine state (bids made, bids won). They go into `pub`,
-  so a guest that reloads mid-match still has correct numbers.
+  `lastResult` (`playingTeam`, `winnerTeam`, `erased`) per hand, `lines` per team,
+  and `winner` per match. Add per-team cross counters and per-seat bid counters to
+  the engine state. They go into `pub`, so a guest that reloads mid-match still has
+  correct numbers.
 - **When to write:** once per match, when the client sees `GAME_OVER`. Store the
   match seed (or room code + match number) with it, so a reload on the end screen
   does not count the same match twice. An abandoned match does not count.
@@ -173,6 +190,11 @@ This is several times the work of the statistics feature itself.
 - Make account linking a separate follow-up task. Do it only when players ask
   for statistics across devices, or for statistics that other players can see.
   Then upload the local numbers once to `players/{uid}`.
+
+## 7. Follow-up tasks
+
+- task-24 (issue #57): Personal statistics on this device. Depends on task-17.
+- task-25 (issue #58): Tournament mode: 5 games and a final ranking. Depends on task-24.
 
 ## Sources
 
