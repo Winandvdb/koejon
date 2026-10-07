@@ -120,12 +120,14 @@ git check-ignore -q .worktrees/x || echo "NOT IGNORED"
 If this prints `NOT IGNORED`, add the line `.worktrees/` to `<REPO>/.gitignore` before you continue. Do not commit that change in `<REPO>`. Tell the user about it in step 10.
 
 ```bash
+git fetch origin
 git worktree add --no-track -b <BRANCH> <WT> origin/develop
 cd <WT>
 git push -u origin <BRANCH>
 npm ci
 ```
 
+Fetch again here, even if step 1 fetched: a run that stopped and resumed would branch from an old `develop`.
 `--no-track` is required: the branch must not track `origin/develop`.
 The push makes the branch visible to other sessions (see the step 2 check).
 
@@ -211,10 +213,24 @@ Look at the list. Add only files that belong to this issue. Never add `.env.loca
 ```bash
 git add <files>
 git commit -m "<short imperative summary>" -m "Closes #<N>"
-git push
 ```
 
 Add the attribution trailer that your harness gives you, if any, to the commit message.
+
+`develop` may have moved while you worked. Merge it in before you push:
+
+```bash
+git fetch origin
+git merge origin/develop
+```
+
+- Conflicts: resolve each file so it keeps the change from `develop` AND your change. Then run the checkout check, `git add` the resolved files and `git commit --no-edit`.
+- If the merge brought in new commits, run `npm test` and `npm run build` again. A failure counts as a failed check in the flag table below.
+- Never rebase or force-push: the branch is already on `origin`.
+
+```bash
+git push
+```
 
 Write the PR body to a file:
 
