@@ -16,7 +16,7 @@ export interface PublicState {
   phase: Phase
   handNumber: number
   dealer: number
-  dealerDraw: DealerDraw | null
+  dealerDraw: Omit<DealerDraw, 'deck'> | null
   turned: { first: Card; second: Card | null; secondUp: boolean } | null
   trump: Suit | null
   level: 0 | 1 | 2
@@ -44,11 +44,13 @@ export interface PublicState {
 }
 
 export function toPublic(s: State): PublicState {
+  // The draw deck stays on the host: it would reveal the cards still to lift.
+  const dealerDraw = s.dealerDraw && (({ deck: _, ...rest }: DealerDraw) => rest)(s.dealerDraw)
   return {
     phase: s.phase,
     handNumber: s.handNumber,
     dealer: s.dealer,
-    dealerDraw: s.dealerDraw,
+    dealerDraw,
     turned: s.turned
       ? {
           first: s.turned.first,
@@ -82,6 +84,17 @@ export function toPublic(s: State): PublicState {
   }
 }
 
+/** The turned cards sit at the dealer's seat while bidding runs, and until
+ *  the first card of the hand falls — not only until all four confirmed:
+ *  the first leader is auto-confirmed and bots confirm at once, so a human
+ *  leader would otherwise never get to see the second card. */
+export function turnedVisible(pub: PublicState): boolean {
+  if (pub.turned === null) return false
+  if (pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE')
+    return true
+  return pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0
+}
+
 const PLACEHOLDER: Card = { s: 'S', r: '9' }
 
 /**
@@ -104,7 +117,7 @@ export function clientState(
     seed: 0,
     handNumber: pub.handNumber,
     dealer: pub.dealer,
-    dealerDraw: pub.dealerDraw ? { ...pub.dealerDraw, packetA: null } : null,
+    dealerDraw: pub.dealerDraw ? { ...pub.dealerDraw, deck: null } : null,
     hands,
     turned: pub.turned
       ? {

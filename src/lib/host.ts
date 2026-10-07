@@ -448,15 +448,14 @@ export class HostGame {
 
   // ---- bots ----
 
-  /** Seat the host should act for: any bot, plus automatic steps for anyone —
-   *  the packet draws and the deal itself. Picking the dealer stays a real choice,
-   *  and a scored hand stays up until a human clicks "next hand". */
+  /** Seat the host should act for: any bot, plus the deal itself for anyone.
+   *  Lifting a packet and picking the dealer stay real choices, and a scored
+   *  hand stays up until a human clicks "next hand". */
   private autoSeat(): number | undefined {
     if (this.state.phase === 'SCORED') return undefined
     const pend = pendingSeats(this.state)
     const bot = pend.find((i) => this.seats[i]?.bot)
     if (bot !== undefined) return bot
-    if (this.state.phase === 'DEALER_DRAW' && this.state.dealerDraw?.pending !== 2) return pend[0]
     if (this.state.phase === 'DEALING') return pend[0]
     return undefined
   }

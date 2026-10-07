@@ -50,7 +50,7 @@ describe('scoring', () => {
     expect(s2.koeien).toEqual([0, 0])
     expect(s2.multiplier).toBe(2) // carried into the next hand
     const s3 = apply(s2, { type: 'next', seat: 0 })
-    expect(s3.phase).toBe('DEALING')
+    expect(s3.phase).toBe('CUTTING')
     expect(s3.multiplier).toBe(2)
   })
 

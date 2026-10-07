@@ -1,5 +1,5 @@
 import { fullDeck, RANK_ORDER, sameCard, trickPoints, trickWinnerIndex } from './cards'
-import { rngRange, rngShuffle } from './rng'
+import { rngShuffle } from './rng'
 import type { Action, BoomkeMark, Card, State, Suit } from './types'
 import { START_LINES } from './types'
 
@@ -17,6 +17,25 @@ export class IllegalActionError extends Error {
 
 const teamOf = (seat: number) => seat % 2
 const leftOf = (seat: number) => (seat + 1) % 4
+/** The dealer's right neighbour cuts. */
+export const cutterOf = (dealer: number) => (dealer + 3) % 4
+
+/** Packet sizes `seat` may lift right now (dealer draw or cut); empty when none. */
+export function liftRange(s: State, seat: number): number[] {
+  let max = 0
+  if (s.phase === 'DEALER_DRAW') {
+    const dd = s.dealerDraw!
+    if (dd.pending === 2 || seat !== dd.drawer[dd.pending]) return []
+    // Team A leaves at least 8, so team B still has 4 to lift and 4 to leave.
+    max = dd.pending === 0 ? 24 - 8 : 24 - dd.packetA! - 4
+  } else if (s.phase === 'CUTTING') {
+    if (seat !== cutterOf(s.dealer)) return []
+    max = 24 - 4
+  }
+  const out: number[] = []
+  for (let n = 4; n <= max; n++) out.push(n)
+  return out
+}
 
 /**
  * Create a fresh match in phase LOBBY.
@@ -34,6 +53,7 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
       drawer: drawers ?? [0, 1],
       draws: [],
       packetA: null,
+      deck: null,
       pending: 0,
       winnerSeat: null,
     },
@@ -79,6 +99,8 @@ export function pendingSeats(s: State): number[] {
       if (dd.pending === 2) return [dd.winnerSeat!]
       return [dd.drawer[dd.pending]]
     }
+    case 'CUTTING':
+      return [cutterOf(s.dealer)]
     case 'DEALING':
       return [s.dealer]
     case 'BIDDING_R1':
@@ -143,11 +165,14 @@ export function legalActions(s: State, seat: number): Action[] {
         if (seat === dd.winnerSeat) {
           for (let d = 0; d < 4; d++) out.push({ type: 'chooseDealer', seat, dealer: d })
         }
-      } else if (seat === dd.drawer[dd.pending]) {
-        out.push({ type: 'draw', seat })
+      } else {
+        for (const n of liftRange(s, seat)) out.push({ type: 'draw', seat, n })
       }
       break
     }
+    case 'CUTTING':
+      for (const n of liftRange(s, seat)) out.push({ type: 'cut', seat, n })
+      break
     case 'DEALING':
       if (seat === s.dealer) out.push({ type: 'deal', seat })
       break
@@ -197,21 +222,29 @@ function actionIsLegal(s: State, a: Action): boolean {
     if (a.type === 'bid' && la.type === 'bid') return la.play === a.play
     if (a.type === 'choose' && la.type === 'choose') return la.suit === a.suit
     if (a.type === 'play' && la.type === 'play') return sameCard(la.card, a.card)
+    if ((a.type === 'draw' && la.type === 'draw') || (a.type === 'cut' && la.type === 'cut'))
+      return la.n === a.n
     return true
   })
 }
 
 /**
  * The deck is not reshuffled between hands: team 0's trick pile goes on
- * team 1's, then the right neighbour cuts (lifts 4..20 cards, puts them under).
+ * team 1's, then the right neighbour cuts (lifts `n` cards, puts them under).
+ * The cut deck waits on pile 0 for the deal.
  */
-function nextDeck(s: State): Card[] {
-  const stacked = [...s.piles[0], ...s.piles[1]]
-  s.piles = [[], []]
+function cutDeck(s: State, n: number): void {
+  let stacked = [...s.piles[0], ...s.piles[1]]
   // First deal of the match: the cards come fresh out of the box.
-  if (stacked.length !== 24) return rngShuffle(s, fullDeck())
-  const k = rngRange(s, 4, 20)
-  return [...stacked.slice(k), ...stacked.slice(0, k)]
+  if (stacked.length !== 24) stacked = rngShuffle(s, fullDeck())
+  s.piles = [[...stacked.slice(n), ...stacked.slice(0, n)], []]
+}
+
+function nextDeck(s: State): Card[] {
+  const deck = [...s.piles[0], ...s.piles[1]]
+  s.piles = [[], []]
+  // A state saved before the cut existed may reach the deal uncut and empty.
+  return deck.length === 24 ? deck : rngShuffle(s, fullDeck())
 }
 
 function doDeal(s: State): void {
@@ -272,7 +305,7 @@ function allPassed(s: State): void {
   s.trick = []
   s.lastTrick = null
   s.prevTrick = null
-  s.phase = 'DEALING'
+  s.phase = 'CUTTING'
 }
 
 function resolveTrick(s: State): void {
@@ -355,7 +388,7 @@ function scoreHand(s: State): void {
 
 function nextHand(s: State): void {
   s.dealer = leftOf(s.dealer)
-  s.phase = 'DEALING'
+  s.phase = 'CUTTING'
 }
 
 /** Apply a validated action; returns a new state. Throws IllegalActionError. */
@@ -369,34 +402,33 @@ export function apply(state: State, action: Action): State {
   switch (action.type) {
     case 'start':
       s.phase = 'DEALER_DRAW'
+      s.dealerDraw!.deck = rngShuffle(s, fullDeck())
       pushLog(s, { t: 'start' })
       break
     case 'draw': {
       const dd = s.dealerDraw!
-      const deck = rngShuffle(s, fullDeck())
+      // A host may resume a draw saved before the deck was kept.
+      const deck = (dd.deck ??= rngShuffle(s, fullDeck()))
+      // The bottom card of the packet is revealed.
       let card: Card
       if (dd.pending === 0) {
-        // Team A packet: take [4,16] (leave >=8). Bottom card of packet is revealed.
-        const k = rngRange(s, 4, 16)
-        dd.packetA = k
-        card = deck[k - 1]
+        dd.packetA = action.n
+        card = deck[action.n - 1]
         dd.draws = [{ seat: action.seat, card }]
         dd.pending = 1
       } else {
-        // Team B draws from what remains of the same deck: take [4, remaining-4].
-        const kA = dd.packetA!
-        const remaining = 24 - kA
-        const k = rngRange(s, 4, remaining - 4)
-        card = deck[kA + k - 1]
+        // Team B lifts from what team A left of the same deck.
+        card = deck[dd.packetA! + action.n - 1]
         dd.draws.push({ seat: action.seat, card })
       }
-      pushLog(s, { t: 'draw', seat: action.seat, card })
+      pushLog(s, { t: 'draw', seat: action.seat, card, n: action.n })
       if (dd.draws.length === 2) {
         const [a, b] = dd.draws
         if (RANK_ORDER[a.card.r] === RANK_ORDER[b.card.r]) {
           // Tie: both players redraw on a fresh deck.
           dd.draws = []
           dd.packetA = null
+          dd.deck = rngShuffle(s, fullDeck())
           dd.pending = 0
           pushLog(s, { t: 'draw-tie' })
         } else {
@@ -412,6 +444,11 @@ export function apply(state: State, action: Action): State {
       s.dealer = action.dealer
       s.dealerDraw = null
       pushLog(s, { t: 'first-dealer', seat: action.dealer })
+      s.phase = 'CUTTING'
+      break
+    case 'cut':
+      cutDeck(s, action.n)
+      pushLog(s, { t: 'cut', seat: action.seat, n: action.n })
       s.phase = 'DEALING'
       break
     case 'deal':
