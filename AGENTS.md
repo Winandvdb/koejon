@@ -84,6 +84,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body.
 - `develop` is the default branch, so `Closes #<issue>` closes the issue when the PR merges.
 - Older issues start with `Backlog: task-<T>` and can name other work as `task-<T>`. Find that issue with `gh issue list --state all --search '"Backlog: task-<T>" in:body'`.
+- To review a PR, use the `pr-review` skill (`.agents/skills/pr-review/SKILL.md`). It reviews with three hats (General, Security, Performance) and posts one review with inline comments. A high-severity security issue or breaking bug requests changes, or turns your own PR into a draft.
 - A PR with the label `needs manual check` is complete, but a person must still check the UI or network behaviour. A draft PR means that something failed.
 
 ## Keep this file current
