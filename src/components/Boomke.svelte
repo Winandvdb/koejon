@@ -102,15 +102,15 @@
 <div class="boomke-wrap" class:scored={scoring && expanded}>
   {#if expanded}
     <div class="boomke">
-      {#if scoring}
-        <!-- the auto-opened boomke floats away from its corner chip, so it
-             gets its own close button -->
-        <button class="icon-btn tiny boomke-close" onclick={toggle} aria-label={$t.close}>✕</button>
-      {/if}
       <div class="boomke-labels">
         <span>{$t.wij} <b>{remaining(0)}</b></span>
         <span class="boomke-title">{$t.boomke}</span>
         <span>{$t.zij} <b>{remaining(1)}</b></span>
+        {#if scoring}
+          <!-- the auto-opened boomke floats away from its corner chip, so it
+               gets its own close button -->
+          <button class="icon-btn tiny boomke-close" onclick={toggle} aria-label={$t.close}>✕</button>
+        {/if}
       </div>
       <svg width="140" height={H} viewBox="0 0 140 {H}" aria-hidden="true">
     <!-- one shared trunk: just a vertical line -->
