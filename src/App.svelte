@@ -18,6 +18,7 @@
   import { HostGame } from './lib/host'
   import { lang, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
+  import { safeStorage } from './lib/storage'
   import { theme } from './lib/theme'
   import type { Action } from './engine'
   import Home from './components/Home.svelte'
@@ -48,11 +49,7 @@
     try {
       uid = await signIn()
       authed = true
-      try {
-        localStorage.setItem('koejon-uid', uid)
-      } catch {
-        // Only the offline fallback below loses it.
-      }
+      safeStorage.setItem('koejon-uid', uid)
       return true
     } catch {
       return false
@@ -62,29 +59,25 @@
   // Offline start: solo still works. Reuse the last signed-in uid so a solo
   // game saved online resumes offline.
   function offlineUid(): string {
-    try {
-      const saved = localStorage.getItem('koejon-uid')
-      if (saved) return saved
-      const id = `local-${crypto.randomUUID()}`
-      localStorage.setItem('koejon-uid', id)
-      return id
-    } catch {
-      return `local-${crypto.randomUUID()}`
-    }
+    const saved = safeStorage.getItem('koejon-uid')
+    if (saved) return saved
+    const id = `local-${crypto.randomUUID()}`
+    safeStorage.setItem('koejon-uid', id)
+    return id
   }
 
   onMount(async () => {
     if (!(await ensureAuth())) uid = offlineUid()
-    const name = localStorage.getItem('koejon-name') ?? ''
+    const name = safeStorage.getItem('koejon-name') ?? ''
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
     // fallback for a fresh tab.
     const urlCode = new URLSearchParams(location.search).get('room')?.trim().toUpperCase()
-    const code = urlCode || localStorage.getItem('koejon-room')
+    const code = urlCode || safeStorage.getItem('koejon-room')
     try {
       if (code === SOLO_CODE) {
         // Offline solo: resume from this browser's storage, no Firestore.
-        const links = localLinks(uid, localStorage)
+        const links = localLinks(uid, safeStorage)
         if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
         else forgetRoom()
       } else if (code && authed) {
@@ -103,7 +96,7 @@
   // Drop a stale room session: clear the stored code AND the invite URL so
   // the home screen doesn't fall back to a dead join page.
   function forgetRoom() {
-    localStorage.removeItem('koejon-room')
+    safeStorage.removeItem('koejon-room')
     history.replaceState(null, '', appUrl())
   }
 
@@ -118,7 +111,7 @@
       if (v.room) hadRoom = true
     })
     err = ''
-    localStorage.setItem('koejon-room', s.code)
+    safeStorage.setItem('koejon-room', s.code)
     // A solo room has nothing to invite to.
     if (s.code !== SOLO_CODE) history.replaceState(null, '', appUrl(s.code))
     // The host tab's own view is fed by the host, so attach it right away
@@ -128,10 +121,14 @@
       ensureHost().catch((e) => {
         if (session !== s) return
         teardown()
-        const m = (e as Error).message
-        showErr(e, m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : '')
+        showErr(e, hostErrText(e))
       })
     }
+  }
+
+  function hostErrText(e: unknown): string {
+    const m = (e as Error)?.message
+    return m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : ''
   }
 
   // The room doc vanished (host destroyed it): leave cleanly instead of
@@ -154,7 +151,7 @@
     unsubView = null
     // All tabs share localStorage: clear the stored room only if it is ours,
     // never a room another tab is in.
-    if (session && localStorage.getItem('koejon-room') === session.code) localStorage.removeItem('koejon-room')
+    if (session && safeStorage.getItem('koejon-room') === session.code) safeStorage.removeItem('koejon-room')
     session?.dispose()
     host?.dispose()
     session = null
@@ -223,7 +220,7 @@
   async function onSolo(name: string, level: BotLevel) {
     err = ''
     try {
-      const links = localLinks(uid, localStorage, newRoomDoc(SOLO_CODE, uid, name))!
+      const links = localLinks(uid, safeStorage, newRoomDoc(SOLO_CODE, uid, name))!
       // attach() runs teardown() which resets soloStarting — set it after.
       attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
       soloStarting = true
@@ -234,7 +231,8 @@
       h.startGame()
     } catch (e) {
       soloStarting = false
-      showErr(e, '', true)
+      // attach() already showed this failure; do not overwrite it with the raw message.
+      showErr(e, hostErrText(e), true)
     }
   }
 

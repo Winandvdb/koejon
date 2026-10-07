@@ -14,6 +14,7 @@ import { parseKjn, type GameDoc } from '../src/lib/kjn'
 import { handRef, newGameRef, roomRef } from '../src/lib/link-firestore'
 import type { RoomDoc } from '../src/lib/net-types'
 import { createRoom, type SessionView } from '../src/lib/room'
+import { memoryStore, until } from './helpers'
 
 function emulatorUp(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -34,8 +35,6 @@ function emulatorUp(): Promise<boolean> {
   })
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
 /** Number of `games` docs, read past the rules with the emulator's owner token. */
 async function gameCount(): Promise<number> {
   const port = Number(process.env.VITE_EMULATOR_FIRESTORE_PORT || 8180)
@@ -51,14 +50,6 @@ async function denied(p: Promise<unknown>): Promise<boolean> {
     return false
   } catch (e) {
     return (e as { code?: string }).code === 'permission-denied'
-  }
-}
-
-async function until(fn: () => boolean, timeout = 120_000): Promise<void> {
-  const t0 = Date.now()
-  while (!fn()) {
-    if (Date.now() - t0 > timeout) throw new Error('e2e timeout')
-    await sleep(60)
   }
 }
 
@@ -80,18 +71,14 @@ describe('emulator e2e', () => {
       uploads.push(g)
       return save(g)
     }
-    const saved = new Map<string, string>()
+    const saved = memoryStore()
     let commits = 0
     const host = await HostGame.attach(session.code, uid, link, {
       botDelay: () => 5,
       heartbeatMs: 60_000,
       drawLingerMs: 20,
       bidLingerMs: 20,
-      storage: {
-        getItem: (k) => saved.get(k) ?? null,
-        setItem: (k, v) => void saved.set(k, v),
-        removeItem: (k) => void saved.delete(k),
-      },
+      storage: saved,
       onCommit: () => commits++,
     })
 
@@ -153,7 +140,7 @@ describe('emulator e2e', () => {
       const perHand = commits / pub.handNumber
       expect(perHand).toBeLessThan(42)
       // Engine state stays on the host device; the write-only bot-hands doc is gone.
-      expect(saved.has(`koejon-engine-${session.code}`)).toBe(true)
+      expect(saved.getItem(`koejon-engine-${session.code}`)).not.toBeNull()
       expect((await getDoc(handRef(session.code, 'host'))).exists()).toBe(false)
       // Host + bots only: the host's view is fed in-tab, so Firestore saw the
       // lobby writes (3 bots, start) and nothing per card.
@@ -161,7 +148,7 @@ describe('emulator e2e', () => {
       expect(fsRoom.version).toBeLessThan(10)
       expect(fsRoom.pub?.phase).not.toBe('LOBBY')
       // The finished match landed as exactly one games doc, accepted by the rules.
-      await until(() => !saved.has(`koejon-kjn-${session.code}`), 10_000)
+      await until(() => saved.getItem(`koejon-kjn-${session.code}`) === null, 10_000)
       expect(uploads).toHaveLength(1)
       expect(await gameCount()).toBe(gamesBefore + 1)
       const rec = parseKjn(uploads[0].kjn)

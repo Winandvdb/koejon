@@ -1,4 +1,4 @@
-import { RANK_ORDER, trickPoints } from '../engine'
+import { RANK_ORDER, teamOf, trickPoints } from '../engine'
 import type { PublicState, TrickCard } from '../engine'
 import type { QuoteEvent } from './net-types'
 
@@ -51,7 +51,8 @@ export const QUOTES = {
   noMarks: ['Wanneer gaan de kaarten draaien?'],
 } as const
 
-/** Deterministic hash — all clients pick the same speaker and line. */
+/** Deterministic hash: the same state always gives the same speaker and line.
+ *  Only the host's QuoteBook picks; clients show what it fired. */
 function hash(...ns: number[]): number {
   let h = 0
   for (const n of ns) h = Math.imul(h ^ (n + 0x9e3779b9), 0x85ebca6b) >>> 0
@@ -60,8 +61,6 @@ function hash(...ns: number[]): number {
 
 /** A pseudo-random seat of `team` (its two seats are `team` and `team + 2`). */
 const teamSeat = (team: number, h: number) => team + 2 * (h % 2)
-
-const teamOf = (seat: number) => seat % 2
 
 /** A bystander nags the seat that keeps everyone waiting. `cool` marks seats
  *  that spoke too recently; null when every bystander is on cooldown. */

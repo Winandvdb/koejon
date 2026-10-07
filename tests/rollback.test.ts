@@ -3,12 +3,12 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { createMatch, toPublic } from '../src/engine'
 import type { Card } from '../src/engine'
 import { HostGame } from '../src/lib/host'
-import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
+import { localLinks, SOLO_CODE } from '../src/lib/link-local'
 import { P2PGuestLink, P2PHostLink } from '../src/lib/link-p2p'
 import type { HandDoc, RoomDoc } from '../src/lib/net-types'
 import { ACT_ACK_MS, newRoomDoc, RoomSession } from '../src/lib/room'
 import type { GuestEvents, GuestLink, HostLink } from '../src/lib/transport'
-import { C, playingState } from './helpers'
+import { C, memoryStore, playingState } from './helpers'
 
 // Firestore stand-in: tests fire each listener by hand, as a late snapshot would.
 const fake = vi.hoisted(() => ({
@@ -94,15 +94,6 @@ const fsRoom = (r: RoomDoc) => fake.listeners.get(`rooms/${CODE}`)!(snap(r))
 const fsHand = (cards: Card[]) => fake.listeners.get(`rooms/${CODE}/hands/${ME}`)!(snap({ cards }))
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-function memoryStore(): KeyValueStore {
-  const m = new Map<string, string>()
-  return {
-    getItem: (k) => m.get(k) ?? null,
-    setItem: (k, v) => void m.set(k, v),
-    removeItem: (k) => void m.delete(k),
-  }
-}
-
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
@@ -120,13 +111,13 @@ describe('no rollback on a flaky connection', () => {
     const ch = pcs[0].ch
 
     fsRoom(roomAt(3))
-    fsHand([C('H', 'A'), C('S', '7')])
+    fsHand([C('H', 'A'), C('S', '9')])
     expect(get(session.room)?.seq).toBe(3)
 
     // The channel brings our accepted play and the next player's card.
     ch.readyState = 'open'
     ch.onopen!()
-    const hand: HandDoc = { cards: [C('S', '7')] }
+    const hand: HandDoc = { cards: [C('S', '9')] }
     ch.onmessage!({ data: JSON.stringify({ t: 'state', room: roomAt(5), hand }) })
     expect(get(session.room)?.seq).toBe(5)
 
@@ -134,7 +125,7 @@ describe('no rollback on a flaky connection', () => {
     ch.readyState = 'closed'
     ch.onclose!()
     fsRoom(roomAt(3))
-    fsHand([C('H', 'A'), C('S', '7')])
+    fsHand([C('H', 'A'), C('S', '9')])
     expect(get(session.room)?.seq).toBe(5)
     expect(get(session.handDoc)).toEqual(hand)
 
@@ -243,7 +234,7 @@ describe('act waits for the host', () => {
   test('a newer state from another move does not confirm ours', async () => {
     vi.useFakeTimers()
     const { session, ev } = fakeSession()
-    const card = C('S', '7')
+    const card = C('S', '9')
     const playing = { ...roomAt(5), pub: toPublic(playingState()) }
     ev.room(playing)
     ev.hand({ cards: [card] })

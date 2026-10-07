@@ -8,7 +8,7 @@ import { gameDoc, newKjn, parseKjn, recordAction, serializeKjn } from '../src/li
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import type { HostLink } from '../src/lib/transport'
-import { mulberry } from './helpers'
+import { memoryStore, mulberry, until } from './helpers'
 
 const MATCHES = 30
 
@@ -219,23 +219,6 @@ describe('KJN/1 format', () => {
 })
 
 // ---- host ----
-
-function memoryStore(): KeyValueStore {
-  const m = new Map<string, string>()
-  return {
-    getItem: (k) => m.get(k) ?? null,
-    setItem: (k, v) => void m.set(k, v),
-    removeItem: (k) => void m.delete(k),
-  }
-}
-
-async function until(fn: () => boolean, timeout = 30_000): Promise<void> {
-  const t0 = Date.now()
-  while (!fn()) {
-    if (Date.now() - t0 > timeout) throw new Error('timeout')
-    await new Promise((r) => setTimeout(r, 5))
-  }
-}
 
 const UID = 'me'
 

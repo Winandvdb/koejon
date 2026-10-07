@@ -15,8 +15,8 @@ Other browsers only send intents (play this card, bid, pass).
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies (Node 20+). |
-| `npm test` | Unit tests + 60-match bot simulation (vitest). Must pass. |
-| `npm run build` | `svelte-check` (type check) + production build. Must pass. |
+| `npm test` | Unit tests + 60-match bot simulation per bot level (vitest). Must pass. |
+| `npm run build` | `svelte-check` (type check of `src/`, and of `tests/` + `scripts/` via `tsconfig.test.json`) + production build. Must pass. |
 | `npm run dev` | Dev server. Needs `firebase emulators:start` in another shell for multiplayer. Solo play needs no emulator. |
 | `npm run e2e` | Full match against the Firestore emulator. Optional. |
 | `npm run bench -- [--base origin/develop] [--matches 500] [--level normal]` | Bot benchmark (`scripts/bot-benchmark.mjs`): this checkout's bot against the bot of a git ref. Prints win rate and bidding stats. Run it for every bot change: the win rate plus its ± margin must reach 50%. |
@@ -40,11 +40,12 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
+| `src/lib/storage.ts` | `safeStorage`: `localStorage` that never throws (blocked storage reads as empty). | Use it for app storage; never touch `localStorage` directly outside a try/catch. |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
 | `src/app.css` | All styles and colour tokens. | |
 | `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |
 | `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. `devbrand.ts` + `dev/` hold the dev build name and icons; a plugin emits them only when `VITE_APP_VARIANT=dev` (the dev channel and previews of PRs into develop). | The worker never caches other origins (Firebase). Registered in production builds only. |
-| `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`. | Reuse the helpers. |
+| `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`, and `mulberry`, `memoryStore`, `blockStorage`, `until`. | Reuse the helpers. |
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
 | `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | |

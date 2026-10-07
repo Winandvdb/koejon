@@ -15,7 +15,8 @@ export class IllegalActionError extends Error {
   }
 }
 
-const teamOf = (seat: number) => seat % 2
+/** Teams are seats {0,2} and {1,3}. */
+export const teamOf = (seat: number) => seat % 2
 const leftOf = (seat: number) => (seat + 1) % 4
 /** The dealer's right neighbour cuts. */
 export const cutterOf = (dealer: number) => (dealer + 3) % 4
@@ -516,7 +517,7 @@ export function apply(state: State, action: Action): State {
 }
 
 /** True when `seat` may not look at their cards (dealer during bidding). */
-export function handMasked(s: State, seat: number): boolean {
+function handMasked(s: State, seat: number): boolean {
   return (
     seat === s.dealer &&
     (s.phase === 'BIDDING_R1' || s.phase === 'BIDDING_R2' || s.phase === 'DEALER_CHOICE')
