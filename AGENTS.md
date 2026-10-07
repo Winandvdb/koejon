@@ -71,6 +71,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - `develop` and `main` are protected: GitHub rejects direct pushes. A change gets into them only through a merged PR, also a small docs change.
 - Push to `develop` deploys the dev channel. Push to `main` deploys live. Never push to `main` or `develop` directly.
 - Branch name: `feature/<issue>-<short-slug>` or `fix/<issue>-<short-slug>` for bugs. `<issue>` is the GitHub issue number.
+- PR body: follow `.github/pull_request_template.md` (Summary, Plan, Acceptance criteria, Tests, Check by hand).
 - Commit messages: short, imperative, for example `Fix trick rollback on late message`.
 - Never commit `.env.local` or other secrets. `.env.production` is committed on purpose (public web config).
 
@@ -83,6 +84,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - An assigned issue is taken. Do not work on an issue that is assigned to someone else.
 - To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body.
 - `develop` is the default branch, so `Closes #<issue>` closes the issue when the PR merges.
+- To release `develop` to `main`, use the `release-pr` skill (`.agents/skills/release-pr/SKILL.md`). It opens the PR `develop` → `main` with a description of all changes and the checks. It never merges: the merge deploys live.
 - Older issues start with `Backlog: task-<T>` and can name other work as `task-<T>`. Find that issue with `gh issue list --state all --search '"Backlog: task-<T>" in:body'`.
 - A PR with the label `needs manual check` is complete, but a person must still check the UI or network behaviour. A draft PR means that something failed.
 
