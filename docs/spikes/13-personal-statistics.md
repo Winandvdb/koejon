@@ -81,7 +81,7 @@ The statistics, per player. A team value counts for both players of the team.
 | Statistic | Rule |
 |---|---|
 | Games played, games won | |
-| Total score | Per game: the winning team gets 13. The losing team gets the meetjes it crossed minus its koeien, minimum 0. That is `max(0, 13 − lines left)`. |
+| Total score | Per game: the winning team gets 13. The losing team gets 13 minus the lines it still had to cross, minimum 0: `max(0, 13 − lines left)`. |
 | Triple crosses | Hands in which the own team crossed 3 lines: doubled first card + kapot, or second card + kapot. |
 | Double crosses | Hands in which the own team crossed 2 lines: first card at a doubled stake, second card, or first card + kapot. |
 | Bids made, bids won | Hands in which the player said "ik ga" or chose trump as dealer, and of those the hands that the own team won. |
