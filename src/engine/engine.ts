@@ -332,7 +332,7 @@ function scoreHand(s: State): void {
   const playing = teamOf(s.bidder!)
   const defending = 1 - playing
   // Exactly 20-20 is a draw: nobody erases lines, no Koei is added, and the
-  // stake on the next deal's first turned card doubles.
+  // stake on the next deal's first turned card doubles — capped at ×2.
   const draw = s.points[playing] === 20
   const winner = draw ? defending : s.points[playing] > 20 ? playing : defending
   const kapot = !draw && s.tricksWon[winner] === 6
@@ -376,7 +376,7 @@ function scoreHand(s: State): void {
     multiplier: s.multiplier,
   }
   pushLog(s, draw ? { t: 'tied' } : { t: 'score', team: winner, n: erased })
-  s.multiplier = draw ? s.multiplier * 2 : 1
+  s.multiplier = draw ? Math.min(s.multiplier * 2, 2) : 1
   if (!draw && s.lines[winner] === 0) {
     s.winner = winner
     s.phase = 'GAME_OVER'

@@ -74,7 +74,7 @@
       {:else}
         {$t.trump}: —
       {/if}
-      {#if pub.multiplier > 1}<span class="mult">×{pub.multiplier}</span>{/if}
+      {#if pub.multiplier > 1 && pub.level !== 2}<span class="mult">×{pub.multiplier}</span>{/if}
     </span>
   </div>
 
