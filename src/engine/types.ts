@@ -59,7 +59,7 @@ export interface HandResult {
   playingTeam: number
   points: [number, number]
   winnerTeam: number
-  /** 20-20: nobody erases lines and the next level-1 stake doubles. */
+  /** 20-20: nobody erases lines and the next level-1 stake doubles (max ×2). */
   draw: boolean
   erased: number
   kapot: boolean

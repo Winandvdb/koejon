@@ -37,7 +37,10 @@ environment deviations. Each entry lists the chosen behavior.
 - **Seating** — the room creator is always seat 0 and host; joining players take the
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
 - **20–20** — a draw: no lines erased, no Koei, and the next deal's level-1 stake
-  doubles (playing team needs >20; defenders win at ≤19).
+  goes to ×2 (playing team needs >20; defenders win at ≤19).
+- **Stake multiplier cap** — the level-1 stake is at most ×2 (owner decision,
+  2026-10-06). All-passed deals and 20-20 draws set it to ×2; consecutive events in
+  any mix keep it at ×2 instead of doubling again. Level-2 stakes are never multiplied.
 - **Deck between hands** — no reshuffle. Each won trick goes on its team's pile; the
   engine shuffles its 4 cards (seeded RNG), as a collected trick is rarely kept in
   play order. For the next deal, team 0's pile is put on top of team 1's pile, then
