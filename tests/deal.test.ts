@@ -54,7 +54,7 @@ describe('dealer rotation', () => {
   })
 
   it('moves to the left neighbour on an all-passed deal and sets multiplier to 2', () => {
-    let s = {
+    let s: State = {
       ...dealtState(5, 0),
       phase: 'DEALER_CHOICE' as const,
       turned: { first: C('H', '9'), second: C('S', 'K'), secondUp: true },

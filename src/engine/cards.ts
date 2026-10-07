@@ -32,10 +32,6 @@ export function sameCard(a: Card, b: Card): boolean {
   return a.s === b.s && a.r === b.r
 }
 
-export function cardEq(a: Card | null | undefined, b: Card | null | undefined): boolean {
-  return !!a && !!b && sameCard(a, b)
-}
-
 /**
  * Index of the winning card in a trick. Highest trump wins;
  * without a trump, the highest card of the led suit wins.
@@ -64,9 +60,4 @@ export function trickPoints(trick: TrickCard[]): number {
   let p = 0
   for (const tc of trick) p += RANK_POINTS[tc.card.r]
   return p
-}
-
-export function cardName(c: Card): string {
-  const names: Record<Suit, string> = { S: '♠', H: '♥', D: '♦', C: '♣' }
-  return `${names[c.s]}${c.r}`
 }

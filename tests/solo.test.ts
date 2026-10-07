@@ -6,6 +6,8 @@ import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
+import { safeStorage } from '../src/lib/storage'
+import { blockStorage, failLocks, memoryStore, until } from './helpers'
 
 const UID = 'me'
 
@@ -14,15 +16,6 @@ function deepProxy<T>(v: T): T {
   if (typeof v !== 'object' || v === null) return v
   const copy = Array.isArray(v) ? v.map(deepProxy) : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deepProxy(x)]))
   return new Proxy(copy, {}) as T
-}
-
-function memoryStore(): KeyValueStore {
-  const m = new Map<string, string>()
-  return {
-    getItem: (k) => m.get(k) ?? null,
-    setItem: (k, v) => void m.set(k, v),
-    removeItem: (k) => void m.delete(k),
-  }
 }
 
 async function open(
@@ -59,14 +52,6 @@ async function open(
   return { host, view: () => latest, close }
 }
 
-async function until(fn: () => boolean, timeout = 30_000): Promise<void> {
-  const t0 = Date.now()
-  while (!fn()) {
-    if (Date.now() - t0 > timeout) throw new Error('timeout')
-    await new Promise((r) => setTimeout(r, 5))
-  }
-}
-
 describe('offline solo', () => {
   test('plays a full match, survives a reload mid-game', async () => {
     const storage = memoryStore()
@@ -94,6 +79,35 @@ describe('offline solo', () => {
     expect(get(usage)).toEqual({ reads: 0, writes: 0 })
   }, 60_000)
 
+  test('plays on when the browser blocks localStorage', async () => {
+    const restore = blockStorage()
+    try {
+      // As the app wires it: safeStorage for the room, the host's default for the engine.
+      const g = await open(safeStorage, true, { storage: undefined })
+      g.host.addBot(1)
+      g.host.addBot(2)
+      g.host.addBot(3)
+      g.host.startGame()
+      await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 2)
+      // Nothing was kept, so a reload has no game to resume.
+      expect(localLinks(UID, safeStorage)).toBeNull()
+      await g.host.destroyRoom()
+      g.close()
+    } finally {
+      restore()
+    }
+  }, 30_000)
+
+  test('a second host tab for the same room is refused', async () => {
+    // The lock request times out: another tab holds it.
+    const restore = failLocks('TimeoutError')
+    try {
+      await expect(open(memoryStore(), true)).rejects.toThrow('host-elsewhere')
+    } finally {
+      restore()
+    }
+  })
+
   test('fired quotes ride on the room doc, so every client sees the same', async () => {
     const g = await open(memoryStore(), true, { quoteRand: () => 0 })
     g.host.addBot(1)
@@ -118,7 +132,7 @@ describe('offline solo', () => {
     g.host.addBot(3)
     g.host.startGame()
     await until(
-      () => (g.view()?.room?.quotes ?? []).some((q) => QUOTES.hurry.includes(q.text)),
+      () => (g.view()?.room?.quotes ?? []).some((q) => (QUOTES.hurry as readonly string[]).includes(q.text)),
     )
     await g.host.destroyRoom()
     g.close()

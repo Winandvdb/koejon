@@ -12,6 +12,7 @@ import { getDoc } from 'firebase/firestore'
 import { handRef, roomRef } from '../src/lib/link-firestore'
 import type { RoomDoc } from '../src/lib/net-types'
 import { createRoom, type SessionView } from '../src/lib/room'
+import { memoryStore, until } from './helpers'
 
 function emulatorUp(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -32,16 +33,6 @@ function emulatorUp(): Promise<boolean> {
   })
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-async function until(fn: () => boolean, timeout = 120_000): Promise<void> {
-  const t0 = Date.now()
-  while (!fn()) {
-    if (Date.now() - t0 > timeout) throw new Error('e2e timeout')
-    await sleep(60)
-  }
-}
-
 describe('emulator e2e', () => {
   test('host + 3 bots play a full match to GAME_OVER', async (ctx) => {
     if (!(await emulatorUp())) {
@@ -52,18 +43,14 @@ describe('emulator e2e', () => {
 
     const uid = await signIn()
     const session = await createRoom(uid, 'Host')
-    const saved = new Map<string, string>()
+    const saved = memoryStore()
     let commits = 0
     const host = await HostGame.attach(session.code, uid, session.hostLink!, {
       botDelay: () => 5,
       heartbeatMs: 60_000,
       drawLingerMs: 20,
       bidLingerMs: 20,
-      storage: {
-        getItem: (k) => saved.get(k) ?? null,
-        setItem: (k, v) => void saved.set(k, v),
-        removeItem: (k) => void saved.delete(k),
-      },
+      storage: saved,
       onCommit: () => commits++,
     })
 
@@ -125,7 +112,7 @@ describe('emulator e2e', () => {
       const perHand = commits / pub.handNumber
       expect(perHand).toBeLessThan(42)
       // Engine state stays on the host device; the write-only bot-hands doc is gone.
-      expect(saved.has(`koejon-engine-${session.code}`)).toBe(true)
+      expect(saved.getItem(`koejon-engine-${session.code}`)).not.toBeNull()
       expect((await getDoc(handRef(session.code, 'host'))).exists()).toBe(false)
       // Host + bots only: the host's view is fed in-tab, so Firestore saw the
       // lobby writes (3 bots, start) and nothing per card.

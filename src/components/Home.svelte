@@ -2,6 +2,8 @@
   import { fly } from 'svelte/transition'
   import { t } from '../lib/i18n'
   import { appUrl } from '../lib/link-p2p'
+  import { CODE_LENGTH } from '../lib/room'
+  import { safeStorage } from '../lib/storage'
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
   import type { BotLevel } from '../bots/bot'
@@ -21,8 +23,8 @@
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
   const inviteCode = new URLSearchParams(location.search).get('room') ?? ''
-  let name = $state(localStorage.getItem('koejon-name') ?? '')
-  const savedLevel = localStorage.getItem('koejon-bot-level') as BotLevel | null
+  let name = $state(safeStorage.getItem('koejon-name') ?? '')
+  const savedLevel = safeStorage.getItem('koejon-bot-level') as BotLevel | null
   let botLevel = $state<BotLevel>(
     savedLevel && BOT_LEVELS.includes(savedLevel) ? savedLevel : 'normal',
   )
@@ -45,7 +47,7 @@
   ]
 
   function save() {
-    localStorage.setItem('koejon-name', name.trim())
+    safeStorage.setItem('koejon-name', name.trim())
   }
 
   function join(e: SubmitEvent) {
@@ -109,7 +111,7 @@
               class:on={botLevel === l}
               onclick={() => {
                 botLevel = l
-                localStorage.setItem('koejon-bot-level', l)
+                safeStorage.setItem('koejon-bot-level', l)
               }}>{lvlName[l]}</button
             >
           {/each}
@@ -119,7 +121,13 @@
       <form class="join-form" onsubmit={join}>
         <label class="field">
           <span>{$t.joinRoom}</span>
-          <input class="code-input" bind:value={code} placeholder={$t.codePh} maxlength="6" />
+          <!-- Not maxlength: it would cut a pasted " ABCDE" to " ABCD" before the trim. -->
+          <input
+            class="code-input"
+            bind:value={code}
+            placeholder={$t.codePh}
+            oninput={() => (code = code.trim().slice(0, CODE_LENGTH))}
+          />
         </label>
         <button class="btn" type="submit" disabled={!online || !name.trim() || !code.trim()}>{$t.joinRoom}</button>
       </form>

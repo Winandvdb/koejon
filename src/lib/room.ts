@@ -14,14 +14,23 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
  *  commits on receipt, so this covers only the network round trip. */
 export const ACT_ACK_MS = 8000
 
-export function makeCode(len = 5): string {
+export const CODE_LENGTH = 5
+
+export function makeCode(len = CODE_LENGTH): string {
   const buf = new Uint8Array(len)
   crypto.getRandomValues(buf)
   return [...buf].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('')
 }
 
-/** Same action, whatever the key order of the objects. */
-const actionKey = (a: Action) => JSON.stringify(a, Object.keys(a).concat('s', 'r').sort())
+/** Same action, whatever the key order of the objects, at any depth. */
+export const actionKey = (a: Action) => JSON.stringify(sortKeys(a))
+
+function sortKeys(v: unknown): unknown {
+  if (typeof v !== 'object' || v === null) return v
+  if (Array.isArray(v)) return v.map(sortKeys)
+  const o = v as Record<string, unknown>
+  return Object.fromEntries(Object.keys(o).sort().map((k) => [k, sortKeys(o[k])]))
+}
 
 export function seatOf(room: RoomDoc | null, uid: string): number {
   if (!room) return -1

@@ -6,6 +6,7 @@ import { HEARTBEAT_MS } from './link-firestore'
 import type { KeyValueStore } from './link-local'
 import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-types'
 import { QuoteBook } from './quotes'
+import { safeStorage } from './storage'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
 
@@ -37,7 +38,7 @@ export interface HostOptions {
   bidLingerMs?: number
   /** Where the full engine state is kept for reload recovery. Only this
    *  browser (same anonymous uid) can be host, so it never leaves the device.
-   *  Default: localStorage when present; none in plain Node. */
+   *  Default: localStorage when present and not blocked; none in plain Node. */
   storage?: KeyValueStore
   /** Random source for quote rolls. Default Math.random. */
   quoteRand?: () => number
@@ -91,7 +92,7 @@ export class HostGame {
     this.botDelay = opts.botDelay ?? (() => 500 + Math.random() * 500)
     this.drawLingerMs = opts.drawLingerMs ?? 3000
     this.bidLingerMs = opts.bidLingerMs ?? 2000
-    this.storage = opts.storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage)
+    this.storage = opts.storage ?? safeStorage
     this.onCommit = opts.onCommit
     this.quoteRand = opts.quoteRand ?? Math.random
     this.hurryMs = opts.hurryMs ?? 9000
@@ -158,7 +159,10 @@ export class HostGame {
           // Held until dispose.
           return new Promise<void>((release) => (this.releaseLock = release))
         })
-        .catch(() => resolve(false))
+        // Only a timeout means another tab holds it. With site data blocked the
+        // browser denies every lock (SecurityError); tabs then share no storage
+        // either, so play on without one.
+        .catch((e) => resolve((e as DOMException)?.name !== 'TimeoutError'))
     })
     if (!got) throw new Error('host-elsewhere')
   }
@@ -465,13 +469,14 @@ export class HostGame {
   }
 
   /** The "seen it" pause exists for humans — bots confirm instantly, inside
-   *  the commit that caused the pause instead of one commit per bot. */
+   *  the commit that caused the pause instead of one commit per bot. A
+   *  troefke confirms too: dropping it would make the bot roll again later. */
   private drainBotAcks(): void {
     while (this.state.phase === 'PLAYING') {
       const seat = this.autoSeat()
       if (seat === undefined || !this.seats[seat]?.bot) return
       const a = this.botMove(seat)
-      if (a.type !== 'ack' || !this.tryApply(a)) return
+      if ((a.type !== 'ack' && a.type !== 'troefke') || !this.tryApply(a)) return
     }
   }
 
