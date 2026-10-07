@@ -1,45 +1,44 @@
 ---
 name: start-task
-description: Start and finish one backlog task of this repo end to end. Claims the GitHub issue (assigns it to the logged-in gh user), makes a git worktree from develop, plans, implements, tests and opens a PR into develop. Use when the user says "start task 7", "pick up task-7", "work on issue #7" or runs /start-task.
-argument-hint: <task number, e.g. 7 or task-7>
+description: Start and finish one GitHub issue of this repo end to end. Claims the issue (assigns it to the logged-in gh user), makes a git worktree from develop, plans, implements, tests and opens a PR into develop. Use when the user says "start issue 52", "pick up #52", "work on issue #52", "start task 52" or runs /start-task.
+argument-hint: <issue number, e.g. 52 or #52>
 ---
 
 # start-task
 
-You implement ONE backlog task, from claim to pull request.
+You implement ONE GitHub issue, from claim to pull request.
 Do the steps in order. Do not skip a step. Do not ask the user for approval, except in a STOP case.
 
 ## Fixed values
 
-- Repo: `Winandvdb/koejon`
+- Repo: `Winandvdb/koejon`. Its default branch is `develop`, so `Closes #<N>` closes the issue when the PR merges.
 - Base branch: `develop` (PRs go into `develop`, never `main`)
-- Main checkout: the directory that contains `backlog/` and `AGENTS.md`. Call it `<REPO>` (an absolute path).
+- Main checkout: the directory that contains `AGENTS.md`. Call it `<REPO>` (an absolute path).
 
 ## STOP cases
 
 When one of these is true, stop. Tell the user what you found. Do not change anything more.
 
-- No task number was given and the user did not choose one (see step 0).
-- The backlog task does not exist, or its status is `Done`.
-- The GitHub issue is closed.
-- The issue is assigned to a different user than you (step 3).
-- A branch for this task already exists on `origin` (step 3).
+- No issue number was given and the user did not choose one (see step 0).
+- The issue does not exist, or it is closed.
+- The issue is assigned to a different user than you (step 2).
+- A branch or an open PR for this issue already exists (step 2).
 - A dependency is not finished (step 2).
 - `gh` is not logged in.
 
 ## Tool notes
 
-- `gh`, `backlog` and `npm ci` need the network. If a command fails with a TLS, certificate or "Forbidden" error inside a sandbox, run it again outside the sandbox.
-- If the backlog MCP tools are not available, use the `backlog` CLI. Both edit the same files.
+- `gh` and `npm ci` need the network. If a command fails with a TLS, certificate or "Forbidden" error inside a sandbox, run it again outside the sandbox.
 - Replace every `<...>` placeholder with the real value before you run a command.
+- Older issues start with a line `Backlog: task-<T>` and can name other work as `task-<T>`. The backlog is gone. To find the issue for `task-<T>`: `gh issue list --repo Winandvdb/koejon --state all --search '"Backlog: task-<T>" in:body'`.
 
 ---
 
-## Step 0: Get the task number
+## Step 0: Get the issue number
 
-The argument is a number (`7`) or a task id (`task-7`). Use only the number: `<N>`.
+The argument is a number (`52`) or `#52`. Use only the number: `<N>`.
 
-If there is no argument, run this and show the result to the user. Ask which task to start. Then STOP until they answer.
+If there is no argument, run this and show the result to the user. Ask which issue to start. Then STOP until they answer.
 
 ```bash
 gh issue list --repo Winandvdb/koejon --state open --search "no:assignee" --json number,title,labels \
@@ -56,95 +55,71 @@ git fetch origin
 git status --porcelain           # save this output: it is <BASELINE>
 ```
 
-`<BASELINE>` lists the changes that were already in `<REPO>` before you started. You use it in step 10.
+`<BASELINE>` lists the changes that were already in `<REPO>` before you started. You use it in step 9.
 
 Read `<REPO>/AGENTS.md`. It has the code map, commands and rules.
 
-## Step 2: Read the task
+## Step 2: Read the issue and check that it is free
 
 ```bash
-backlog task view <N> --plain
+gh issue view <N> --repo Winandvdb/koejon \
+  --json title,state,labels,assignees,body,closedByPullRequestsReferences
 ```
 
-Note: title, status, labels, priority, dependencies, description and acceptance criteria.
-
-- Status `Done` → STOP.
-- For each id in `dependencies` (number `<D>`), read its status **from `origin/develop` only**. Do not use `backlog task view` for this: it also reads other branches, where a task can be `Done` before its PR is merged.
-
-  ```bash
-  git grep -h '^status:' origin/develop -- 'backlog/*/task-<D> - *'
-  ```
-
-  The output must be `status: Done`. If it is not, check the dependency's GitHub issue (step 3 query with `<D>`). If that issue is not closed either → STOP. The dependency is not merged yet.
-
-## Step 3: Find the GitHub issue and check that it is free
-
-The first line of each issue body is `Backlog: task-<N>`. The issue number can differ from `<N>`.
-
-```bash
-gh issue list --repo Winandvdb/koejon --state all --limit 300 --json number,state,body,assignees \
-  --jq '.[] | select(.body | test("^Backlog: task-<N>( |\\n|$)")) | {number, state, assignees: [.assignees[].login]}'
-```
-
-The result gives `<ISSUE>` (the issue number).
-
-- No result: make the issue. Use the task title. Use the label `bug` if the task has label `bug`, else `enhancement`. Add `priority: <priority>` if the task has a priority. Body:
-
-  ```
-  Backlog: task-<N>
-
-  <task description>
-
-  ### Acceptance criteria
-  - [ ] <criterion 1>
-  - [ ] <criterion 2>
-  ```
-
-  ```bash
-  gh issue create --repo Winandvdb/koejon --title "<title>" --label "<label>" --body-file <file>
-  ```
+Note: title, labels, priority label, description and acceptance criteria (the `- [ ]` list under `### Acceptance criteria`).
 
 - `state` is `CLOSED` → STOP.
 - `assignees` has a login that is not `<ME>` → STOP. Someone else works on it.
+- `closedByPullRequestsReferences` is not empty → STOP. A PR for this issue already exists.
 - Check for an existing branch:
 
   ```bash
-  git ls-remote --heads origin "*task-<N>-*"
+  git ls-remote --heads origin "*/<N>-*"
   ```
 
-  Any output → STOP. A session already started this task.
+  Any output → STOP. A session already started this issue.
 
-## Step 4: Claim the issue (always)
+- Dependencies: each line `Depends on #<D>` in the body. For each `<D>`:
+
+  ```bash
+  gh issue view <D> --repo Winandvdb/koejon --json state --jq .state
+  ```
+
+  The output must be `CLOSED`. If it is not → STOP. The dependency is not merged yet.
+
+## Step 3: Claim the issue (always)
 
 ```bash
-gh issue edit <ISSUE> --repo Winandvdb/koejon --add-assignee @me
-gh issue view <ISSUE> --repo Winandvdb/koejon --json assignees --jq '[.assignees[].login]'
+gh issue edit <N> --repo Winandvdb/koejon --add-assignee @me
+gh issue view <N> --repo Winandvdb/koejon --json assignees --jq '[.assignees[].login]'
 ```
 
 The second command must show `<ME>`. If it does not, try the first command once more. If it still fails → STOP.
 
-## Step 5: Make the worktree
+## Step 4: Make the worktree
 
 Make the names:
 
 - `<SLUG>`: 2 to 5 words from the title, lower case, joined with `-`. Example: `trick-rollback`.
-- `<BRANCH>`: `fix/task-<N>-<SLUG>` if the task has label `bug`, else `feature/task-<N>-<SLUG>`.
-- `<WT>`: the absolute path `<REPO>/.worktrees/task-<N>`. It is inside the repo folder, so sandboxed commands can write there. `.worktrees/` is in `.gitignore`.
+- `<BRANCH>`: `fix/<N>-<SLUG>` if the issue has label `bug`, else `feature/<N>-<SLUG>`.
+- `<WT>`: the absolute path `<REPO>/.worktrees/<N>`. It is inside the repo folder, so sandboxed commands can write there. `.worktrees/` is in `.gitignore`.
 
 ```bash
 cd <REPO>
 git check-ignore -q .worktrees/x || echo "NOT IGNORED"
 ```
 
-If this prints `NOT IGNORED`, add the line `.worktrees/` to `<REPO>/.gitignore` before you continue. Do not commit that change in `<REPO>`. Tell the user about it in step 11.
+If this prints `NOT IGNORED`, add the line `.worktrees/` to `<REPO>/.gitignore` before you continue. Do not commit that change in `<REPO>`. Tell the user about it in step 10.
 
 ```bash
 git worktree add --no-track -b <BRANCH> <WT> origin/develop
 cd <WT>
+git push -u origin <BRANCH>
 npm ci
 ```
 
 `--no-track` is required: the branch must not track `origin/develop`.
+The push makes the branch visible to other sessions (see the step 2 check).
 
 **From now on, work only inside `<WT>`.** Every file you read or edit must be under `<WT>`. Every command runs in `<WT>`. Do not edit files in `<REPO>`.
 
@@ -159,32 +134,13 @@ npm ci
 
   If one of them prints something else, do not commit. Run `cd <WT>` and check again.
 
-## Step 6: Mark the task "In Progress" and push the branch
+## Step 5: Understand and plan
 
-Run the checkout check (step 5) first.
-
-```bash
-cd <WT>
-backlog task edit <N> -s "In Progress" -a @<ME>
-git add backlog
-git commit -m "Start task-<N>: <title>"
-git push -u origin <BRANCH>
-```
-
-The push makes the branch visible to other sessions (see the step 3 check).
-
-## Step 7: Understand and plan
-
-1. Read the issue and its comments: `gh issue view <ISSUE> --repo Winandvdb/koejon --comments`.
+1. Read the issue comments: `gh issue view <N> --repo Winandvdb/koejon --comments`.
 2. Use the code map in `AGENTS.md` to find the files. Read them. Read the tests in `tests/` for the same area.
-3. Write a short plan: numbered steps, and for each step how you check it. Map every acceptance criterion to a step.
-4. Save the plan in the task:
+3. Write a short plan: numbered steps, and for each step how you check it. Map every acceptance criterion to a step. Keep the plan: it goes in the PR body in step 9.
 
-   ```bash
-   backlog task edit <N> --plan $'1. <step> -> check: <how>\n2. <step> -> check: <how>'
-   ```
-
-## Step 8: Implement
+## Step 6: Implement
 
 Rules:
 
@@ -203,9 +159,9 @@ npm test
 npm run build
 ```
 
-If a check fails, fix the cause and run both again. If they still fail after 3 fix rounds, continue to step 9 and open the PR as a **draft**.
+If a check fails, fix the cause and run both again. If they still fail after 3 fix rounds, continue to step 7 and open the PR as a **draft**.
 
-## Step 9: Update the task
+## Step 7: Sort the acceptance criteria
 
 Put each acceptance criterion in one of three groups:
 
@@ -215,55 +171,53 @@ Put each acceptance criterion in one of three groups:
 | **Manual check** | You made the change, but only a person can confirm it. You cannot see the screen or a real bad network. | "No clipping on cards", "colour stands out", "works on iOS". |
 | **Not done** | You did not make the change, or a test for it fails. | |
 
-Tick only the **Done** criteria:
+The groups go in the PR body (step 9). Do not edit the issue body.
 
-```bash
-backlog task edit <N> --check-ac <index> --check-ac <index>
-backlog task edit <N> --notes "<what you changed, which files, what you tested, what to check by hand>"
-```
+## Step 8: Check the main checkout
 
-If all criteria are **Done** and both checks pass: `backlog task edit <N> -s Done`. Otherwise keep `In Progress`.
-
-## Step 10: Commit, push, open the PR
-
-First check that you did not edit the main checkout by mistake:
+Check that you did not edit the main checkout by mistake:
 
 ```bash
 git -C <REPO> status --porcelain
 ```
 
-Compare the output with `<BASELINE>` from step 1. Ignore lines for `.worktrees/` and `.gitignore`: you made those in step 5, and they are not mistakes. **Never delete anything in `.worktrees/`.** If there are other new lines, you edited files in `<REPO>`. For each new file:
+Compare the output with `<BASELINE>` from step 1. Ignore lines for `.worktrees/` and `.gitignore`: you made those in step 4, and they are not mistakes. **Never delete anything in `.worktrees/`.** If there are other new lines, you edited files in `<REPO>`. For each new file:
 
 1. Copy the change to the same path under `<WT>`.
 2. Undo it in `<REPO>`: `git -C <REPO> restore <path>` for a changed file, or delete a new file.
 
 Never undo a line that was already in `<BASELINE>`. That is the user's own work.
 
-Then run the checkout check (step 5) and look at the changes:
+## Step 9: Commit, push, open the PR
+
+Run the checkout check (step 4) and look at the changes:
 
 ```bash
 cd <WT>
 git status
 ```
 
-Look at the list. Add only files that belong to this task. Never add `.env.local`, logs, or `dist/`.
+Look at the list. Add only files that belong to this issue. Never add `.env.local`, logs, or `dist/`.
 
 ```bash
 git add <files>
-git commit -m "<short imperative summary>" -m "Closes #<ISSUE>"
+git commit -m "<short imperative summary>" -m "Closes #<N>"
 git push
 ```
 
 Add the attribution trailer that your harness gives you, if any, to the commit message.
-`Closes #<ISSUE>` is in the commit message on purpose: the issue closes when the commit reaches `main`.
 
 Write the PR body to a file:
 
 ```
-Closes #<ISSUE> · Backlog: task-<N>
+Closes #<N>
 
 ## Summary
 <2-5 bullets: what changed and why>
+
+## Plan
+1. <step> -> check: <how>
+2. <step> -> check: <how>
 
 ## Acceptance criteria
 - [x] <Done criterion>
@@ -280,7 +234,7 @@ Closes #<ISSUE> · Backlog: task-<N>
 
 ```bash
 gh pr create --repo Winandvdb/koejon --base develop --head <BRANCH> --assignee @me \
-  --title "task-<N>: <title>" --body-file <file>
+  --title "#<N>: <title>" --body-file <file>
 ```
 
 Add flags to that command from this table. Use the first row that is true:
@@ -293,14 +247,14 @@ Add flags to that command from this table. Use the first row that is true:
 
 A draft PR always means that something is wrong. A **Manual check** alone is not a reason for a draft.
 
-## Step 11: Report to the user
+## Step 10: Report to the user
 
 Give, in short sentences:
 
-- Issue `#<ISSUE>` is assigned to `<ME>`.
+- Issue `#<N>` is assigned to `<ME>`.
 - Branch `<BRANCH>`, worktree `<WT>`.
 - PR link. If it is a draft, why. If it has the label `needs manual check`, which criteria.
 - Result of `npm test` and `npm run build`.
 - What the user must check by hand.
-- If you added `.worktrees/` to `<REPO>/.gitignore` in step 5: the user must commit that.
+- If you added `.worktrees/` to `<REPO>/.gitignore` in step 4: the user must commit that.
 - After the merge, remove the worktree with `git worktree remove <WT>`.
