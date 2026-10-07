@@ -1,9 +1,11 @@
 ---
 id: task-17
 title: Cap the first-card stake multiplier at x2
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@Winandvdb'
 created_date: '2026-10-06 09:19'
+updated_date: '2026-10-07 10:40'
 labels:
   - engine
   - rules
