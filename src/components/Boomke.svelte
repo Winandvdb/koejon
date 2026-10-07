@@ -14,8 +14,27 @@
 
   /** Collapsed during play; opens automatically when a hand is scored. */
   let open = $state(false)
+  /** Player closed the auto-opened boomke; resets when play continues. */
+  let dismissed = $state(false)
   const scoring = $derived(phase === 'SCORED' || phase === 'GAME_OVER')
-  const expanded = $derived(open || scoring)
+  const expanded = $derived(open || (scoring && !dismissed))
+
+  $effect(() => {
+    if (!scoring) {
+      open = false
+      dismissed = false
+    }
+  })
+
+  const toggle = () => {
+    if (expanded) {
+      open = false
+      dismissed = scoring
+    } else {
+      open = true
+      dismissed = false
+    }
+  }
 
   const STEP = 15
   const TOP = 30
@@ -80,7 +99,7 @@
   const remaining = (side: 0 | 1) => sides[side].filter((m) => !m.crossed).length
 </script>
 
-<div class="boomke-wrap" class:scored={scoring}>
+<div class="boomke-wrap" class:scored={scoring && expanded}>
   {#if expanded}
     <div class="boomke">
       <div class="boomke-labels">
@@ -128,9 +147,7 @@
       </svg>
     </div>
   {/if}
-  {#if !scoring}
-    <button class="boomke-chip" onclick={() => (open = !open)} aria-expanded={expanded}>
-      {$t.boomke} · {$t.wij} {remaining(0)} – {$t.zij} {remaining(1)}
-    </button>
-  {/if}
+  <button class="boomke-chip" onclick={toggle} aria-expanded={expanded}>
+    {$t.boomke} · {$t.wij} {remaining(0)} – {$t.zij} {remaining(1)}
+  </button>
 </div>
