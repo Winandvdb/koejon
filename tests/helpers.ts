@@ -30,14 +30,27 @@ export function blockStorage(): () => void {
       throw new DOMException('The operation is insecure.', 'SecurityError')
     },
   })
-  const locks = globalThis.navigator.locks
-  const request = locks.request
-  locks.request = (() =>
-    Promise.reject(new DOMException('The request was denied.', 'SecurityError'))) as LockManager['request']
+  const unlock = failLocks('SecurityError')
   return () => {
     if (before) Object.defineProperty(globalThis, 'localStorage', before)
     else delete (globalThis as { localStorage?: Storage }).localStorage
-    locks.request = request
+    unlock()
+  }
+}
+
+/** Every Web Lock request fails with this error: 'SecurityError' as with site
+ *  data blocked, 'TimeoutError' as when another tab holds the lock. Replaces
+ *  the whole navigator, since older Node has no locks (or no navigator).
+ *  Returns the undo. */
+export function failLocks(name: string): () => void {
+  const before = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { locks: { request: () => Promise.reject(new DOMException('Lock failed.', name)) } },
+  })
+  return () => {
+    if (before) Object.defineProperty(globalThis, 'navigator', before)
+    else delete (globalThis as { navigator?: Navigator }).navigator
   }
 }
 

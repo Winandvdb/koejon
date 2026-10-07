@@ -7,7 +7,7 @@ import { QUOTES } from '../src/lib/quotes'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import { safeStorage } from '../src/lib/storage'
-import { blockStorage, memoryStore, until } from './helpers'
+import { blockStorage, failLocks, memoryStore, until } from './helpers'
 
 const UID = 'me'
 
@@ -99,11 +99,14 @@ describe('offline solo', () => {
   }, 30_000)
 
   test('a second host tab for the same room is refused', async () => {
-    const storage = memoryStore()
-    const first = await open(storage, true)
-    await expect(open(storage, false)).rejects.toThrow('host-elsewhere')
-    first.close()
-  }, 10_000)
+    // The lock request times out: another tab holds it.
+    const restore = failLocks('TimeoutError')
+    try {
+      await expect(open(memoryStore(), true)).rejects.toThrow('host-elsewhere')
+    } finally {
+      restore()
+    }
+  })
 
   test('fired quotes ride on the room doc, so every client sees the same', async () => {
     const g = await open(memoryStore(), true, { quoteRand: () => 0 })
