@@ -1,13 +1,6 @@
----
-id: doc-1
-title: 'Spike: personal statistics with anonymous login'
-type: technical
-created_date: '2026-10-06 09:06'
----
-
 # Spike: personal statistics with anonymous login
 
-Task: task-13. Question: can we track per-player statistics (games played, games won,
+Issue: #13 (2026-10-06). Question: can we track per-player statistics (games played, games won,
 bids made, bids won) when the only identity is the anonymous Firebase uid?
 
 Short answer: yes, but the anonymous uid gives no advantage over `localStorage`.
@@ -62,7 +55,9 @@ anonymous accounts 30 days after **creation**, not after the last visit, so an
 active player also loses the account. The browser then gets a new uid on the next
 sign-in. Projects turn it on because, with Identity Platform, anonymous users
 count as monthly active users (free up to 50,000 per month). A small card game
-stays far below that. Check the console setting; I did not look.
+stays far below that. Checked by the owner (2026-10-07): the Firebase console shows
+no clean-up setting, so the project does not use Identity Platform and anonymous
+accounts do not expire.
 
 Statistics in `localStorage` do not depend on the Firebase account, so clean-up has no effect on them.
 
@@ -92,7 +87,7 @@ The statistics, per player. A team value counts for both players of the team.
 | Bids made, bids won | Hands in which the player said "ik ga" or chose trump as dealer, and of those the hands that the own team won. |
 
 A hand crosses at most 3 lines: the stake only doubles on the first card, and only to ×2.
-The engine can still go higher after a 20-20 draw at a doubled stake; task-17 fixes that.
+#40 made the engine keep the stake at ×2, also after a 20-20 draw at a doubled stake.
 
 Score, triple crosses and double crosses are also the tournament ranking (after games won):
 5 games, ranked by games won, total score, triple crosses, double crosses.
@@ -193,9 +188,9 @@ This is several times the work of the statistics feature itself.
 
 ## 7. Follow-up tasks
 
-- task-24 (issue #57): Personal statistics on this device. Depends on task-17.
-- task-25 (issue #58): Tournament mode: 5 games and a final ranking. Depends on task-24.
-- task-26 (issue #59): Store played matches for bot learning. The host writes 1 Firestore document per finished multiplayer match. No dependencies.
+- #57: Personal statistics on this device. Depends on #40 (merged).
+- #58: Tournament mode: 5 games and a final ranking. Depends on #57.
+- #59: Store played matches for bot learning. The host writes 1 Firestore document per finished multiplayer match. No dependencies.
 
 ## Sources
 
