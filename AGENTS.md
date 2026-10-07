@@ -47,7 +47,6 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
 | `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | |
-| `backlog/` | Task backlog (Backlog.md). See below. | |
 | `IMPLEMENTATION_PROMPT.md` | The original build spec. Historical. | Where it differs from the code or README, the code and README are correct. |
 
 ## Game words (Dutch → meaning)
@@ -68,18 +67,19 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 
 - Branches start from `develop`. PRs go into `develop`.
 - Push to `develop` deploys the dev channel. Push to `main` deploys live. Never push to `main` or `develop` directly.
-- Branch name: `feature/task-<N>-<short-slug>` or `fix/task-<N>-<short-slug>` for bugs.
+- Branch name: `feature/<issue>-<short-slug>` or `fix/<issue>-<short-slug>` for bugs. `<issue>` is the GitHub issue number.
 - Commit messages: short, imperative, for example `Fix trick rollback on late message`.
 - Never commit `.env.local` or other secrets. `.env.production` is committed on purpose (public web config).
 
-## Backlog and GitHub issues
+## GitHub issues
 
-- Each task is a file in `backlog/tasks/task-<N> - <Title>.md`. It has a description and acceptance criteria.
-- Each task has one GitHub issue in `Winandvdb/koejon`. The first line of the issue body is `Backlog: task-<N>`.
-- The issue number can differ from the task number. Find the issue by that first line.
+- All work is tracked as GitHub issues in `Winandvdb/koejon`. There is no backlog in the repo.
+- An issue has a description, `Depends on #<D>` / `Related to #<R>` lines when needed, and an `### Acceptance criteria` checklist. It has one type label (`bug`, `enhancement`, `question`) and one `priority:` label.
+- To create an issue, use the `create-issue` skill (`.agents/skills/create-issue/SKILL.md`).
 - An assigned issue is taken. Do not work on an issue that is assigned to someone else.
-- Edit task files with the `backlog` CLI (`backlog task edit <N> ...`) or the backlog MCP tools. Do not change the `<!-- SECTION -->` / `<!-- AC -->` markers by hand.
-- To start work on a task, use the `start-task` skill (`.agents/skills/start-task/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/task-<N>` (ignored by git).
+- To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body.
+- `develop` is the default branch, so `Closes #<issue>` closes the issue when the PR merges.
+- Older issues start with `Backlog: task-<T>` and can name other work as `task-<T>`. Find that issue with `gh issue list --state all --search '"Backlog: task-<T>" in:body'`.
 - A PR with the label `needs manual check` is complete, but a person must still check the UI or network behaviour. A draft PR means that something failed.
 
 ## Keep this file current
