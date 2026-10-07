@@ -150,6 +150,7 @@ Rules:
 - Engine and bot logic: add or change tests in `tests/`. Reuse the builders in `tests/helpers.ts`.
 - New UI text: add it in Dutch AND English in `src/lib/i18n.ts`.
 - A new rule decision: add it to `RULE_ASSUMPTIONS.md`.
+- Spike (label `question`): write the result to `<WT>/docs/spikes/<N>-<SLUG>.md`. Do not change code. Make an issue for each follow-up with the `create-issue` skill, and list the issue numbers at the end of the write-up.
 - If you add, move or remove a module, command or rule that `AGENTS.md` describes, update `AGENTS.md`.
 
 Run both checks. Both must pass:
