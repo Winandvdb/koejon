@@ -12,7 +12,7 @@ That session sees only the issue and the code. Write so it needs nothing else.
 ## Fixed values
 
 - Repo: `Winandvdb/koejon`
-- Type labels: `bug` (something is broken), `enhancement` (new or changed behaviour), `question` (a spike: the result is a write-up, not code).
+- Type labels: `bug` (something is broken), `enhancement` (new or changed behaviour), `question` (a spike: the result is a write-up in `docs/spikes/`, not code).
 - Priority labels: `priority: high`, `priority: medium`, `priority: low`.
 
 ## Tool notes

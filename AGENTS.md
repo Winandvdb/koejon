@@ -48,6 +48,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
 | `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | |
+| `docs/spikes/` | Spike write-ups (issues with label `question`), one file per issue: `<issue>-<slug>.md`. | The result of a spike is a write-up here, not code. |
 | `IMPLEMENTATION_PROMPT.md` | The original build spec. Historical. | Where it differs from the code or README, the code and README are correct. |
 
 ## Game words (Dutch → meaning)
@@ -67,6 +68,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 ## Git and GitHub
 
 - Branches start from `develop`. PRs go into `develop`.
+- `develop` and `main` are protected: GitHub rejects direct pushes. A change gets into them only through a merged PR, also a small docs change.
 - Push to `develop` deploys the dev channel. Push to `main` deploys live. Never push to `main` or `develop` directly.
 - Branch name: `feature/<issue>-<short-slug>` or `fix/<issue>-<short-slug>` for bugs. `<issue>` is the GitHub issue number.
 - Commit messages: short, imperative, for example `Fix trick rollback on late message`.
@@ -77,6 +79,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - All work is tracked as GitHub issues in `Winandvdb/koejon`. There is no backlog in the repo.
 - An issue has a description, `Depends on #<D>` / `Related to #<R>` lines when needed, and an `### Acceptance criteria` checklist. It has one type label (`bug`, `enhancement`, `question`) and one `priority:` label.
 - To create an issue, use the `create-issue` skill (`.agents/skills/create-issue/SKILL.md`).
+- Before you edit an issue (title, body, labels), fetch it again with `gh issue view <n> --json title,body,labels,updatedAt`. Make your change on that fresh copy, never on a copy from earlier in the session. Other people or agents can change the issue at any time, and `gh issue edit --body` replaces the full body.
 - An assigned issue is taken. Do not work on an issue that is assigned to someone else.
 - To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body.
 - `develop` is the default branch, so `Closes #<issue>` closes the issue when the PR merges.

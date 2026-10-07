@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fly, scale } from 'svelte/transition'
   import type { Action, Card } from '../engine'
-  import { teamOf, turnedVisible } from '../engine'
+  import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
@@ -123,7 +123,11 @@
   let manual = $state({ hand: -1, order: [] as string[] })
   const displayHand = $derived(
     view.hand &&
-      arrangeHand(view.hand, $sortMode, manual.hand === pub.handNumber ? manual.order : []),
+      arrangeHand(
+        shownHand(pub, my, view.hand),
+        $sortMode,
+        manual.hand === pub.handNumber ? manual.order : [],
+      ),
   )
   const manualSort = $derived($sortMode === 'manual')
   /** Ask once, after the dealer is chosen and the cards are in the hand. */
@@ -418,12 +422,12 @@
               <button class="fab troef" onclick={() => send({ type: 'troefke', seat: my })}>{$t.troefkeAsk}</button>
             {/if}
             {#if has('ack')}
-              <button class="fab primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+              <button class="fab primary pulse" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
             {/if}
           </div>
         {:else if has('bid')}
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
-            <button class="fab primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>
+            <button class="fab primary pulse" onclick={() => send({ type: 'bid', seat: my, play: true })}>
               {$t.play}
             </button>
             <button class="fab" onclick={() => send({ type: 'bid', seat: my, play: false })}>
