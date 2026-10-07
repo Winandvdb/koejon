@@ -18,7 +18,7 @@ Do the steps in order. Do not ask the user for approval, except in a STOP case.
 - Head branch: `develop`. Base branch: `main`. Do not make a release branch.
 - PR title: `Release to main`
 - Main checkout: the directory that contains `AGENTS.md`. Call it `<REPO>`.
-- Earlier release PRs: #25 and #46. Read #46 for the tone and the level of detail: `gh pr view 46 --repo Winandvdb/koejon --json body --jq .body`.
+- Earlier release PRs: the merged PRs from `develop` into `main`. Step 2 finds the last one.
 
 ## STOP cases
 
@@ -26,7 +26,7 @@ When one of these is true, stop. Tell the user what you found. Do not change any
 
 - `gh` is not logged in.
 - `develop` has no commits that `main` does not have (step 2).
-- `main` has commits that `develop` does not have (step 2). Someone must merge `main` back into `develop` first.
+- `main` has non-merge commits that `develop` does not have (step 2), for example a hotfix. Someone must merge `main` back into `develop` first.
 
 ## Tool notes
 
@@ -47,11 +47,19 @@ git fetch origin
 ## Step 2: Check what goes live
 
 ```bash
-git log --oneline origin/develop..origin/main     # must be empty
-git log --oneline origin/main..origin/develop     # must not be empty
+git log --oneline --no-merges origin/develop..origin/main     # must be empty
+git log --oneline origin/main..origin/develop                 # must not be empty
 ```
 
 First output not empty → STOP. Second output empty → STOP: there is nothing to release.
+The merge commits of earlier release PRs exist only on `main`. `--no-merges` skips them, because their content is already on `develop`.
+
+Find the last release PR. Its number is `<L>`. Read its body for the tone and the level of detail:
+
+```bash
+gh pr list --repo Winandvdb/koejon --base main --head develop --state merged --limit 1 --json number,url
+gh pr view <L> --repo Winandvdb/koejon --json body --jq .body
+```
 
 Check for an open release PR:
 
@@ -115,7 +123,7 @@ Write the body to a file in your scratchpad. Use this layout. Write in English, 
 ```
 ## Functional context
 
-Release of `develop` to `main` (live on koejon.web.app). It contains everything merged into `develop` since the last release (#<last release PR>):
+Release of `develop` to `main` (live on koejon.web.app). It contains everything merged into `develop` since the last release (#<L>):
 
 - **<Player-facing theme>** (#<issue>, #<issue>): <what a player sees or gets now, 1-2 sentences>.
 - **<Theme>** (#<issue>): <...>
