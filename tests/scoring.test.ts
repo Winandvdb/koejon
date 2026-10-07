@@ -54,6 +54,21 @@ describe('scoring', () => {
     expect(s3.multiplier).toBe(2)
   })
 
+  it('20-20 draw after an all-passed deal stays at x2', () => {
+    const s = lastTrickState({
+      bidder: 1,
+      multiplier: 2,
+      points: [20, 20],
+      tricksWon: [3, 2],
+      trick: TRICK(),
+      turn: 0,
+      card: C('S', 'K'),
+    })
+    const s2 = finish(s, 0)
+    expect(s2.lastResult!.draw).toBe(true)
+    expect(s2.multiplier).toBe(2)
+  })
+
   it('level 1 multiplier applies: x4 erases 4', () => {
     const s = lastTrickState({
       bidder: 1,
