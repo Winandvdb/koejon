@@ -1,12 +1,12 @@
 ---
 name: create-issue
-description: Create one GitHub issue in this repo, with a description, acceptance criteria, a type label and a priority label, ready for the start-task skill. Use when the user says "create an issue", "make a task for ...", "log this bug", "add to the backlog" or runs /create-issue.
+description: Create one GitHub issue in this repo, with a description, acceptance criteria, a type label and a priority label, ready for the start-issue skill. Use when the user says "create an issue", "make a task for ...", "log this bug", "add to the backlog" or runs /create-issue.
 argument-hint: <what the issue is about>
 ---
 
 # create-issue
 
-You write ONE GitHub issue that another session can pick up with the `start-task` skill.
+You write ONE GitHub issue that another session can pick up with the `start-issue` skill.
 That session sees only the issue and the code. Write so it needs nothing else.
 
 ## Fixed values
@@ -47,7 +47,7 @@ If a related issue exists, note its number for the body.
 - **Type label**: one from the fixed values.
 - **Priority**: use the priority that the user gave. If they gave none, use `priority: medium` and say so in the report.
 
-Write the body to a file. Keep the `### Acceptance criteria` heading exactly: `start-task` looks for it.
+Write the body to a file. Keep the `### Acceptance criteria` heading exactly: `start-issue` looks for it.
 
 ```
 <description>
@@ -69,7 +69,7 @@ gh issue create --repo Winandvdb/koejon --title "<title>" \
   --label "<type label>" --label "<priority label>" --body-file <file>
 ```
 
-Do not assign the issue. `start-task` assigns it when work starts.
+Do not assign the issue. `start-issue` assigns it when work starts.
 
 ## Step 5: Report to the user
 
@@ -78,4 +78,4 @@ Give, in short sentences:
 - The issue link and number.
 - The labels, and if you chose the priority yourself.
 - Open questions that you wrote in the issue, if any.
-- The next command: `/start-task <number>`.
+- The next command: `/start-issue <number>`.

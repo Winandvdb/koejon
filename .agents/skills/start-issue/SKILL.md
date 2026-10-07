@@ -1,10 +1,10 @@
 ---
-name: start-task
-description: Start and finish one GitHub issue of this repo end to end. Claims the issue (assigns it to the logged-in gh user), makes a git worktree from develop, plans, implements, tests and opens a PR into develop. Use when the user says "start issue 52", "pick up #52", "work on issue #52", "start task 52" or runs /start-task.
+name: start-issue
+description: Start and finish one GitHub issue of this repo end to end. Claims the issue (assigns it to the logged-in gh user), makes a git worktree from develop, plans, implements, tests and opens a PR into develop. Use when the user says "start issue 52", "pick up #52", "work on issue #52", "start task 52" or runs /start-issue.
 argument-hint: <issue number, e.g. 52 or #52>
 ---
 
-# start-task
+# start-issue
 
 You implement ONE GitHub issue, from claim to pull request.
 Do the steps in order. Do not skip a step. Do not ask the user for approval, except in a STOP case.
