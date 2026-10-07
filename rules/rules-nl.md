@@ -48,9 +48,9 @@
   - Passen ze opnieuw alle 3 → de deler kiest: gaan met één van de twee getoonde kleuren
     als troef, of passen.
 - Wordt de hand volledig gepast → de linkerbuur van de deler wordt de nieuwe deler en de
-  inzet op de eerste gedraaide kaart verdubbelt. Meerdere gepaste handen achter elkaar blijven
-  verdubbelen (×2, ×4, ...). De inzet op de tweede gedraaide kaart blijft altijd ongewijzigd.
-  Zodra er een hand gespeeld en geteld is, is de inzet weer normaal.
+  inzet op de eerste gedraaide kaart wordt ×2. Gepaste handen en gelijke spelen achter elkaar
+  laten de inzet op ×2: hij verdubbelt nooit verder. De inzet op de tweede gedraaide kaart blijft
+  altijd ongewijzigd. Zodra er een hand gespeeld en geteld is, is de inzet weer normaal.
 
 ## Spelen
 
@@ -76,7 +76,7 @@
 - Het spelende team is het team van de speler die "spelen" zei (of van de deler als de deler
   koos). Het spelende team wint de hand bij meer dan 20 punten. Bij 19 of minder wint de
   verdediging. Een exacte 20-20 is gelijkspel: niemand streept meetjes weg en er komt geen
-  Koei bij, maar de inzet op de eerste gedraaide kaart van de volgende hand verdubbelt.
+  Koei bij, maar de inzet op de eerste gedraaide kaart van de volgende hand wordt ×2.
 - Het winnende team streept meetjes weg:
   - Hand gespeeld op de eerste gedraaide kaart: 1 meetje × de inzet.
   - Hand gespeeld op de tweede gedraaide kaart: 2 meetjes (nooit vermenigvuldigd).
