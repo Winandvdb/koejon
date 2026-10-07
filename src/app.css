@@ -1087,6 +1087,11 @@ button.tag {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
+/* Same gold pulse as the active nameplate: the game waits on me. */
+.fab.pulse {
+  animation: glow 1.6s ease-in-out infinite;
+}
+
 .result {
   min-width: 240px;
   gap: 8px;
@@ -1922,7 +1927,8 @@ button.tag {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nameplate.active {
+  .nameplate.active,
+  .fab.pulse {
     animation: none;
     box-shadow: 0 0 0 2px var(--gold);
   }

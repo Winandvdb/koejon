@@ -418,12 +418,12 @@
               <button class="fab troef" onclick={() => send({ type: 'troefke', seat: my })}>{$t.troefkeAsk}</button>
             {/if}
             {#if has('ack')}
-              <button class="fab primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+              <button class="fab primary pulse" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
             {/if}
           </div>
         {:else if has('bid')}
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
-            <button class="fab primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>
+            <button class="fab primary pulse" onclick={() => send({ type: 'bid', seat: my, play: true })}>
               {$t.play}
             </button>
             <button class="fab" onclick={() => send({ type: 'bid', seat: my, play: false })}>
