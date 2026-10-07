@@ -6,12 +6,12 @@ import {
   RANK_POINTS,
   RANKS,
   SUITS,
+  teamOf,
   trickPoints,
   trickWinnerIndex,
 } from '../engine'
 import type { Action, Card, Rank, State, Suit, TrickCard } from '../engine'
 
-const teamOf = (seat: number) => seat % 2
 const partnerOf = (seat: number) => (seat + 2) % 4
 const oppSeatsOf = (seat: number) => [(seat + 1) % 4, (seat + 3) % 4]
 
@@ -52,7 +52,7 @@ const LONE_TRUMP_MIN = 13
 /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
 const KNIJP_MIN = 4
 const KNIJP_CHANCE = 0.85
-const TROEFKE_CHANCE = 0.9
+export const TROEFKE_CHANCE = 0.9
 /** Dealer blind-choice probabilities. */
 const DEALER_SAME_SUIT = 0.9
 const DEALER_LOW_SAME = 0.15
@@ -406,11 +406,14 @@ export function botAction(
     case 'start':
     case 'deal':
     case 'next':
-    case 'troefke':
-      // Troefke is the bidder's lone legal action while the partner's first
-      // lead is pending — there is no decline. The real decision happens in
-      // the 'ack' branch below, where asking doubles as the confirmation.
       return first
+    case 'troefke':
+      // Troefke is first only for a bidder that already confirmed. The host
+      // and the simulation only ask pending seats, and then the partner is
+      // pending, not the bidder. The real decision is in the 'ack' branch.
+      throw new Error(
+        `bot seat ${seat} was asked to act with only troefke open: only pending seats may be asked, and a bidder decides troefke with its ack`,
+      )
     case 'ack': {
       const t = legal.find((a) => a.type === 'troefke')
       if (t && profile.tactics && wantsTroefke(s, seat, rand)) return t

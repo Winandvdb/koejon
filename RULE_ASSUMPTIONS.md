@@ -30,8 +30,8 @@ environment deviations. Each entry lists the chosen behavior.
   when a seated player leaves mid-match, a bot silently takes over the seat so the
   match can finish; in the lobby the seat is simply cleared.
 - **Host disconnect detection** — clients flag "host left" when the room heartbeat is
-  older than 15 s (heartbeat written by the host every 5 s). No host migration (spec'd
-  limitation).
+  older than 45 s (heartbeat written by the host every 15 s, `HEARTBEAT_MS`). No host
+  migration (spec'd limitation).
 - **Match start** — the host can only start when all 4 seats are occupied (the game is
   defined for exactly 4 players). Any extra `start` intents are rejected.
 - **Seating** — the room creator is always seat 0 and host; joining players take the
@@ -92,12 +92,14 @@ environment deviations. Each entry lists the chosen behavior.
 - **Emulator auto-connect** — the app connects to the emulators when
   `VITE_USE_FIREBASE_EMULATOR=true` **or** when no `VITE_FIREBASE_*` config is present,
   so `npm run dev` works with zero configuration.
-- **Host-authoritative writes** — all state transitions are single batched writes by
-  the host (room public state + hand docs + `hands/host` + engine snapshot). Clients
-  only write their own `actions/{uid}` intent doc.
-- **Engine recovery** — the full engine state is persisted host-only under
-  `rooms/{code}/engine/state` so a host reload can resume a match; other clients cannot
-  read it (it contains all hands and the RNG state).
+- **Host-authoritative writes** — only the host publishes state: the room public
+  state plus one hand doc per human seat, in one batched write (over Firestore) or
+  one message per guest (over WebRTC). Clients only send intents (their own
+  `actions/{uid}` doc over Firestore).
+- **Engine recovery** — the full engine state stays on the host device, in
+  `localStorage` under `koejon-engine-{code}`, so a host reload can resume a match.
+  It never goes to Firestore, so other clients cannot read it (it contains all hands
+  and the RNG state).
 - **Bot dealer chooses blind** — a human dealer's hand doc is masked during bidding,
   so a bot dealer may not rate its hand for the dealer choice either. The bot picks a
   shown suit at random (≈70% play) instead of evaluating its cards.

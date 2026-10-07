@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { teamOf } from '../engine'
   import { t } from '../lib/i18n'
   import type { RoomDoc } from '../lib/net-types'
 
@@ -44,8 +45,8 @@
 
   const full = $derived(room.seats.every((s) => s !== null))
   const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
-  const myTeam = $derived(mySeat % 2)
-  const teamName = (seat: number) => (seat % 2 === myTeam ? $t.wij : $t.zij)
+  const myTeam = $derived(teamOf(mySeat))
+  const teamName = (seat: number) => (teamOf(seat) === myTeam ? $t.wij : $t.zij)
 
   const inviteUrl = $derived(`${location.origin}${location.pathname}?room=${room.code}`)
   let qr = $state('')
@@ -133,7 +134,7 @@
                 onaddbot(i)
               }}>+ {$t.bot}</button>
           {/if}
-          <span class="team" class:ta={i % 2 === myTeam}>{teamName(i)}</span>
+          <span class="team" class:ta={teamOf(i) === myTeam}>{teamName(i)}</span>
         </li>
       {/each}
     </ul>

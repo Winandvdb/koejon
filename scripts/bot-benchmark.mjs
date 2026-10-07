@@ -42,7 +42,12 @@ try {
 
   const newStats = () => ({ hands: 0, secondUp: 0, r1: [0, 0], r2: [0, 0], trumps: [0, 0, 0, 0, 0, 0, 0] })
 
-  /** One match; `bots[team]` plays for that team. Returns the winning team. */
+  /**
+   * One match; `bots[team]` plays for that team. Returns the winning team.
+   * @param {number} seed
+   * @param {Function[]} bots
+   * @param {ReturnType<typeof newStats>} [stats]
+   */
   function runMatch(seed, bots, stats) {
     let s = createMatch(seed)
     const rand = mulberry(seed * 7919 + 13)
@@ -57,7 +62,7 @@ try {
         stats[r1 ? 'r1' : 'r2'][0]++
         if (a.play) {
           stats[r1 ? 'r1' : 'r2'][1]++
-          stats.trumps[s.hands[seat].filter((c) => c.s === suit).length]++
+          stats.trumps[s.hands[seat].filter((/** @type {{ s: string }} */ c) => c.s === suit).length]++
         }
       }
       const next = apply(s, a)
@@ -76,7 +81,7 @@ try {
   const n = 2 * MATCHES
   const p = wins / n
   const ci = 1.96 * Math.sqrt((p * (1 - p)) / n)
-  const pct = (x) => `${(100 * x).toFixed(1)}%`
+  const pct = (/** @type {number} */ x) => `${(100 * x).toFixed(1)}%`
 
   console.log(`Bot benchmark: this checkout vs ${opt.base}, level ${opt.level}, ${n} matches`)
   console.log(`Win rate of this checkout: ${pct(p)} ± ${pct(ci)} (${wins}/${n})`)

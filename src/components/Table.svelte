@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fly, scale } from 'svelte/transition'
   import type { Action, Card } from '../engine'
-  import { turnedVisible } from '../engine'
+  import { teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
@@ -31,9 +31,9 @@
   const pub = $derived(room.pub!)
   const seats = $derived(room.seats)
   const my = $derived(view.mySeat)
-  const myTeam = $derived(my % 2)
+  const myTeam = $derived(teamOf(my))
   const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
-  const playingTeam = $derived(pub.bidder === null ? null : pub.bidder % 2)
+  const playingTeam = $derived(pub.bidder === null ? null : teamOf(pub.bidder))
 
   const name = (i: number) => seats[i]?.name ?? `#${i}`
   /** Relative position: 0 bottom (me), 1 left, 2 top, 3 right. */
@@ -217,7 +217,7 @@
 
 {#snippet nameplate(seat: number)}
   {@const s: SeatInfo | null = seats[seat]}
-  {@const side = playingTeam !== null && playing ? (seat % 2 === playingTeam ? 'decl' : 'def') : null}
+  {@const side = playingTeam !== null && playing ? (teamOf(seat) === playingTeam ? 'decl' : 'def') : null}
   <div class="nameplate" class:active={acting(seat)} class:decl={side === 'decl'} class:def={side === 'def'}>
     <span class="avatar">{s?.bot ? '🤖' : name(seat).slice(0, 1).toUpperCase()}</span>
     <span class="np-name">
@@ -225,7 +225,7 @@
     </span>
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
-    {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
+    {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[teamOf(seat)]}</span>{/if}
     <div class="bubbles" class:has-say={!!sayings[seat]}>
       {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
       {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}

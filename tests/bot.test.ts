@@ -132,6 +132,11 @@ describe('bot troefke', () => {
     expect(botAction(s, 1, smart)).toEqual({ type: 'ack', seat: 1 })
   })
 
+  it('a bidder that already confirmed is never asked: troefke alone is an error', () => {
+    const s = { ...troefkeState(TRASH), trickAcks: [0, 1, 2, 3] }
+    expect(() => botAction(s, 1, smart)).toThrow(/only pending seats may be asked/)
+  })
+
   it('the partner honours the request by leading their best trump', () => {
     const s = { ...troefkeState(TRASH), troefkeAsked: true, trickAcks: [0, 1, 2, 3] }
     expect(botAction(s, 3, smart)).toEqual({ type: 'play', seat: 3, card: C('H', '10') })

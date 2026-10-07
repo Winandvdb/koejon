@@ -1,17 +1,47 @@
-import { apply, createMatch } from '../src/engine'
+import { apply, createMatch, rngNext } from '../src/engine'
 import type { Card, State, Suit, TrickCard } from '../src/engine'
+import type { KeyValueStore } from '../src/lib/link-local'
 
 export const C = (s: Suit, r: Card['r']): Card => ({ s, r })
 
-/** Deterministic float source for bots/tests. */
+/** Deterministic float source for bots/tests: the engine's own mulberry32. */
 export function mulberry(seed: number): () => number {
-  let a = seed | 0
+  const holder = { rng: seed }
+  return () => rngNext(holder)
+}
+
+/** In-memory stand-in for localStorage. */
+export function memoryStore(): KeyValueStore {
+  const m = new Map<string, string>()
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+  }
+}
+
+/** Act as a browser with cookies blocked: even reading localStorage throws.
+ *  Returns the undo. */
+export function blockStorage(): () => void {
+  const before = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() {
+      throw new DOMException('The operation is insecure.', 'SecurityError')
+    },
+  })
   return () => {
-    a |= 0
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    if (before) Object.defineProperty(globalThis, 'localStorage', before)
+    else delete (globalThis as { localStorage?: Storage }).localStorage
+  }
+}
+
+/** Wait until `fn` holds. */
+export async function until(fn: () => boolean, timeout = 30_000): Promise<void> {
+  const t0 = Date.now()
+  while (!fn()) {
+    if (Date.now() - t0 > timeout) throw new Error('timeout')
+    await new Promise((r) => setTimeout(r, 5))
   }
 }
 
@@ -109,7 +139,7 @@ export function dealtState(seed: number, dealer = 0): State {
   let guard = 100
   while (s.dealerDraw && s.dealerDraw.pending !== 2 && guard-- > 0) {
     const dd = s.dealerDraw
-    const seat = dd.drawer[dd.pending]
+    const seat = dd.drawer[dd.pending as 0 | 1]
     s = apply(s, { type: 'draw', seat, n: 6 })
   }
   if (!s.dealerDraw || s.dealerDraw.pending !== 2) throw new Error('draw did not finish')

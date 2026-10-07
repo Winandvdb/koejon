@@ -263,11 +263,6 @@ h3 {
   background: color-mix(in srgb, var(--accent) 88%, white);
 }
 
-.btn.ghost {
-  background: transparent;
-  border-color: transparent;
-}
-
 .btn.tiny {
   padding: 3px 9px;
   font-size: 12px;
@@ -343,14 +338,6 @@ h3 {
   text-align: left;
 }
 
-.btnrow,
-.bid-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -414,11 +401,6 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--muted);
-}
-
-.hint {
-  font-size: 0.85rem;
   color: var(--muted);
 }
 
@@ -595,10 +577,6 @@ input[type='checkbox'] {
   gap: 8px;
   min-height: 46px;
   border-bottom: 1px solid var(--border);
-}
-
-.seat-list li.clickable {
-  cursor: pointer;
 }
 
 .seat-list li.picked {

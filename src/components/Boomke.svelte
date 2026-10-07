@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n'
-  import type { BoomkeMark } from '../engine'
+  import { START_LINES, type BoomkeMark } from '../engine'
 
   let {
     marks,
@@ -34,7 +34,7 @@
   /** Lines climb the ladder; koeis hang as tails at the bottom of the boom. */
   const lines = $derived(sides.map((ms) => ms.filter((m) => m.t === 'line')))
   const koeis = $derived(sides.map((ms) => ms.filter((m) => m.t === 'koei')))
-  const n = $derived(Math.max(lines[0].length, lines[1].length, 13))
+  const n = $derived(Math.max(lines[0].length, lines[1].length, START_LINES))
   const kmax = $derived(Math.max(koeis[0].length, koeis[1].length))
   const H = $derived(TOP + n * STEP + 14 + (kmax > 0 ? KOEI_ZONE + (kmax - 1) * KOEI_ROW : 0))
   const y = (i: number) => TOP + (n - 1 - i) * STEP + 8
