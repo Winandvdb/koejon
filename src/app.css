@@ -1087,9 +1087,18 @@ button.tag {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
-/* Same gold pulse as the active nameplate: the game waits on me. */
+/* The pulse uses the button's own colour: the game waits on me. */
 .fab.pulse {
+  --glow: var(--fab);
   animation: glow 1.6s ease-in-out infinite;
+}
+
+.fab.primary.pulse {
+  --glow: var(--cta);
+}
+
+.fab.troef.pulse {
+  --glow: var(--gold);
 }
 
 .result {
@@ -1916,13 +1925,13 @@ button.tag {
   0%,
   100% {
     box-shadow:
-      0 0 0 2px var(--gold),
-      0 0 8px 0 rgba(224, 172, 46, 0.4);
+      0 0 0 2px var(--glow, var(--gold)),
+      0 0 8px 0 color-mix(in srgb, var(--glow, var(--gold)) 40%, transparent);
   }
   50% {
     box-shadow:
-      0 0 0 2px var(--gold),
-      0 0 20px 4px rgba(224, 172, 46, 0.7);
+      0 0 0 2px var(--glow, var(--gold)),
+      0 0 20px 4px color-mix(in srgb, var(--glow, var(--gold)) 70%, transparent);
   }
 }
 
@@ -1930,7 +1939,7 @@ button.tag {
   .nameplate.active,
   .fab.pulse {
     animation: none;
-    box-shadow: 0 0 0 2px var(--gold);
+    box-shadow: 0 0 0 2px var(--glow, var(--gold));
   }
 
   .confetti {
