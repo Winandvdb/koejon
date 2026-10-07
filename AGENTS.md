@@ -39,6 +39,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
+| `src/lib/stats.ts` | Personal statistics on this device (`localStorage`). `recordMatch` adds the own seat's numbers once per match at `GAME_OVER`; the engine counts them in `State.stats`. | No Firestore. Wrap `localStorage` in try/catch. |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
 | `src/app.css` | All styles and colour tokens. | |
 | `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |

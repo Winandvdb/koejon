@@ -1,12 +1,25 @@
 import { fullDeck, RANK_ORDER, sameCard, trickPoints, trickWinnerIndex } from './cards'
 import { rngShuffle } from './rng'
-import type { Action, BoomkeMark, Card, State, Suit } from './types'
+import type { Action, BoomkeMark, Card, MatchStats, State, Suit } from './types'
 import { START_LINES } from './types'
 
 const freshMarks = (): BoomkeMark[] =>
   [0, 1].flatMap((team) =>
     Array.from({ length: START_LINES }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
   )
+
+const freshStats = (): MatchStats => ({
+  doubles: [0, 0],
+  triples: [0, 0],
+  bidsMade: [0, 0, 0, 0],
+  bidsWon: [0, 0, 0, 0],
+})
+
+/** A finished match's score for `team`: 13 for the winner, and for the loser
+ *  13 minus the lines it still had to cross (Koeien included), at least 0. */
+export function matchScore(s: { lines: [number, number]; winner: number | null }, team: number): number {
+  return team === s.winner ? START_LINES : Math.max(0, START_LINES - s.lines[team])
+}
 
 export class IllegalActionError extends Error {
   constructor(msg: string) {
@@ -80,6 +93,7 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     koeien: [0, 0],
     lastResult: null,
     winner: null,
+    stats: freshStats(),
     log: [],
   }
 }
@@ -284,6 +298,7 @@ function startPlaying(s: State, trump: Suit, level: 1 | 2, bidder: number): void
   s.trump = trump
   s.level = level
   s.bidder = bidder
+  s.stats.bidsMade[bidder]++
   s.leader = leftOf(s.dealer)
   s.turn = s.leader
   s.phase = 'PLAYING'
@@ -340,6 +355,10 @@ function scoreHand(s: State): void {
   const erased = draw ? 0 : base + (kapot ? 1 : 0)
   const koei = !draw && winner === defending
   s.lines[winner] = Math.max(0, s.lines[winner] - erased)
+  // Counted by the stake, also when the team had fewer lines left to cross.
+  if (erased === 2) s.stats.doubles[winner]++
+  if (erased >= 3) s.stats.triples[winner]++
+  if (!draw && winner === playing) s.stats.bidsWon[s.bidder!]++
   // Cross the `erased` marks, top ladder lines first; Koeis are crossed last.
   // Same batch keeps one scratch gesture.
   let toCross = erased
@@ -399,6 +418,8 @@ export function apply(state: State, action: Action): State {
   const s = structuredClone(state)
   // A host may resume an engine state saved before piles existed.
   s.piles ??= [[], []]
+  // ... or before stats existed.
+  s.stats ??= freshStats()
   switch (action.type) {
     case 'start':
       s.phase = 'DEALER_DRAW'

@@ -69,6 +69,18 @@ export interface HandResult {
   multiplier: number
 }
 
+/** Per-match counters for the players' personal statistics. */
+export interface MatchStats {
+  /** Per team: hands in which the team crossed 2 lines. */
+  doubles: [number, number]
+  /** Per team: hands in which the team crossed 3 lines. */
+  triples: [number, number]
+  /** Per seat: hands the seat bid ("ik ga" or the dealer's trump choice). */
+  bidsMade: [number, number, number, number]
+  /** Per seat: of those bids, the hands the own team won. */
+  bidsWon: [number, number, number, number]
+}
+
 export interface LogEvent {
   t: string
   seat?: number
@@ -121,6 +133,7 @@ export interface State {
   lastResult: HandResult | null
   /** Match winner team (0/1) once a team reached 0 lines. */
   winner: number | null
+  stats: MatchStats
   log: LogEvent[]
 }
 

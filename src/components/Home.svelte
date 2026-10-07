@@ -5,6 +5,7 @@
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
   import type { BotLevel } from '../bots/bot'
+  import { loadStats } from '../lib/stats'
   import CardView from './CardView.svelte'
 
   let {
@@ -43,6 +44,17 @@
     { s: 'D', r: 'Q' },
     { s: 'C', r: 'J' },
   ]
+
+  const stats = loadStats()
+  const statRows = $derived([
+    [$t.statPlayed, stats.played],
+    [$t.statWon, stats.won],
+    [$t.statScore, stats.score],
+    [$t.statDoubles, stats.doubles],
+    [$t.statTriples, stats.triples],
+    [$t.statBidsMade, stats.bidsMade],
+    [$t.statBidsWon, stats.bidsWon],
+  ] as const)
 
   function save() {
     localStorage.setItem('koejon-name', name.trim())
@@ -124,5 +136,15 @@
         <button class="btn" type="submit" disabled={!online || !name.trim() || !code.trim()}>{$t.joinRoom}</button>
       </form>
     </div>
+    {#if stats.played > 0}
+      <section class="panel home-panel">
+        <h2>{$t.statsTitle}</h2>
+        <dl class="stats-grid">
+          {#each statRows as [label, n] (label)}
+            <div class="stat"><dt>{label}</dt><dd>{n}</dd></div>
+          {/each}
+        </dl>
+      </section>
+    {/if}
   {/if}
 </div>

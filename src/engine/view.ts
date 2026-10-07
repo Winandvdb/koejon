@@ -5,6 +5,7 @@ import type {
   DealerDraw,
   HandResult,
   LogEvent,
+  MatchStats,
   Phase,
   State,
   Suit,
@@ -39,6 +40,7 @@ export interface PublicState {
   koeien: [number, number]
   lastResult: HandResult | null
   winner: number | null
+  stats: MatchStats
   actionSeats: number[]
   log: LogEvent[]
 }
@@ -79,6 +81,7 @@ export function toPublic(s: State): PublicState {
     koeien: s.koeien,
     lastResult: s.lastResult,
     winner: s.winner,
+    stats: s.stats,
     actionSeats: pendingSeats(s),
     log: s.log,
   }
@@ -147,6 +150,7 @@ export function clientState(
     koeien: pub.koeien,
     lastResult: pub.lastResult,
     winner: pub.winner,
+    stats: pub.stats,
     log: pub.log,
   }
 }

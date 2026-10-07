@@ -79,6 +79,14 @@ environment deviations. Each entry lists the chosen behavior.
   `localStorage`. They are view-only and do not affect the game.
 - **No log panel** — the event log stays in the state (used for bid bubbles) but
   is not rendered, per owner request.
+- **Match score** (personal statistics, #57) — a finished match gives the winning
+  team 13 and the losing team 13 minus the lines it still had to cross, Koeien
+  included, at least 0 (`matchScore`). Both players of a team get the team's score.
+- **Double and triple crosses** (#57) — a hand counts as a double or triple cross for
+  the team that won it when its stake (`erased`) is 2 or 3 lines. It counts by the
+  stake, also when the team had fewer lines left to cross. A 20-20 draw counts as
+  neither. A bid ("ik ga" or the dealer's trump choice) counts as won only when the
+  bidder's team wins the hand; a draw is not a win.
 - **Invite links** — `?room=CODE` prefills the join field; the lobby shows a QR code and
   a copyable link.
 

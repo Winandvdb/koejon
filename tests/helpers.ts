@@ -59,6 +59,7 @@ export function playingState(over: Partial<State> = {}): State {
     koeien: [0, 0],
     lastResult: null,
     winner: null,
+    stats: { doubles: [0, 0], triples: [0, 0], bidsMade: [0, 0, 0, 0], bidsWon: [0, 0, 0, 0] },
     log: [],
     ...over,
   }

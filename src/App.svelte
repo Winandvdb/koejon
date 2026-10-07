@@ -18,6 +18,7 @@
   import { HostGame } from './lib/host'
   import { lang, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
+  import { recordMatch } from './lib/stats'
   import { theme } from './lib/theme'
   import type { Action } from './engine'
   import Home from './components/Home.svelte'
@@ -241,6 +242,15 @@
   $effect(() => {
     const ph = view?.room?.pub?.phase
     if (soloStarting && ph && ph !== 'LOBBY') soloStarting = false
+  })
+
+  // Personal statistics: each human client counts only its own seat. Bots
+  // write nothing, and recordMatch skips a match it already counted.
+  $effect(() => {
+    const r = view?.room
+    const seat = view?.mySeat ?? -1
+    if (session && r?.pub?.phase === 'GAME_OVER' && seat >= 0 && !r.seats[seat]?.bot)
+      recordMatch(session.code, r.pub, seat)
   })
 
   async function onJoin(code: string, name: string) {
