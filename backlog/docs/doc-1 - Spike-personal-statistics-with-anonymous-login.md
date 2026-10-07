@@ -195,6 +195,7 @@ This is several times the work of the statistics feature itself.
 
 - task-24 (issue #57): Personal statistics on this device. Depends on task-17.
 - task-25 (issue #58): Tournament mode: 5 games and a final ranking. Depends on task-24.
+- task-26 (issue #59): Store played matches for bot learning. The host writes 1 Firestore document per finished multiplayer match. No dependencies.
 
 ## Sources
 
