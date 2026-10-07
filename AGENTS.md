@@ -71,6 +71,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - `develop` and `main` are protected: GitHub rejects direct pushes. A change gets into them only through a merged PR, also a small docs change.
 - Push to `develop` deploys the dev channel. Push to `main` deploys live. Never push to `main` or `develop` directly.
 - Branch name: `feature/<issue>-<short-slug>` or `fix/<issue>-<short-slug>` for bugs. `<issue>` is the GitHub issue number.
+- PR body: follow `.github/pull_request_template.md` (Summary, Plan, Acceptance criteria, Tests, Check by hand).
 - Commit messages: short, imperative, for example `Fix trick rollback on late message`.
 - Never commit `.env.local` or other secrets. `.env.production` is committed on purpose (public web config).
 
