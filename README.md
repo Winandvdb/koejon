@@ -110,7 +110,8 @@ To point the CLI at a different project, edit `.firebaserc` or run `firebase use
 - `src/components/` — Svelte UI: home, lobby, table, boomke scoreboard, log, rules dialog.
 - Firestore layout: `rooms/{code}` (public state), `rooms/{code}/hands/{uid}` (private
   hands; `hands/host` holds bot hands), `rooms/{code}/actions/{uid}` (player intents),
-  `rooms/{code}/engine/state` (host-only serialized engine state for recovery).
+  `rooms/{code}/engine/state` (host-only serialized engine state for recovery),
+  `games/{id}` (finished matches as KJN/1 records, write-only; see below).
 
 ### Firestore data flow
 
@@ -125,6 +126,105 @@ limitation). Reconnects resume from the Firestore snapshot; a host reload restor
 engine from `rooms/{code}/engine/state`. When the host explicitly leaves, the whole
 room tree is deleted instead. A stuck human seat can be replaced by a bot from the
 host's kick button (lobby seat list or in-game nameplate).
+
+## Game records (KJN/1)
+
+Every finished multiplayer match is stored once as a KJN/1 record, for later
+analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`, `parseKjn`).
+
+### Format
+
+KJN/1 is plain text in the style of PBN/PGN: one `[Tag "value"]` per line.
+A header section comes first, then one section per hand, with an empty line
+between sections. The text ends with one newline. Tags always appear in the
+order below; optional tags are left out, never empty. This is the canonical
+form: `parseKjn` rejects any other spelling.
+
+Cards are a suit `S H D C` plus a rank `9 T J Q K A` (`T` = 10), e.g. `HT`.
+Seats are `0`–`3`; teams are seats {0,2} = team 0 and {1,3} = team 1.
+
+Header:
+
+| Tag | Value |
+|---|---|
+| `Format` | `KJN/1` |
+| `App` | Build (short commit) that recorded the match |
+| `Seats` | Four of `human`, `bot-easy`, `bot-normal`, `bot-hard`, `mixed` (switched mid-match), seat 0 first |
+| `Winner` | Winning team. Only in a finished match |
+| `Lines` | Lines left per team at the end, `"team0 team1"`. With `Winner` |
+
+Each hand, passed (thrown-in) hands included:
+
+| Tag | Value |
+|---|---|
+| `Hand` | 1, 2, … |
+| `Dealer` | Seat |
+| `Deal` | The four dealt hands, seat 0 first, separated by ` / `, each in dealt order. The dealer's 6th and 5th cards are the turned cards |
+| `Turned` | First (face-up) and second turned card |
+| `Auction` | Bids in order as seat + `G` (ik ga) or `P` (pas). Round 2, when played, follows after ` / ` |
+| `Choice` | Only when the dealer chose: the trump suit, or `-` (pass) |
+| `Contract` | `"bidder trump level"`, e.g. `"3 D 2"`, or `-` when everybody passed |
+| `Troefke` | `1` when the bidder asked for troefke, else `0`. Not for a passed hand |
+| `Play` | Tricks in order, separated by ` / `: the leading seat, then the four cards in play order. Not for a passed hand |
+| `Playing` | Team of the bidder. Not for a passed hand (also for `Points` … `Koei`) |
+| `Points` | Card points per team, `"team0 team1"` |
+| `Crossed` | Lines crossed per team this hand |
+| `Kapot` | `1` when the winning team took all 6 tricks |
+| `Koei` | `1` when the playing team got a koei |
+
+Trick acknowledgements and other UI actions are not recorded. The record has
+the dealt cards, not the seed: it stays readable without the RNG or engine
+build that made it. A change that an existing KJN/1 reader would read
+differently needs a new version (`KJN/2`); `tests/kjn.test.ts` holds a frozen
+KJN/1 sample that must keep parsing to the same text.
+
+### The `games` collection
+
+At `GAME_OVER` the host writes one document `games/{random id}`:
+`format`, `app`, `seats`, `winner`, `hands` (count) and `kjn` (the full text, about
+6 KB; at most 40 000 characters). The in-progress record lives next to the engine
+state in the host's `localStorage` (`koejon-kjn-<code>`), so a host reload loses
+no hands; it is removed once the upload landed. A failed upload is retried on the
+next commit or reload.
+
+Not stored: solo games (offline), unfinished matches, matches the host began on
+an older build, and bot-only matches from tests or `npm run bench`. The rules
+allow only a create of a well-formed document; the app cannot read, change or
+delete games.
+
+### Export for analysis
+
+The app cannot read `games`; use admin access. With `gcloud` logged in to the
+project (a managed export needs the Blaze plan and a Cloud Storage bucket):
+
+```bash
+gcloud firestore export gs://<bucket>/games-export --collection-ids=games
+```
+
+or, from a script with the Admin SDK (`npm i firebase-admin` in a scratch folder,
+credentials from `gcloud auth application-default login`):
+
+```js
+import { initializeApp } from 'firebase-admin/app'
+import { getFirestore } from 'firebase-admin/firestore'
+import { writeFileSync } from 'node:fs'
+initializeApp({ projectId: '<project-id>' })
+const snap = await getFirestore().collection('games').get()
+writeFileSync('games.kjn', snap.docs.map((d) => d.get('kjn')).join('\n'))
+```
+
+Records in the file are separated by an empty line before each `[Format` tag.
+`parseKjn` in `src/lib/kjn.ts` reads one record.
+
+### Privacy decision
+
+No in-app notice is shown for this collection. A `games` document holds no
+names, Firebase UIDs, room codes, device data or timestamps (Firestore only
+keeps its own create time), and the seats are only `human` or a bot level. The
+card play of an anonymous seat cannot be linked to a person with the data we
+keep, so we treat it as anonymous gameplay data. Every field is needed for
+gameplay analysis. If a field that can identify a player or device is ever
+added, add an in-app notice before that ships.
 
 ## Rules
 

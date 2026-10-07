@@ -8,6 +8,7 @@ import {
   type Unsubscribe,
 } from './fs'
 import { db } from './firebase'
+import type { GameDoc } from './kjn'
 import { FirestoreGuestLink, FirestoreHostLink, HEARTBEAT_MS } from './link-firestore'
 import type { HandDoc, Intent, PeerMsg, RoomDoc, RtcDoc } from './net-types'
 import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from './transport'
@@ -254,6 +255,10 @@ export class P2PHostLink implements HostLink {
     // Before the room goes: the rules check the host against the room doc.
     await Promise.all([...this.rtcIds].map((id) => deleteDoc(rtcRef(this.code, id)).catch(() => {})))
     await this.inner.destroy(humanUids)
+  }
+
+  saveGame(game: GameDoc): Promise<void> {
+    return this.inner.saveGame(game)
   }
 
   dispose(): void {

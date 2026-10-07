@@ -36,6 +36,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/link-p2p.ts` | Multiplayer over WebRTC. Firestore only for lobby and signaling. | |
 | `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
 | `src/lib/fs.ts`, `firebase.ts` | Firestore wrapper (counts reads and writes), Firebase init, emulator auto-connect. | |
+| `src/lib/kjn.ts` | KJN/1 game records: `recordAction` (host builds the record), `serializeKjn`, `parseKjn`, `gameDoc`. The host uploads one `games/{id}` doc per finished multiplayer match. Format spec in `README.md`. | KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. |
 | `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |

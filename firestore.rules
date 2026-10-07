@@ -62,5 +62,27 @@ service cloud.firestore {
         allow delete: if signedIn() && (request.auth.uid == uid || isHost(code));
       }
     }
+
+    // Finished multiplayer matches as KJN/1 records (see README). Write-once:
+    // the app never reads, changes or deletes them. No uid, name or room code.
+    match /games/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['format', 'app', 'seats', 'winner', 'hands', 'kjn'])
+        && request.resource.data.keys().hasAll(['format', 'app', 'seats', 'winner', 'hands', 'kjn'])
+        && request.resource.data.format == 'KJN/1'
+        && request.resource.data.app is string
+        && request.resource.data.app.matches('[A-Za-z0-9._-]{1,40}')
+        && request.resource.data.seats is list
+        && request.resource.data.seats.size() == 4
+        && request.resource.data.seats.hasOnly(['human', 'bot-easy', 'bot-normal', 'bot-hard', 'mixed'])
+        && request.resource.data.winner in [0, 1]
+        && request.resource.data.hands is int
+        && request.resource.data.hands > 0
+        && request.resource.data.hands <= 200
+        && request.resource.data.kjn is string
+        && request.resource.data.kjn.size() <= 40000
+        && request.resource.data.kjn.matches('\\[Format "KJN/1"\\]\\n(.|\\n)*');
+      allow read, update, delete: if false;
+    }
   }
 }

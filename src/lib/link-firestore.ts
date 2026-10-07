@@ -10,6 +10,7 @@ import {
   type Unsubscribe,
 } from './fs'
 import { db } from './firebase'
+import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
 import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from './transport'
 
@@ -17,6 +18,8 @@ export const roomRef = (code: string) => doc(db, 'rooms', code)
 export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
 export const actionRef = (code: string, uid: string) => doc(db, 'rooms', code, 'actions', uid)
 export const actionsCol = (code: string) => collection(db, 'rooms', code, 'actions')
+/** A random id: nothing ties a game to its room. */
+export const newGameRef = () => doc(collection(db, 'games'))
 
 /** Three missed host beats (15 s each) before guests call the host gone. */
 export const HEARTBEAT_MS = 15_000
@@ -115,6 +118,10 @@ export class FirestoreHostLink implements HostLink {
     for (const uid of humanUids) batch.delete(handRef(this.code, uid))
     batch.delete(roomRef(this.code))
     await batch.commit()
+  }
+
+  async saveGame(game: GameDoc): Promise<void> {
+    await withTimeout(setDoc(newGameRef(), game))
   }
 
   dispose(): void {

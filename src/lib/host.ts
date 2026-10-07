@@ -5,9 +5,14 @@ import type { BotLevel } from '../bots/bot'
 import { HEARTBEAT_MS } from './link-firestore'
 import type { KeyValueStore } from './link-local'
 import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-types'
+import { gameDoc, newKjn, recordAction } from './kjn'
+import type { KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
+
+declare const __APP_VERSION__: string
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown'
 
 const BOT_NAMES = [
   'Klaas',
@@ -50,6 +55,7 @@ export interface HostOptions {
 const engineKey = (code: string) => `koejon-engine-${code}`
 const seqKey = (code: string) => `koejon-seq-${code}`
 const quotesKey = (code: string) => `koejon-quotes-${code}`
+const kjnKey = (code: string) => `koejon-kjn-${code}`
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -80,6 +86,10 @@ export class HostGame {
   /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
   private waitSeat = -1
   private waitTimer: ReturnType<typeof setTimeout> | null = null
+  /** KJN record of this match, kept until uploaded. Null offline and for a
+   *  match that started before this host recorded. */
+  private kjn: KjnMatch | null = null
+  private uploading = false
 
   private constructor(
     private code: string,
@@ -142,6 +152,7 @@ export class HostGame {
     if (saved) {
       this.state = saved
       this.quoteBook = this.readQuotes() ?? this.quoteBook
+      this.kjn = this.readKjn()
     } else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
   }
@@ -281,6 +292,8 @@ export class HostGame {
     // A new match resets which lines were said.
     this.quoteBook.reset()
     this.quoteLog = []
+    // Only a link that can upload keeps a record: solo games stay offline.
+    this.kjn = this.link.saveGame ? newKjn(APP_VERSION, this.seatKinds()) : null
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
     await this.commit()
@@ -311,6 +324,7 @@ export class HostGame {
       this.storage?.removeItem(engineKey(this.code))
       this.storage?.removeItem(seqKey(this.code))
       this.storage?.removeItem(quotesKey(this.code))
+      this.storage?.removeItem(kjnKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -368,14 +382,49 @@ export class HostGame {
   }
 
   private tryApply(a: Action): boolean {
+    let next: State
     try {
-      this.state = apply(this.state, a)
-      return true
+      next = apply(this.state, a)
     } catch (e) {
       // Illegal or stale intent: dropped.
       console.warn('[host] dropped action', a.type, 'seat', a.seat, (e as Error).message)
       return false
     }
+    if (this.kjn) {
+      recordAction(this.kjn, this.state, a, next)
+      if (a.type === 'deal') {
+        const now = this.seatKinds()
+        this.kjn.seats = this.kjn.seats.map((k, i) => (k === now[i] ? k : 'mixed'))
+      }
+    }
+    this.state = next
+    return true
+  }
+
+  private seatKinds(): SeatKind[] {
+    return this.seats.map((s): SeatKind => (s?.bot ? `bot-${s.botLevel ?? 'normal'}` : 'human'))
+  }
+
+  /** One `games/{id}` write per finished match; the record goes once it landed. */
+  private uploadGame(): void {
+    const rec = this.kjn
+    const doc = rec && gameDoc(rec)
+    if (!rec || !doc || this.uploading || !this.link.saveGame) return
+    this.uploading = true
+    this.link
+      .saveGame(doc)
+      .then(() => {
+        if (this.kjn !== rec) return
+        this.kjn = null
+        try {
+          this.storage?.removeItem(kjnKey(this.code))
+        } catch {
+          // Storage blocked: the record was never kept either.
+        }
+      })
+      // Kept: the next commit or a reload tries again.
+      .catch((e) => console.warn('[host] game upload failed', e))
+      .finally(() => (this.uploading = false))
   }
 
   // ---- persistence ----
@@ -415,15 +464,27 @@ export class HostGame {
     }
   }
 
+  private readKjn(): KjnMatch | null {
+    try {
+      const json = this.storage?.getItem(kjnKey(this.code))
+      return json ? (JSON.parse(json) as KjnMatch) : null
+    } catch {
+      return null
+    }
+  }
+
   private async commit(): Promise<void> {
     this.drainBotAcks()
     const seq = ++this.seq
     try {
       this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
       this.storage?.setItem(seqKey(this.code), String(seq))
+      if (this.kjn) this.storage?.setItem(kjnKey(this.code), JSON.stringify(this.kjn))
+      else this.storage?.removeItem(kjnKey(this.code))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
+    if (this.state.phase === 'GAME_OVER') this.uploadGame()
     const hands = new Map<string, HandDoc>()
     this.seats.forEach((seat, i) => {
       if (seat && !seat.bot) hands.set(seat.uid, { cards: visibleHand(this.state, i) })
