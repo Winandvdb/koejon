@@ -121,7 +121,13 @@
       <form class="join-form" onsubmit={join}>
         <label class="field">
           <span>{$t.joinRoom}</span>
-          <input class="code-input" bind:value={code} placeholder={$t.codePh} maxlength={CODE_LENGTH} />
+          <!-- Not maxlength: it would cut a pasted " ABCDE" to " ABCD" before the trim. -->
+          <input
+            class="code-input"
+            bind:value={code}
+            placeholder={$t.codePh}
+            oninput={() => (code = code.trim().slice(0, CODE_LENGTH))}
+          />
         </label>
         <button class="btn" type="submit" disabled={!online || !name.trim() || !code.trim()}>{$t.joinRoom}</button>
       </form>

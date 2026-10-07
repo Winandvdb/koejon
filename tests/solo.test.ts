@@ -98,6 +98,13 @@ describe('offline solo', () => {
     }
   }, 30_000)
 
+  test('a second host tab for the same room is refused', async () => {
+    const storage = memoryStore()
+    const first = await open(storage, true)
+    await expect(open(storage, false)).rejects.toThrow('host-elsewhere')
+    first.close()
+  }, 10_000)
+
   test('fired quotes ride on the room doc, so every client sees the same', async () => {
     const g = await open(memoryStore(), true, { quoteRand: () => 0 })
     g.host.addBot(1)

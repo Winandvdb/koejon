@@ -20,8 +20,8 @@ export function memoryStore(): KeyValueStore {
   }
 }
 
-/** Act as a browser with cookies blocked: even reading localStorage throws.
- *  Returns the undo. */
+/** Act as a browser with cookies blocked: even reading localStorage throws,
+ *  and Web Locks deny every request. Returns the undo. */
 export function blockStorage(): () => void {
   const before = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
   Object.defineProperty(globalThis, 'localStorage', {
@@ -30,9 +30,14 @@ export function blockStorage(): () => void {
       throw new DOMException('The operation is insecure.', 'SecurityError')
     },
   })
+  const locks = globalThis.navigator.locks
+  const request = locks.request
+  locks.request = (() =>
+    Promise.reject(new DOMException('The request was denied.', 'SecurityError'))) as LockManager['request']
   return () => {
     if (before) Object.defineProperty(globalThis, 'localStorage', before)
     else delete (globalThis as { localStorage?: Storage }).localStorage
+    locks.request = request
   }
 }
 

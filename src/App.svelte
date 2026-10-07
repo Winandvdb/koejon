@@ -121,10 +121,14 @@
       ensureHost().catch((e) => {
         if (session !== s) return
         teardown()
-        const m = (e as Error).message
-        showErr(e, m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : '')
+        showErr(e, hostErrText(e))
       })
     }
+  }
+
+  function hostErrText(e: unknown): string {
+    const m = (e as Error)?.message
+    return m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : ''
   }
 
   // The room doc vanished (host destroyed it): leave cleanly instead of
@@ -227,7 +231,8 @@
       h.startGame()
     } catch (e) {
       soloStarting = false
-      showErr(e, '', true)
+      // attach() already showed this failure; do not overwrite it with the raw message.
+      showErr(e, hostErrText(e), true)
     }
   }
 

@@ -159,7 +159,10 @@ export class HostGame {
           // Held until dispose.
           return new Promise<void>((release) => (this.releaseLock = release))
         })
-        .catch(() => resolve(false))
+        // Only a timeout means another tab holds it. With site data blocked the
+        // browser denies every lock (SecurityError); tabs then share no storage
+        // either, so play on without one.
+        .catch((e) => resolve((e as DOMException)?.name !== 'TimeoutError'))
     })
     if (!got) throw new Error('host-elsewhere')
   }
