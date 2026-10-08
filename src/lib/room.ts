@@ -1,4 +1,4 @@
-import { getDoc, setDoc } from './fs'
+import { getDoc, setDoc } from 'firebase/firestore'
 import { derived, get, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'

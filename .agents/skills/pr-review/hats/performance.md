@@ -19,7 +19,6 @@ security and general quality are out of scope. Other hats cover them.
   hands). Each host write also costs about 1 read on the server for the
   `isHost` rule. One guest intent costs 1 write, 1 delete by the host, and
   listener reads.
-- `fs.ts` counts reads and writes for the dev build.
 
 ## What keeps the cost low now (report a change that breaks it)
 
@@ -35,9 +34,8 @@ security and general quality are out of scope. Other hats cover them.
 ## Look for
 
 - **Firestore cost**: a new read or write per card, per trick or per commit.
-  A new listener, or a listener that is not removed in `dispose()`. A direct
-  `firebase/firestore` call that bypasses `fs.ts`. A query listener on a
-  collection that can grow.
+  A new listener, or a listener that is not removed in `dispose()`. A query
+  listener on a collection that can grow.
 - **Message size**: a new list or object in `RoomDoc`, `PublicState` or a
   `PeerMsg` with no limit. It is sent on every commit and must stay far below
   the 1 MB Firestore doc limit.
