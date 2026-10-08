@@ -1,5 +1,7 @@
-import { apply, createMatch, rngNext } from '../src/engine'
+import { apply, createMatch, pendingSeats, rngNext } from '../src/engine'
 import type { Card, State, Suit, TrickCard } from '../src/engine'
+import { botAction } from '../src/bots/bot'
+import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
 import type { KeyValueStore } from '../src/lib/link-local'
 
 export const C = (s: Suit, r: Card['r']): Card => ({ s, r })
@@ -8,6 +10,20 @@ export const C = (s: Suit, r: Card['r']): Card => ({ s, r })
 export function mulberry(seed: number): () => number {
   const holder = { rng: seed }
   return () => rngNext(holder)
+}
+
+/** A finished bot match: final state and its KJN text. */
+export function finishedMatch(seed: number): { final: State; kjn: string } {
+  let s = createMatch(seed)
+  const rand = mulberry(seed * 31 + 7)
+  const rec = newKjn('test', ['human', 'human', 'bot-normal', 'bot-normal'])
+  while (s.phase !== 'GAME_OVER') {
+    const a = botAction(s, pendingSeats(s)[0], rand)
+    const next = apply(s, a)
+    recordAction(rec, s, a, next)
+    s = next
+  }
+  return { final: s, kjn: serializeKjn(rec) }
 }
 
 /** In-memory stand-in for localStorage. */

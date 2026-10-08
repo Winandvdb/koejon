@@ -60,6 +60,7 @@ const engineKey = (code: string) => `koejon-engine-${code}`
 const seqKey = (code: string) => `koejon-seq-${code}`
 const quotesKey = (code: string) => `koejon-quotes-${code}`
 const kjnKey = (code: string) => `koejon-kjn-${code}`
+const finalKey = (code: string) => `koejon-kjn-final-${code}`
 /** Finished records not uploaded yet, from any room: a new match never drops one. */
 const PENDING_KEY = 'koejon-games-pending'
 const PENDING_MAX = 20
@@ -103,6 +104,8 @@ export class HostGame {
   /** KJN record of the match in progress. Null when the link cannot upload,
    *  and for a match that started before this host recorded. */
   private kjn: KjnMatch | null = null
+  /** KJN text of the finished match, sent to every client in GAME_OVER. */
+  private finalKjn: string | null = null
   private uploading = false
   private disposed = false
   private onOnline = () => this.flushPending()
@@ -173,6 +176,7 @@ export class HostGame {
       this.state = saved
       this.quoteBook = this.readQuotes() ?? this.quoteBook
       this.kjn = this.readKjn()
+      this.finalKjn = saved.phase === 'GAME_OVER' ? this.readFinal() : null
     } else if (inLobby) this.state = createMatch((this.rand() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
   }
@@ -319,6 +323,7 @@ export class HostGame {
     this.quoteLog = []
     // A link that cannot upload (tests, bench) keeps no record.
     this.kjn = this.link.saveGame ? newKjn(APP_VERSION, this.seatKinds()) : null
+    this.finalKjn = null
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
     await this.commit()
@@ -350,6 +355,7 @@ export class HostGame {
       this.storage?.removeItem(seqKey(this.code))
       this.storage?.removeItem(quotesKey(this.code))
       this.storage?.removeItem(kjnKey(this.code))
+      this.storage?.removeItem(finalKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -445,6 +451,7 @@ export class HostGame {
     const doc = gameDoc(this.kjn!)
     this.kjn = null
     if (!doc) return
+    this.finalKjn = doc.kjn
     const id = crypto.randomUUID().replace(/-/g, '')
     this.writePending([...this.readPending(), { id, doc }].slice(-PENDING_MAX))
   }
@@ -518,6 +525,14 @@ export class HostGame {
     }
   }
 
+  private readFinal(): string | null {
+    try {
+      return this.storage?.getItem(finalKey(this.code)) ?? null
+    } catch {
+      return null
+    }
+  }
+
   private readPending(): PendingGame[] {
     try {
       const list = JSON.parse(this.storage?.getItem(PENDING_KEY) ?? '[]') as unknown
@@ -545,6 +560,8 @@ export class HostGame {
       this.storage?.setItem(seqKey(this.code), String(seq))
       if (this.kjn) this.storage?.setItem(kjnKey(this.code), JSON.stringify(this.kjn))
       else this.storage?.removeItem(kjnKey(this.code))
+      if (this.finalKjn) this.storage?.setItem(finalKey(this.code), this.finalKjn)
+      else this.storage?.removeItem(finalKey(this.code))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
@@ -560,9 +577,11 @@ export class HostGame {
       this.quoteLog = [...this.quoteLog, q].slice(-12)
       this.writeQuotes()
     }
+    // Only once all hands are played out: the record holds every dealt card.
+    const kjn = this.state.phase === 'GAME_OVER' ? this.finalKjn : null
     // The version only moves forward when the publish lands.
     await this.link.publish(
-      { seats: this.seats, pub, version: this.version + 1, seq, opts: this.opts, quotes: this.quoteLog },
+      { seats: this.seats, pub, version: this.version + 1, seq, opts: this.opts, quotes: this.quoteLog, kjn },
       hands,
     )
     this.version++

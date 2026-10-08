@@ -218,8 +218,7 @@ export class P2PHostLink implements HostLink {
     this.room = { ...this.room!, ...update, heartbeat: Date.now() }
     this.lastUpdate = update
     this.lastHands = hands
-    this.local?.room(this.room)
-    this.local?.hand(hands.get(this.uid) ?? null)
+    this.local?.state(this.room, hands.get(this.uid) ?? null)
     for (const [uid, p] of this.peers) {
       if (p.ch?.readyState === 'open') this.sendState(uid, p.ch)
     }
@@ -316,9 +315,9 @@ export class P2PGuestLink implements GuestLink {
         this.fsSeq = r.seq ?? 0
         if (!this.fsCurrent) return
         this.shownSeq = this.fsSeq
-        ev.room(r)
         // A hand held back while this copy was old belongs to it now.
-        if (this.fsHand !== undefined) ev.hand(this.fsHand)
+        if (this.fsHand !== undefined) ev.state(r, this.fsHand)
+        else ev.room(r)
       },
       hand: (h) => {
         this.fsHand = h
@@ -366,8 +365,7 @@ export class P2PGuestLink implements GuestLink {
       if (msg.t !== 'state') return
       // The channel is in order and straight from the host: always current.
       this.shownSeq = msg.room.seq ?? 0
-      this.ev?.room(msg.room)
-      this.ev?.hand(msg.hand)
+      this.ev?.state(msg.room, msg.hand)
     }
     // While the channel is open the host sends no Firestore beats, so a lost
     // channel is the "host gone" signal. Firestore beats (the host resyncs
