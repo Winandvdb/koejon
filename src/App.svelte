@@ -16,6 +16,7 @@
   import type { RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
+  import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
   import { lang, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
   import { safeStorage } from './lib/storage'
@@ -31,6 +32,10 @@
    *  tab's Firestore reads/writes in the top bar. */
   const viteEnv = (import.meta as { env?: { DEV?: boolean; VITE_APP_VARIANT?: string } }).env
   const DEV = !!viteEnv?.DEV || viteEnv?.VITE_APP_VARIANT === 'dev'
+
+  /** `?seed=` of a dev or review build (src/lib/seed.ts). Read now: attach()
+   *  clears the URL. Solo only — a seeded multiplayer host would know every hand. */
+  const seed = SEED_ALLOWED ? demoSeed(location.search, true) : null
 
   let uid = $state('')
   let session = $state<RoomSession | null>(null)
@@ -169,7 +174,8 @@
   function ensureHost(): Promise<HostGame> {
     if (!hostPromise) {
       const s = session!
-      hostPromise = HostGame.attach(s.code, uid, s.hostLink!)
+      const rand = seed === null ? undefined : hostRand(seed, s.code)
+      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
           // their back (it would answer that room's guests forever).

@@ -42,6 +42,9 @@ export interface HostOptions {
   storage?: KeyValueStore
   /** Random source for quote rolls. Default Math.random. */
   quoteRand?: () => number
+  /** Random source for the match seed, bot names and bot plays. Default
+   *  Math.random; a seeded one makes a solo game repeat (`?seed=`, src/lib/seed.ts). */
+  rand?: () => number
   /** How long one pending seat may stall before a hurry nag. Default 9 s. */
   hurryMs?: number
   /** Test hook: called after every landed commit. */
@@ -74,6 +77,7 @@ export class HostGame {
   private storage: HostOptions['storage']
   private onCommit: HostOptions['onCommit']
   private quoteRand: () => number
+  private rand: () => number
   private hurryMs: number
   private quoteBook = new QuoteBook()
   /** Quotes fired this match, newest last — published on every update. */
@@ -95,6 +99,7 @@ export class HostGame {
     this.storage = opts.storage ?? safeStorage
     this.onCommit = opts.onCommit
     this.quoteRand = opts.quoteRand ?? Math.random
+    this.rand = opts.rand ?? Math.random
     this.hurryMs = opts.hurryMs ?? 9000
   }
 
@@ -143,7 +148,7 @@ export class HostGame {
     if (saved) {
       this.state = saved
       this.quoteBook = this.readQuotes() ?? this.quoteBook
-    } else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
+    } else if (inLobby) this.state = createMatch((this.rand() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
   }
 
@@ -201,8 +206,8 @@ export class HostGame {
       if (this.state.phase !== 'LOBBY' || this.seats[seat] !== null) return
       const taken = new Set(this.seats.map((s) => s?.name))
       const free = BOT_NAMES.filter((n) => !taken.has(n))
-      const name = free[Math.floor(Math.random() * free.length)] ?? `Bot ${seat + 1}`
-      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
+      const name = free[Math.floor(this.rand() * free.length)] ?? `Bot ${seat + 1}`
+      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${this.rand().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
       await this.commit()
     })
   }
@@ -233,7 +238,7 @@ export class HostGame {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY') return
       for (let i = 3; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
+        const j = Math.floor(this.rand() * (i + 1))
         ;[this.seats[i], this.seats[j]] = [this.seats[j], this.seats[i]]
       }
       await this.commit()
@@ -270,7 +275,7 @@ export class HostGame {
   newMatch(): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'GAME_OVER') return
-      await this.beginMatch((Math.random() * 2 ** 31) | 0)
+      await this.beginMatch((this.rand() * 2 ** 31) | 0)
     })
   }
 
@@ -465,7 +470,7 @@ export class HostGame {
   }
 
   private botMove(seat: number): Action {
-    return botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal')
+    return botAction(this.state, seat, this.rand, this.seats[seat]?.botLevel ?? 'normal')
   }
 
   /** The "seen it" pause exists for humans — bots confirm instantly, inside
