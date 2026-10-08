@@ -53,7 +53,8 @@
   /** Lines climb the ladder; koeis hang as tails at the bottom of the boom. */
   const lines = $derived(sides.map((ms) => ms.filter((m) => m.t === 'line')))
   const koeis = $derived(sides.map((ms) => ms.filter((m) => m.t === 'koei')))
-  const n = $derived(Math.max(lines[0].length, lines[1].length, START_LINES))
+  // Each team has one line mark per start line, so the marks give the match's tree length.
+  const n = $derived(Math.max(lines[0].length, lines[1].length) || START_LINES)
   const kmax = $derived(Math.max(koeis[0].length, koeis[1].length))
   const H = $derived(TOP + n * STEP + 14 + (kmax > 0 ? KOEI_ZONE + (kmax - 1) * KOEI_ROW : 0))
   const y = (i: number) => TOP + (n - 1 - i) * STEP + 8

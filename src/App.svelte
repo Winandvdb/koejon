@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { getDoc, resetUsage, usage } from './lib/fs'
   import { signIn } from './lib/firebase'
   import {
@@ -20,6 +21,7 @@
   import { lang, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
   import { safeStorage } from './lib/storage'
+  import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
   import type { Action } from './engine'
   import type { HistoryEntry } from './lib/history'
@@ -29,6 +31,7 @@
   import Table from './components/Table.svelte'
   import Replay from './components/Replay.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
+  import DevPanel from './components/DevPanel.svelte'
 
   /** Dev builds (the vite dev server, or VITE_APP_VARIANT=dev: the dev
    *  channel and previews of PRs into develop) show a DEV chip and this
@@ -176,6 +179,9 @@
     history.replaceState(null, '', appUrl())
   }
 
+  // A changed dev setting acts at once on a running host.
+  if (DEV) onMount(() => devSettings.subscribe(() => host?.devChanged()))
+
   let hostPromise: Promise<HostGame> | null = null
 
   function ensureHost(): Promise<HostGame> {
@@ -183,7 +189,8 @@
       const s = session!
       const rand = soloRand
       soloRand = undefined
-      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand })
+      // Dev settings exist only in dev builds; elsewhere the host uses its defaults.
+      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand, dev: DEV ? () => get(devSettings) : undefined })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
           // their back (it would answer that room's guests forever).
@@ -354,12 +361,15 @@
     >
   {/if}
   <div class="settings-anchor">
-    {#if view?.room}
-      {@const r = view.room}
-      {@const hostCtl = r.hostUid !== uid}
+    <!-- Dev builds: also on the home screen, as tree length and autoplay are set before a solo match. -->
+    {#if view?.room || DEV}
       <button class="icon-btn" title={$t.settings} aria-label={$t.settings} onclick={() => (showSettings = !showSettings)}>⚙</button>
-      {#if showSettings}
-        <div class="settings-pop panel">
+    {/if}
+    {#if showSettings && (view?.room || DEV)}
+      <div class="settings-pop panel">
+        {#if view?.room}
+          {@const r = view.room}
+          {@const hostCtl = r.hostUid !== uid}
           <label>
             <input
               type="checkbox"
@@ -384,8 +394,9 @@
               <button class:active={$sortMode === m} onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button>
             {/each}
           </div>
-        </div>
-      {/if}
+        {/if}
+        {#if DEV}<DevPanel />{/if}
+      </div>
     {/if}
   </div>
   <button class="icon-btn" title={$t.rules} aria-label={$t.rules} onclick={() => (showRules = true)}>📖</button>
