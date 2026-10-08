@@ -48,14 +48,22 @@ an app with no backend, phone viewport, ESM film scripts).
 
 ## Run
 
-In a Claude Code session in the repo: `/human-review` (uncommitted work), `/human-review
-origin/develop` (the branch) or `/human-review <PR number>`. The page lands in `.human-review/`,
-which git ignores.
+In a Claude Code session in the repo: `/human-review origin/develop` (the branch) or
+`/human-review <PR number>`. The page lands in `.human-review/`, which git ignores.
+
+- Always give the base. With no argument and a clean working tree, the skill compares the branch
+  against `origin/main`, not against `develop`.
+- Skip the producers that only fail or stay empty here: when the skill runs `run-steps.py`, add
+  `--skip city,diagrams`. Code City is Java-only, and the diagram diff needs PlantUML while koejon
+  has no diagrams. Without the skip, `steps-ledger.py check` also reports a DRIFT for the Data and
+  Structure tabs.
+- Stop the page server before you delete `.human-review/`:
+  `$HUMAN_REVIEW_HOME/scripts/serve-review.py --stop`.
 
 One step on its own, for example to check the setup:
 
 ```bash
-$HUMAN_REVIEW_HOME/scripts/run-steps.py --only testcov --skip city --no-ledger
+$HUMAN_REVIEW_HOME/scripts/run-steps.py --only testcov --skip city,diagrams --no-ledger
 $HUMAN_REVIEW_HOME/scripts/run-steps.py --only video --no-ledger
 ```
 
