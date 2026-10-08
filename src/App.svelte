@@ -10,7 +10,7 @@
     RoomSession,
     type SessionView,
   } from './lib/room'
-  import { roomRef } from './lib/link-firestore'
+  import { roomRef, saveGame } from './lib/link-firestore'
   import { localLinks, SOLO_CODE } from './lib/link-local'
   import { appUrl, P2P_ENABLED } from './lib/link-p2p'
   import type { RoomDoc } from './lib/net-types'
@@ -34,8 +34,11 @@
   const DEV = !!viteEnv?.DEV || viteEnv?.VITE_APP_VARIANT === 'dev'
 
   /** `?seed=` of a dev or review build (src/lib/seed.ts). Read now: attach()
-   *  clears the URL. Solo only — a seeded multiplayer host would know every hand. */
-  const seed = SEED_ALLOWED ? demoSeed(location.search, true) : null
+   *  clears the URL. It seeds the first new solo game of this page load only —
+   *  never a resumed game, a later game, or a multiplayer room. */
+  let seed = SEED_ALLOWED ? demoSeed(location.search, true) : null
+  /** The random source for the next host attach; ensureHost() takes it. */
+  let soloRand: (() => number) | undefined
 
   let uid = $state('')
   let session = $state<RoomSession | null>(null)
@@ -81,9 +84,10 @@
     const code = urlCode || safeStorage.getItem('koejon-room')
     try {
       if (code === SOLO_CODE) {
-        // Offline solo: resume from this browser's storage, no Firestore.
+        // Offline solo: resume from this browser's storage; Firestore only
+        // receives the finished match.
         const links = localLinks(uid, safeStorage)
-        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
         else forgetRoom()
       } else if (code && authed) {
         // Return to a room in progress only when our seat is still ours.
@@ -174,7 +178,8 @@
   function ensureHost(): Promise<HostGame> {
     if (!hostPromise) {
       const s = session!
-      const rand = seed === null ? undefined : hostRand(seed, s.code)
+      const rand = soloRand
+      soloRand = undefined
       hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
@@ -227,8 +232,13 @@
     err = ''
     try {
       const links = localLinks(uid, safeStorage, newRoomDoc(SOLO_CODE, uid, name))!
+      if (seed !== null) {
+        soloRand = hostRand(seed, SOLO_CODE)
+        seed = null
+      }
       // attach() runs teardown() which resets soloStarting — set it after.
-      attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+      // Play stays offline; only the finished match is uploaded, when online.
+      attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
       soloStarting = true
       const h = await ensureHost()
       h.addBot(1, level)

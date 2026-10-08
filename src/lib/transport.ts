@@ -1,3 +1,4 @@
+import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
 
 /** What the host changes on every commit; the link adds its own heartbeat. */
@@ -16,6 +17,9 @@ export interface HostLink {
   heartbeat(): void
   /** Remove the room for everybody. */
   destroy(humanUids: string[]): Promise<void>
+  /** Store a finished match as `games/{id}`; `id` stays the same on a retry.
+   *  Absent: the host keeps no record (tests, bench). */
+  saveGame?(id: string, game: GameDoc): Promise<void>
   dispose(): void
 }
 

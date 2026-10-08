@@ -111,14 +111,22 @@ describe('offline solo', () => {
     }
   })
 
-  /** Bot names and every card played in the first two hands. */
-  async function playTwoHands(rand?: () => number, ownRand?: () => number): Promise<string[]> {
+  /** Bot names and every card played in the first two hands. `toggle` flips a
+   *  display option (an extra commit) whenever a bot is about to play. */
+  async function playTwoHands(rand?: () => number, ownRand?: () => number, toggle = false): Promise<string[]> {
     const g = await open(memoryStore(), true, { rand }, true, ownRand)
     const log: string[] = []
     const seen = new Set<string>()
+    const toggled = new Set<string>()
     const unsub = g.session.view.subscribe((v) => {
       const pub = v.room?.pub
       if (!pub || pub.handNumber > 2) return
+      const botToPlay = pub.phase === 'PLAYING' && pub.actionSeats.some((s) => v.room!.seats[s]?.bot)
+      const at = `${pub.handNumber}/${pub.tricksPlayed}/${pub.trick.length}`
+      if (toggle && botToPlay && !toggled.has(at)) {
+        toggled.add(at)
+        g.host.setOption('score', toggled.size % 2 === 1)
+      }
       for (const tc of pub.trick) {
         const key = `${pub.handNumber}/${pub.tricksPlayed}/${tc.seat}${tc.card.s}${tc.card.r}`
         if (seen.has(key)) continue
@@ -145,6 +153,11 @@ describe('offline solo', () => {
     expect(b).toEqual(a)
     // The host's seed decides it, not our own seat's moves.
     expect(await playTwoHands(seededRandom(2), seededRandom(99))).not.toEqual(a)
+  }, 60_000)
+
+  test('extra commits (a display toggle) do not change a seeded game', async () => {
+    const plain = await playTwoHands(seededRandom(1), seededRandom(99))
+    expect(await playTwoHands(seededRandom(1), seededRandom(99), true)).toEqual(plain)
   }, 60_000)
 
   test('without a seed, games differ', async () => {

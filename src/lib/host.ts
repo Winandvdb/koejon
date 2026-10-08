@@ -1,14 +1,19 @@
-import { apply, createMatch, pendingSeats, toPublic, visibleHand } from '../engine'
+import { apply, createMatch, legalActions, pendingSeats, toPublic, visibleHand } from '../engine'
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
 import { HEARTBEAT_MS } from './link-firestore'
 import type { KeyValueStore } from './link-local'
 import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-types'
+import { gameDoc, newKjn, recordAction } from './kjn'
+import type { GameDoc, KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
 import { safeStorage } from './storage'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
+
+declare const __APP_VERSION__: string
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown'
 
 const BOT_NAMES = [
   'Klaas',
@@ -54,6 +59,16 @@ export interface HostOptions {
 const engineKey = (code: string) => `koejon-engine-${code}`
 const seqKey = (code: string) => `koejon-seq-${code}`
 const quotesKey = (code: string) => `koejon-quotes-${code}`
+const kjnKey = (code: string) => `koejon-kjn-${code}`
+/** Finished records not uploaded yet, from any room: a new match never drops one. */
+const PENDING_KEY = 'koejon-games-pending'
+const PENDING_MAX = 20
+
+interface PendingGame {
+  /** Fixed doc id, reused on every retry. */
+  id: string
+  doc: GameDoc
+}
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -85,6 +100,12 @@ export class HostGame {
   /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
   private waitSeat = -1
   private waitTimer: ReturnType<typeof setTimeout> | null = null
+  /** KJN record of the match in progress. Null when the link cannot upload,
+   *  and for a match that started before this host recorded. */
+  private kjn: KjnMatch | null = null
+  private uploading = false
+  private disposed = false
+  private onOnline = () => this.flushPending()
 
   private constructor(
     private code: string,
@@ -128,6 +149,9 @@ export class HostGame {
     // state (own hand included) without waiting for the next move.
     if (h.state.phase !== 'LOBBY') h.enqueue(() => h.commit())
     h.scheduleBots()
+    // Records left by an offline match or an earlier session.
+    globalThis.addEventListener?.('online', h.onOnline)
+    h.flushPending()
     return h
   }
 
@@ -148,6 +172,7 @@ export class HostGame {
     if (saved) {
       this.state = saved
       this.quoteBook = this.readQuotes() ?? this.quoteBook
+      this.kjn = this.readKjn()
     } else if (inLobby) this.state = createMatch((this.rand() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
   }
@@ -173,6 +198,8 @@ export class HostGame {
   }
 
   dispose(): void {
+    this.disposed = true
+    globalThis.removeEventListener?.('online', this.onOnline)
     this.link.dispose()
     this.releaseLock?.()
     this.releaseLock = null
@@ -290,6 +317,8 @@ export class HostGame {
     // A new match resets which lines were said.
     this.quoteBook.reset()
     this.quoteLog = []
+    // A link that cannot upload (tests, bench) keeps no record.
+    this.kjn = this.link.saveGame ? newKjn(APP_VERSION, this.seatKinds()) : null
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
     await this.commit()
@@ -320,6 +349,7 @@ export class HostGame {
       this.storage?.removeItem(engineKey(this.code))
       this.storage?.removeItem(seqKey(this.code))
       this.storage?.removeItem(quotesKey(this.code))
+      this.storage?.removeItem(kjnKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -377,14 +407,69 @@ export class HostGame {
   }
 
   private tryApply(a: Action): boolean {
+    let next: State
     try {
-      this.state = apply(this.state, a)
-      return true
+      next = apply(this.state, a)
     } catch (e) {
       // Illegal or stale intent: dropped.
       console.warn('[host] dropped action', a.type, 'seat', a.seat, (e as Error).message)
       return false
     }
+    if (this.kjn) {
+      try {
+        recordAction(this.kjn, this.state, a, next)
+        if (next.phase === 'GAME_OVER') this.finishRecord()
+      } catch (e) {
+        // The record is analysis data: it must never stop a match.
+        console.warn('[host] game record dropped', e)
+        this.kjn = null
+      }
+    }
+    this.state = next
+    return true
+  }
+
+  private seatKinds(): SeatKind[] {
+    return this.seats.map((s): SeatKind => (s?.bot ? `bot-${s.botLevel ?? 'normal'}` : 'human'))
+  }
+
+  /** A seat that changed hands (leave, kick, reclaim) since the start is `mixed`. */
+  private markMixed(): void {
+    const now = this.seatKinds()
+    this.kjn!.seats = this.kjn!.seats.map((k, i) => (k === now[i] ? k : 'mixed'))
+  }
+
+  /** GAME_OVER: the record moves to the upload queue. */
+  private finishRecord(): void {
+    this.markMixed()
+    const doc = gameDoc(this.kjn!)
+    this.kjn = null
+    if (!doc) return
+    const id = crypto.randomUUID().replace(/-/g, '')
+    this.writePending([...this.readPending(), { id, doc }].slice(-PENDING_MAX))
+  }
+
+  /** Upload queued records one by one; a failed one stays for the next try. */
+  private flushPending(): void {
+    const save = this.link.saveGame?.bind(this.link)
+    if (this.uploading || this.disposed || !save) return
+    const next = this.readPending()[0]
+    if (!next) return
+    this.uploading = true
+    save(next.id, next.doc)
+      .then(() => true)
+      .catch((e) => {
+        console.warn('[host] game upload failed', e)
+        // Denied never turns into allowed: the doc already landed (write-once)
+        // or the rules refuse it. Anything else (offline) is retried later.
+        return (e as { code?: string })?.code === 'permission-denied'
+      })
+      .then((done) => {
+        this.uploading = false
+        if (!done) return
+        this.writePending(this.readPending().filter((p) => p.id !== next.id))
+        this.flushPending()
+      })
   }
 
   // ---- persistence ----
@@ -424,15 +509,46 @@ export class HostGame {
     }
   }
 
+  private readKjn(): KjnMatch | null {
+    try {
+      const json = this.storage?.getItem(kjnKey(this.code))
+      return json ? (JSON.parse(json) as KjnMatch) : null
+    } catch {
+      return null
+    }
+  }
+
+  private readPending(): PendingGame[] {
+    try {
+      const list = JSON.parse(this.storage?.getItem(PENDING_KEY) ?? '[]') as unknown
+      return Array.isArray(list) ? (list as PendingGame[]) : []
+    } catch {
+      return []
+    }
+  }
+
+  private writePending(list: PendingGame[]): void {
+    try {
+      if (list.length) this.storage?.setItem(PENDING_KEY, JSON.stringify(list))
+      else this.storage?.removeItem(PENDING_KEY)
+    } catch {
+      // Storage full or blocked: this record is lost, which is acceptable.
+    }
+  }
+
   private async commit(): Promise<void> {
     this.drainBotAcks()
     const seq = ++this.seq
+    if (this.kjn) this.markMixed()
     try {
       this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
       this.storage?.setItem(seqKey(this.code), String(seq))
+      if (this.kjn) this.storage?.setItem(kjnKey(this.code), JSON.stringify(this.kjn))
+      else this.storage?.removeItem(kjnKey(this.code))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
+    this.flushPending()
     const hands = new Map<string, HandDoc>()
     this.seats.forEach((seat, i) => {
       if (seat && !seat.bot) hands.set(seat.uid, { cards: visibleHand(this.state, i) })
@@ -480,6 +596,9 @@ export class HostGame {
     while (this.state.phase === 'PLAYING') {
       const seat = this.autoSeat()
       if (seat === undefined || !this.seats[seat]?.bot) return
+      // Ask the bot only when it can ack: a move thrown away would still draw
+      // from this.rand, and a seeded game would then depend on extra commits.
+      if (!legalActions(this.state, seat).some((x) => x.type === 'ack' || x.type === 'troefke')) return
       const a = this.botMove(seat)
       if ((a.type !== 'ack' && a.type !== 'troefke') || !this.tryApply(a)) return
     }
