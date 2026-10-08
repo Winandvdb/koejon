@@ -1,26 +1,11 @@
 import { describe, expect, test } from 'vitest'
-import { apply, createMatch, pendingSeats } from '../src/engine'
-import { botAction } from '../src/bots/bot'
 import { kjnFile } from '../src/lib/download'
-import { newKjn, parseKjn, recordAction, replayKjn, serializeKjn } from '../src/lib/kjn'
-import { mulberry } from './helpers'
-
-function finishedKjn(seed: number): string {
-  let s = createMatch(seed)
-  const rand = mulberry(seed)
-  const rec = newKjn('test', ['human', 'bot-normal', 'human', 'bot-normal'])
-  while (s.phase !== 'GAME_OVER') {
-    const a = botAction(s, pendingSeats(s)[0], rand)
-    const next = apply(s, a)
-    recordAction(rec, s, a, next)
-    s = next
-  }
-  return serializeKjn(rec)
-}
+import { parseKjn, replayKjn } from '../src/lib/kjn'
+import { finishedMatch } from './helpers'
 
 describe('kjnFile', () => {
   test('holds the KJN/1 text unchanged, and it replays', async () => {
-    const kjn = finishedKjn(11)
+    const { kjn } = finishedMatch(11)
     const file = kjnFile(kjn, new Date(2026, 9, 8, 21, 5))
     const text = await file.text()
     expect(text).toBe(kjn)

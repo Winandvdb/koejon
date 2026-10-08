@@ -1,19 +1,17 @@
 import { get } from 'svelte/store'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { apply, createMatch, pendingSeats, toPublic } from '../src/engine'
-import type { State } from '../src/engine'
+import { createMatch, toPublic } from '../src/engine'
 import { botAction } from '../src/bots/bot'
 import { addHistory, HISTORY_KEY, HISTORY_MAX, readHistory } from '../src/lib/history'
 import { HostGame } from '../src/lib/host'
 import type { GameDoc } from '../src/lib/kjn'
-import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
 import { FirestoreGuestLink, FirestoreHostLink } from '../src/lib/link-firestore'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { P2PGuestLink, P2PHostLink } from '../src/lib/link-p2p'
 import type { HandDoc, RoomDoc } from '../src/lib/net-types'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from '../src/lib/transport'
-import { memoryStore, mulberry, until } from './helpers'
+import { finishedMatch as finished, memoryStore, until } from './helpers'
 
 // Firestore stand-in that counts writes and keeps the room payloads.
 const fake = vi.hoisted(() => ({
@@ -98,20 +96,6 @@ afterEach(() => {
   fake.writes = 0
   fake.rooms.length = 0
 })
-
-/** A finished bot match: final state and its KJN text. */
-function finished(seed: number): { final: State; kjn: string } {
-  let s = createMatch(seed)
-  const rand = mulberry(seed * 31 + 7)
-  const rec = newKjn('test', ['human', 'human', 'bot-normal', 'bot-normal'])
-  while (s.phase !== 'GAME_OVER') {
-    const a = botAction(s, pendingSeats(s)[0], rand)
-    const next = apply(s, a)
-    recordAction(rec, s, a, next)
-    s = next
-  }
-  return { final: s, kjn: serializeKjn(rec) }
-}
 
 const CODE = 'ABCDE'
 const ME = 'me'

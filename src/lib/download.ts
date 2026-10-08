@@ -26,6 +26,6 @@ export async function downloadKjn(kjn: string): Promise<void> {
   document.body.append(a)
   a.click()
   a.remove()
-  // Revoke after the click has started the download.
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+  // Safari and some Firefox versions read the blob after click() returns.
+  setTimeout(() => URL.revokeObjectURL(url), 40_000)
 }
