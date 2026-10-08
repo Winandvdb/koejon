@@ -75,6 +75,7 @@ export class RoomSession {
   readonly connLost = writable(false)
   readonly view: Readable<SessionView>
   private unsubHistory: () => void
+  private savedKjn: string | null = null
 
   constructor(
     readonly code: string,
@@ -107,9 +108,11 @@ export class RoomSession {
   /** A seated human keeps the finished match on this device. */
   private keepRecord(room: RoomDoc | null): void {
     if (!room?.kjn || room.pub?.phase !== 'GAME_OVER') return
+    if (room.kjn === this.savedKjn) return
     const seat = seatOf(room, this.uid)
     if (seat < 0 || room.seats[seat]!.bot) return
     addHistory({ seat, names: room.seats.map((s) => s?.name ?? ''), kjn: room.kjn }, this.history)
+    this.savedKjn = room.kjn
   }
 
   send(intent: Intent): Promise<void> {

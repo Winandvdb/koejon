@@ -203,6 +203,19 @@ describe('session saves the finished match', () => {
     b.session.dispose()
   })
 
+  test('later updates of the same match do not read the history again', () => {
+    const store = memoryStore()
+    let reads = 0
+    const counted: KeyValueStore = { ...store, getItem: (k) => (reads++, store.getItem(k)) }
+    const s = fakeSession(ME, counted)
+    s.ev.room(overRoom())
+    const after = reads
+    s.ev.room({ ...overRoom(), seq: 10 })
+    s.ev.room({ ...overRoom(), seq: 11 })
+    expect(reads).toBe(after)
+    s.session.dispose()
+  })
+
   test('spectators and seats held by a bot save nothing', () => {
     const store = memoryStore()
     const spectator = fakeSession('nobody', store)
