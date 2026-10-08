@@ -1,9 +1,9 @@
 ---
-base: acb4250395fba31712847dffc38e815ccd3c7cf9
-audited-base: acb4250395fba31712847dffc38e815ccd3c7cf9
-audited-head: be3a312e3cf98b340fda45402fe94366c5f10d2f
-implementation: be3a312e3cf98b340fda45402fe94366c5f10d2f
-head: be3a312e3cf98b340fda45402fe94366c5f10d2f
+base: 1952a5b42889e507d2f3683ccfd2b3c680b86e55
+audited-base: 1952a5b42889e507d2f3683ccfd2b3c680b86e55
+audited-head: 645b4eadae1c5810698db7fc79009bbcdd54a9d1
+implementation: 645b4eadae1c5810698db7fc79009bbcdd54a9d1
+head: 645b4eadae1c5810698db7fc79009bbcdd54a9d1
 reviewers: /code-review high
 harness: claude-code
 session: 0e3b4d47-67f2-4d87-8524-dd118006ad9c
@@ -13,82 +13,96 @@ anchors: review-commit
 
 ## Fixed
 
-### Discarded bot moves drew from the seeded stream
-- file: src/lib/host.ts:485
-- file: tests/solo.test.ts:158-160
+### Review builds signed in to the live Firebase project
+- file: scripts/review-app.sh:27-28
+- file: docs/human-review.md:75-77
+- source: /code-review high
+- severity: high
+- observation: the review build was a production build with the real Firebase config. Every film signed in anonymously to the live project, and a film played to the end would write a games record into the shared database.
+- fix: build with VITE_USE_FIREBASE_EMULATOR=true; without an emulator the app plays solo offline.
+
+### A deleted .human-review/ left the base worktree registered
+- file: scripts/review-app.sh:23
+- file: scripts/review-app.sh:58
 - source: /code-review high
 - severity: medium
-- observation: drainBotAcks() asked a bot for a move on every commit and threw away anything but an ack, yet each ask drew from the seeded rand. An extra commit (a display toggle) changed every later bot play.
-- fix: ask the bot only when its legal actions hold an ack or troefke; a test toggles an option mid-game.
+- observation: up added a git worktree under .human-review/.apps and down never removed it; after rm -rf .human-review the next worktree add for that sha failed.
+- fix: prune before add, and down removes the worktree.
 
-### A resumed solo game got a fresh seeded stream
-- file: src/App.svelte:180
-- file: src/App.svelte:235
+### up printed the URL when the server never answered
+- file: scripts/review-app.sh:41-45
 - source: /code-review high
 - severity: medium
-- observation: ensureHost() seeded every solo host, also one that resumed a saved game from storage, so ?seed= restarted the stream in the middle of an old game.
-- fix: only onSolo() hands a seeded source to the next attach; a resume gets none.
+- observation: the wait loop ended silently after 30 s or a crashed vite preview, and up still exited 0 with a URL, so the film recorded an error page.
+- fix: fail with the end of preview.log when the port never answers.
 
-### The seed stayed for every later solo game in the tab
-- file: src/App.svelte:236
+### Python playwright was not pinned
+- file: docs/human-review.md:41
 - source: /code-review high
 - severity: low
-- observation: seed was a constant for the page's life; after Leave and a new solo game the same deal came back with no seed in the URL.
-- fix: the seed is used once and then cleared.
+- observation: pip installed the latest playwright while npx installed Chromium for the pinned 1.56.0; a Python script would miss its browser.
+- fix: pin playwright==1.56.0 in the pip line.
 
-### Third copy of mulberry32
-- file: src/lib/seed.ts:31
+### Docs and human-review.json seemed to disagree on the base
+- file: docs/human-review.md:54-57
 - source: /code-review high
 - severity: low
-- observation: seededRandom() repeated the engine's rngNext; a fix in one copy would not reach the other.
-- fix: wrap rngNext from the engine.
+- observation: the docs said a run with no argument compares against origin/main while human-review.json sets origin/develop.
+- fix: say the skill passes its own --base; the config base applies to run-steps.py without --base.
 
 ## Ignored
 
-### Seed the quote rolls and bot delays too
-- file: src/lib/host.ts:101
+### Normalise the short sha in url and down
+- file: scripts/review-app.sh:49
+- source: /code-review high
+- severity: info
+- observation: up names the app dir with git rev-parse --short, url and down use the plugin's {shortsha} as given.
+- why: the plugin makes {shortsha} with git rev-parse --short too (run-steps.py _app_slots).
+
+### HEAD builds the dirty working tree in place
+- file: scripts/review-app.sh:19
 - source: /code-review high
 - severity: low
-- observation: quoteRand and botDelay still use Math.random, so table talk differs between two seeded runs.
-- why: quotes depend on Date.now(); sharing the stream would make the game depend on timing.
+- observation: HEAD builds the working tree with its .env.local; another commit builds a clean worktree.
+- why: in place is how uncommitted work gets filmed; the emulator flag now fixes the backend.
 
-### Pass SEED_ALLOWED into demoSeed instead of an outer check
-- file: src/App.svelte:39
+### The base worktree uses HEAD's node_modules
+- file: scripts/review-app.sh:25
+- source: /code-review high
+- severity: low
+- observation: a base commit is built with the current checkout's dependency versions, not its own lockfile.
+- why: only the UX audit builds a base commit, and koejon does not configure it.
+
+### The stacked PR breaks "PRs go into develop"
+- file: AGENTS.md:73
 - source: /code-review high
 - severity: info
-- observation: the allowed check runs outside and a constant true goes into demoSeed's own allowed parameter.
-- why: the outer check lets Vite drop the parse code from live bundles (bundle checked).
+- observation: PR #81 targets feature/77-seed-url-parameter and the branch started from it.
+- why: the human asked in this session to stack #78 on #77 and not merge #77 yet.
 
-### Guard import.meta.env in seed.ts
-- file: src/lib/seed.ts:13
+### The review dev dependencies install in every npm ci
+- file: package.json:26-27
 - source: /code-review high
-- severity: info
-- observation: seed.ts reads import.meta.env directly; outside Vite it would throw on load.
-- why: only App.svelte imports it; Vite's static replacement removes the code in live builds.
-
-### The unseeded-games-differ test depends on chance
-- file: tests/solo.test.ts:163-166
-- source: /code-review high
-- severity: info
-- observation: two Math.random games could match by chance, and the test pins no code behaviour.
-- why: a match needs equal 31-bit seeds and names; it pins acceptance criterion 2.
+- severity: low
+- observation: playwright and @vitest/coverage-istanbul install in CI and deploys, though only the local review tool uses them.
+- why: the issue asked for this choice; one pinned version for everyone outweighs install time.
 
 ## Assumptions
 
-### Seed only solo games, never a multiplayer room
-- file: src/lib/seed.ts:25
-- alternative: seed Math.random globally, as the spike prototype did
-- confidence: 0.85
-- why: the issue left this open; a seeded host would know every hand, and a global override also seeds Firebase and WebRTC ids. A demo of multiplayer would want it, which keeps this below 0.9.
+### Playwright as a pinned dev dependency, not a folder outside the repo
+- file: package.json:27
+- alternative: a Playwright folder outside the repo via HUMAN_REVIEW_NODE_PATH
+- confidence: 0.6
+- why: every checkout then films with the same recorder version and no extra path. It costs install time in CI and deploys, which the review flagged; optionalDependencies would also work.
 
-### No seed on the dev channel either, only dev server and VITE_ALLOW_SEED builds
-- file: src/lib/seed.ts:13
-- alternative: also allow it when VITE_APP_VARIANT=dev (dev channel, PR previews)
-- confidence: 0.7
-- why: the human asked that players cannot abuse it in prod; the dev channel is public too, so I kept it out. A reviewer who wants to try a seed on a PR preview would need the other reading.
+### The CI gate waits for the PR workflow
+- file: human-review.json:4
+- alternative: name the develop workflow, or let the plugin pick every run on the sha
+- confidence: 0.9
+- why: koejon has no ci.yml, and firebase-hosting-pull-request.yml is the one that tests a PR branch. It only runs while the PR can merge, which the #77 review showed.
 
-### Seed only the first new solo game of a page load
-- file: src/App.svelte:235-236
-- alternative: seed every solo game until the page reloads
-- confidence: 0.75
-- why: a demo films one game per load, and a seed nobody sees in the URL should not silently fix later games.
+### Install the fork as a user skill link, not from the plugin marketplace
+- file: docs/human-review.md:23
+- alternative: /plugin marketplace add Winandvdb/human-review
+- confidence: 0.8
+- why: the marketplace takes the fork's default branch, which lacks the koejon patches. Merging koejon-spike into the fork's main would make the marketplace route work.

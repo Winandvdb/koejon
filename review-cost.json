@@ -1,12 +1,11 @@
 {
   "schema": "review-cost/1",
   "harness": "claude-code",
-  "recordedAt": "2026-10-08T10:59:57+00:00",
-  "base": "acb4250395fba31712847dffc38e815ccd3c7cf9",
-  "implementation": "be3a312e3cf98b340fda45402fe94366c5f10d2f",
+  "recordedAt": "2026-10-08T11:32:40+00:00",
+  "base": "1952a5b42889e507d2f3683ccfd2b3c680b86e55",
+  "implementation": "645b4eadae1c5810698db7fc79009bbcdd54a9d1",
   "rounds": [
-    "2026-10-08T10:59:35+00:00",
-    "2026-10-08T10:59:57+00:00"
+    "2026-10-08T11:32:40+00:00"
   ],
   "aicUsd": 0.01,
   "components": [
@@ -17,8 +16,8 @@
       "reason": null,
       "source": "recorded",
       "window": [
-        "2026-10-08T08:41:54+00:00",
-        "2026-10-08T10:36:09+00:00"
+        "2026-10-08T09:00:15+00:00",
+        "2026-10-08T11:26:11+00:00"
       ],
       "harnesses": [
         "claude-code"
@@ -29,23 +28,27 @@
           "session": "0e3b4d47-67f2-4d87-8524-dd118006ad9c",
           "what": "the implementing session, fork \u2192 prepare",
           "window": [
-            "2026-10-08T08:41:54+00:00",
-            "2026-10-08T10:36:09+00:00"
+            "2026-10-08T09:00:15+00:00",
+            "2026-10-08T11:26:11+00:00"
           ],
-          "tokens": 50745942,
+          "tokens": 64139882,
           "models": {
-            "Opus 5.5": 50745942
+            "Opus 5.5": 64139882
           },
-          "usd": 13.2275,
+          "usd": 16.0011,
           "aic": null,
-          "calls": 120,
-          "modelSeconds": 887.5
+          "calls": 134,
+          "modelSeconds": 1944.5,
+          "subagentModels": [
+            "Opus 5.5"
+          ],
+          "subagents": 1
         }
       ],
-      "tokens": 50745942,
-      "usd": 13.2275,
+      "tokens": 64139882,
+      "usd": 16.0011,
       "aic": null,
-      "modelSeconds": 887.5
+      "modelSeconds": 1944.5
     },
     {
       "key": "review",
@@ -54,8 +57,8 @@
       "reason": null,
       "source": "recorded",
       "window": [
-        "2026-10-08T10:36:09+00:00",
-        "2026-10-08T10:39:01+00:00"
+        "2026-10-08T11:26:11+00:00",
+        "2026-10-08T11:29:01+00:00"
       ],
       "harnesses": [
         "claude-code"
@@ -66,27 +69,27 @@
           "session": "0e3b4d47-67f2-4d87-8524-dd118006ad9c",
           "what": "the reviewers and their brief",
           "window": [
-            "2026-10-08T10:36:09+00:00",
-            "2026-10-08T10:39:01+00:00"
+            "2026-10-08T11:26:11+00:00",
+            "2026-10-08T11:29:01+00:00"
           ],
-          "tokens": 2210128,
+          "tokens": 3279024,
           "models": {
-            "Opus 5.5": 2210128
+            "Opus 5.5": 3279024
           },
-          "usd": 1.0014,
+          "usd": 1.203,
           "aic": null,
-          "calls": 13,
-          "modelSeconds": 156.0,
+          "calls": 24,
+          "modelSeconds": 149.7,
           "subagentModels": [
             "Opus 5.5"
           ],
           "subagents": 1
         }
       ],
-      "tokens": 2210128,
-      "usd": 1.0014,
+      "tokens": 3279024,
+      "usd": 1.203,
       "aic": null,
-      "modelSeconds": 156.0
+      "modelSeconds": 149.7
     },
     {
       "key": "autofix",
@@ -95,8 +98,8 @@
       "reason": null,
       "source": "recorded",
       "window": [
-        "2026-10-08T10:39:01+00:00",
-        "2026-10-08T10:59:57+00:00"
+        "2026-10-08T11:29:01+00:00",
+        "2026-10-08T11:32:40+00:00"
       ],
       "harnesses": [
         "claude-code"
@@ -107,23 +110,23 @@
           "session": "0e3b4d47-67f2-4d87-8524-dd118006ad9c",
           "what": "deciding and fixing",
           "window": [
-            "2026-10-08T10:39:01+00:00",
-            "2026-10-08T10:59:55+00:00"
+            "2026-10-08T11:29:01+00:00",
+            "2026-10-08T11:32:37+00:00"
           ],
-          "tokens": 13995350,
+          "tokens": 7875780,
           "models": {
-            "Opus 5.5": 13995350
+            "Opus 5.5": 7875780
           },
-          "usd": 3.4204,
+          "usd": 1.9623,
           "aic": null,
-          "calls": 26,
-          "modelSeconds": 1171.8
+          "calls": 13,
+          "modelSeconds": 124.9
         }
       ],
-      "tokens": 13995350,
-      "usd": 3.4204,
+      "tokens": 7875780,
+      "usd": 1.9623,
       "aic": null,
-      "modelSeconds": 1171.8
+      "modelSeconds": 124.9
     }
   ]
 }

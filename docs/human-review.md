@@ -38,7 +38,7 @@ an app with no backend, phone viewport, ESM film scripts).
 
    ```bash
    python3 -m venv ~/tools/hr-venv
-   ~/tools/hr-venv/bin/pip install pygments pillow numpy playwright pyyaml
+   ~/tools/hr-venv/bin/pip install pygments pillow numpy playwright==1.56.0 pyyaml
    export PATH=~/tools/hr-venv/bin:$PATH
    ```
 
@@ -52,7 +52,9 @@ In a Claude Code session in the repo: `/human-review origin/develop` (the branch
 `/human-review <PR number>`. The page lands in `.human-review/`, which git ignores.
 
 - Always give the base. With no argument and a clean working tree, the skill compares the branch
-  against `origin/main`, not against `develop`.
+  against `origin/main`, not against `develop`: it passes its own `--base` to every script. The
+  `"base": "origin/develop"` in `human-review.json` applies only when you run `run-steps.py`
+  without `--base`.
 - Skip the producers that only fail or stay empty here: when the skill runs `run-steps.py`, add
   `--skip city,diagrams`. Code City is Java-only, and the diagram diff needs PlantUML while koejon
   has no diagrams. Without the skip, `steps-ledger.py check` also reports a DRIFT for the Data and
@@ -70,8 +72,9 @@ $HUMAN_REVIEW_HOME/scripts/run-steps.py --only video --no-ledger
 What `human-review.json` sets up:
 
 - `video.app`: `scripts/review-app.sh up <sha>` builds that commit with `VITE_ALLOW_SEED=1` (so
-  `?seed=` works, `src/lib/seed.ts`) and serves it with `vite preview` on a free port; `down` stops
-  it. `reset: "true"` is a no-op on purpose: solo state lives in the browser, and every film opens a
+  `?seed=` works, `src/lib/seed.ts`) and `VITE_USE_FIREBASE_EMULATOR=true` (a film never signs in
+  to the live Firebase project or writes to its database; without a running emulator the app
+  plays solo offline), and serves it with `vite preview` on a free port; `down` stops it. `reset: "true"` is a no-op on purpose: solo state lives in the browser, and every film opens a
   fresh browser context.
 - `NARRATION_FISH: "off"`: the narration stays on this Mac. Without it, a Fish Audio key in the
   environment sends every spoken line to that paid service.
