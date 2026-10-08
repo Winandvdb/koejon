@@ -1477,6 +1477,36 @@ button.tag {
   translate: -50% 0;
 }
 
+/* Won tricks: one face-down card per trick. Out of the flow, so a growing
+   pile never moves the seat. */
+.seat {
+  position: relative;
+}
+
+.trick-pile {
+  --cw: calc(var(--card) * 0.4);
+  position: absolute;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.4);
+}
+
+.pile-card {
+  position: absolute;
+  inset: 0;
+}
+
+.seat-p2 .trick-pile {
+  right: 4px;
+  top: 50%;
+  margin-top: calc(var(--cw) * -0.7);
+}
+
+.seat-p1 .trick-pile {
+  bottom: 6px;
+  left: 50%;
+  margin-left: calc(var(--cw) * -0.5);
+}
+
 /* ---------- Trick area ---------- */
 
 .trick-area {
