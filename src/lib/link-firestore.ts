@@ -8,7 +8,7 @@ import {
   updateDoc,
   writeBatch,
   type Unsubscribe,
-} from './fs'
+} from 'firebase/firestore'
 import { auth, db, signIn } from './firebase'
 import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'

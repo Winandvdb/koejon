@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getDoc, resetUsage, usage } from './lib/fs'
+  import { getDoc } from 'firebase/firestore'
   import { signIn } from './lib/firebase'
   import {
     createRoom,
@@ -31,8 +31,7 @@
   import RulesDialog from './components/RulesDialog.svelte'
 
   /** Dev builds (the vite dev server, or VITE_APP_VARIANT=dev: the dev
-   *  channel and previews of PRs into develop) show a DEV chip and this
-   *  tab's Firestore reads/writes in the top bar. */
+   *  channel and previews of PRs into develop) show a DEV chip in the top bar. */
   const viteEnv = (import.meta as { env?: { DEV?: boolean; VITE_APP_VARIANT?: string } }).env
   const DEV = !!viteEnv?.DEV || viteEnv?.VITE_APP_VARIANT === 'dev'
 
@@ -346,13 +345,6 @@
   {#if DEV}<span class="room-chip dev">DEV</span>{/if}
   {#if session && session.code !== SOLO_CODE}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
-  {#if DEV}
-    <button
-      class="room-chip usage"
-      title="Firestore reads / writes from this tab since load (click to reset). Excludes the rules' isHost reads on the server: about 1 per host write."
-      onclick={resetUsage}>R {$usage.reads} · W {$usage.writes}{P2P_ENABLED ? '' : ' · P2P off'}</button
-    >
-  {/if}
   <div class="settings-anchor">
     {#if view?.room}
       {@const r = view.room}

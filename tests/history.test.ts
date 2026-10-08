@@ -20,7 +20,7 @@ const fake = vi.hoisted(() => ({
   rooms: [] as Record<string, unknown>[],
 }))
 vi.mock('../src/lib/firebase', () => ({ db: {} }))
-vi.mock('../src/lib/fs', () => ({
+vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...p: string[]) => ({ path: p.join('/') }),
   collection: (_db: unknown, ...p: string[]) => ({ path: p.join('/') }),
   onSnapshot: (ref: { path: string }, next: (snap: unknown) => void) => {

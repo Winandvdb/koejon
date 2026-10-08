@@ -6,7 +6,7 @@ import {
   setDoc,
   updateDoc,
   type Unsubscribe,
-} from './fs'
+} from 'firebase/firestore'
 import { db } from './firebase'
 import type { GameDoc } from './kjn'
 import { FirestoreGuestLink, FirestoreHostLink, HEARTBEAT_MS } from './link-firestore'

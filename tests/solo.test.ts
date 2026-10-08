@@ -1,6 +1,5 @@
-import { get } from 'svelte/store'
-import { describe, expect, test } from 'vitest'
-import { usage } from '../src/lib/fs'
+import * as firestore from 'firebase/firestore'
+import { describe, expect, test, vi } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
@@ -9,6 +8,21 @@ import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import { seededRandom } from '../src/lib/seed'
 import { safeStorage } from '../src/lib/storage'
 import { blockStorage, failLocks, memoryStore, until } from './helpers'
+
+// Spies on every Firestore read and write the app uses, so a test can prove
+// that solo never calls one.
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('firebase/firestore')>()
+  return {
+    ...fs,
+    getDoc: vi.fn(fs.getDoc),
+    setDoc: vi.fn(fs.setDoc),
+    updateDoc: vi.fn(fs.updateDoc),
+    deleteDoc: vi.fn(fs.deleteDoc),
+    writeBatch: vi.fn(fs.writeBatch),
+    onSnapshot: vi.fn(fs.onSnapshot),
+  }
+})
 
 const UID = 'me'
 
@@ -79,7 +93,8 @@ describe('offline solo', () => {
     expect(localLinks(UID, storage)).toBeNull()
     expect(storage.getItem(`koejon-engine-${SOLO_CODE}`)).toBeNull()
     // A whole solo match, reload included, never touched Firestore.
-    expect(get(usage)).toEqual({ reads: 0, writes: 0 })
+    const { getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot } = firestore
+    for (const f of [getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot]) expect(f).not.toHaveBeenCalled()
   }, 60_000)
 
   test('plays on when the browser blocks localStorage', async () => {
