@@ -43,6 +43,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
 | `src/lib/storage.ts` | `safeStorage`: `localStorage` that never throws (blocked storage reads as empty). | Use it for app storage; never touch `localStorage` directly outside a try/catch. |
+| `src/lib/seed.ts` | `?seed=N`: a solo game that repeats exactly (deal, bot names, bot plays), for scripted demos. The host's `rand` option carries it. | Solo only. Only in the Vite dev server or a build with `VITE_ALLOW_SEED=1`; never set that flag in a deploy workflow (whoever knows the seed knows every hand). |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. | Must work at phone width. |
 | `src/app.css` | All styles and colour tokens. | |
 | `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |
