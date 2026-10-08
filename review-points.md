@@ -78,31 +78,31 @@ anchors: review-commit
 ## Assumptions
 
 ### One pile per team: ours at the partner, theirs at the left opponent
-- file: src/components/Table.svelte:310
+- file: src/components/Table.svelte:303
 - alternative: Pile at the seat that won each trick, or ours at my own seat.
 - why: The ticket says "next to that team", and a team is two seats; my own seat area is crowded with the hand, hints and the boomke chip. The human saw this placement and asked only for clearer ownership, which pushes it up; the winner-seat reading still makes sense, which pulls it down.
 - confidence: 0.6
 
 ### Team shown by a ring in the nameplate colour
-- file: src/app.css:1510-1516
+- file: src/app.css:1504-1510
 - alternative: A label ("Wij"/"Zij") or a count badge under the pile.
 - why: The human asked to make ownership clear but not how; red and blue already mean playing and defending team on the nameplates. A label would be clearer to a new player, so it is not certain.
 - confidence: 0.65
 
 ### Piles show only in PLAYING, SCORED and GAME_OVER
-- file: src/components/Table.svelte:275
+- file: src/components/Table.svelte:269
 - alternative: Keep the piles through CUTTING and DEALING until the actual deal.
 - why: After "next hand" the piles become the new deck at the cut, so on a real table they are gone by then. The ticket says "clears at the next deal", which is a little later, so this is a close reading.
 - confidence: 0.75
 
 ### One face-down card per trick, not four
-- file: src/components/Table.svelte:289
+- file: src/components/Table.svelte:282
 - alternative: Four cards per trick, crossed as on a real table.
 - why: The human asked that the tricks can be counted, and one card per trick makes the count direct. Four cards per trick would look closer to a real table.
 - confidence: 0.8
 
 ### Keep a full-hand minimum size for every opponent hand
-- file: src/app.css:1443-1452
+- file: src/app.css:1433-1442
 - alternative: A fixed anchor element for the pile only, leaving the hand box free to shrink.
 - why: A stable hand box is the smallest fix, and the seat already reserves this space for most of a hand. It also applies when no pile shows (lobby, dealer draw), and I did not check those layouts on screen.
 - confidence: 0.6
