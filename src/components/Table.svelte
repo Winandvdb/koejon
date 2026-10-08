@@ -47,6 +47,21 @@
     { x: 180, y: 0 },
   ]
   const TILT = [-4, 3, -2, 5]
+  /** Each won trick lies clearly askew on the pile, so the tricks can be counted. The skew
+   *  differs per hand, team and trick, but is derived, not random: a redraw must not move
+   *  a card, and every client must see the same pile. Neighbours turn opposite ways. */
+  const pileSkew = (hand: number, team: number, k: number) => {
+    let h = Math.imul(hand + 1, 0x9e3779b1) ^ Math.imul(team + 1, 0x85ebca6b) ^ Math.imul(k + 1, 0xc2b2ae35)
+    const next = () => {
+      h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d)
+      h = Math.imul(h ^ (h >>> 12), 0x297a2d39)
+      return ((h ^= h >>> 15) >>> 0) / 2 ** 32
+    }
+    const turn = (k % 2 ? 1 : -1) * (6 + next() * 14)
+    const x = k * 0.12 + (next() - 0.5) * 0.14
+    const y = -k * 0.16 + (next() - 0.5) * 0.1
+    return `translate: calc(var(--cw) * ${x.toFixed(3)}) calc(var(--cw) * ${y.toFixed(3)}); rotate: ${turn.toFixed(1)}deg`
+  }
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
@@ -89,6 +104,11 @@
   )
   /** Lingered cards fly out towards the seat that won the trick. */
   const lingerExit = $derived(DIR[rel(pub.leader)])
+  /** Won tricks on a team's pile. A trick still lingering on the felt joins the
+   *  pile when it flies off; after the last trick it joins at once for the score. */
+  const pileCount = (team: number) =>
+    pub.tricksWon[team] -
+    (pub.phase === 'PLAYING' && lingerTrick !== null && teamOf(pub.leader) === team ? 1 : 0)
 
   /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
@@ -259,6 +279,33 @@
   {/if}
 {/snippet}
 
+{#snippet trickPile(team: number)}
+  {#if playing && pileCount(team) > 0}
+    {@const label = `${teamName(team)} — ${$t.tricks}: ${pileCount(team)}`}
+    <!-- The ring repeats the team colour of the nameplates. The wrapper has its
+         own transition: a local one on the first card would not play. -->
+    <div
+      class="trick-pile"
+      class:decl={team === playingTeam}
+      class:def={team !== playingTeam}
+      role="img"
+      title={label}
+      aria-label={label}
+      in:scale={{ start: 0.6, duration: 220 }}
+    >
+      {#each Array(pileCount(team)) as _, k (k)}
+        <div
+          class="pile-card"
+          style={pileSkew(pub.handNumber, team, k)}
+          in:scale={{ start: 0.6, duration: 220 }}
+        >
+          <div class="card-back"></div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet opponent(seat: number, pos: number)}
   <div class="seat seat-p{pos}">
     {@render nameplate(seat)}
@@ -266,6 +313,8 @@
       {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
         <div class="opp-card"><div class="card-back"></div></div>
       {/each}
+      <!-- One pile per team, right by the hand: ours at my partner, theirs at the left opponent. -->
+      {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
     </div>
     {@render turnedAt(seat)}
   </div>
