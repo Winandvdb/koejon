@@ -2,7 +2,7 @@ import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
 
 /** What the host changes on every commit; the link adds its own heartbeat. */
-export type RoomUpdate = Pick<RoomDoc, 'seats' | 'pub' | 'version' | 'seq' | 'opts' | 'quotes'>
+export type RoomUpdate = Pick<RoomDoc, 'seats' | 'pub' | 'version' | 'seq' | 'opts' | 'quotes' | 'kjn'>
 
 /** Host side of the wire: how state leaves the host and intents reach it. */
 export interface HostLink {

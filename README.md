@@ -206,6 +206,20 @@ cannot read, change or delete games), at most 12 fields, a `format` of the form
 fields or a new format version without a rules change. The exact document shape
 is checked in `tests/kjn.test.ts`.
 
+### Local history
+
+The `games` collection is write-only and holds no player identifiers, so a
+player's own matches live on their device (`src/lib/history.ts`). In `GAME_OVER`
+the host puts the canonical KJN/1 text on the room (`room.kjn`): over the data
+channel, and on the `GAME_OVER` room write for Firestore guests, so no extra
+write. Before `GAME_OVER` it is always null, since the record holds every dealt
+card; a new match clears it. Each seated human client, solo included, adds the
+match once to `localStorage` (`koejon-history`, at most 20, oldest dropped
+first) with the finish time, own seat and the seat names. Names stay on the
+device and never go into the KJN text. The same text is never added twice, so a
+reload on the end screen does not duplicate it. A record that `parseKjn` rejects
+is not kept. The history is never uploaded.
+
 ### Export for analysis
 
 The app cannot read `games`; use admin access. With `gcloud` logged in to the
