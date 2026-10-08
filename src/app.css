@@ -1422,13 +1422,23 @@ button.tag {
 /* ---------- Opponent hands ---------- */
 
 .opp-hand {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
+/* Keep the size of a full hand: the trick pile is placed against it and must
+   not move as cards are played. */
+.opp-hand.horizontal {
+  min-width: calc(var(--card) * 1.2);
+  min-height: calc(var(--card) * 0.7);
+}
+
 .opp-hand.vertical {
   flex-direction: column;
+  min-width: calc(var(--card) * 0.5);
+  min-height: calc(var(--card) * 1.25);
 }
 
 .opp-card {
@@ -1479,10 +1489,6 @@ button.tag {
 
 /* Won tricks: one face-down card per trick, next to the hand. Out of the
    flow, so a growing pile never moves the seat. */
-.opp-hand {
-  position: relative;
-}
-
 .trick-pile {
   --cw: calc(var(--card) * 0.4);
   position: absolute;
@@ -1505,13 +1511,13 @@ button.tag {
 
 /* Room for the skewed cards, which fan out to the right and upwards. */
 .seat-p2 .trick-pile {
-  left: calc(100% + 20px);
+  left: calc(100% + var(--cw) * 0.6);
   top: 50%;
   margin-top: calc(var(--cw) * -0.5);
 }
 
 .seat-p1 .trick-pile {
-  top: calc(100% + 28px);
+  top: calc(100% + var(--cw) * 0.8);
   left: 50%;
   margin-left: calc(var(--cw) * -0.7);
 }

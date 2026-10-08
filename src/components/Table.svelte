@@ -90,6 +90,11 @@
   )
   /** Lingered cards fly out towards the seat that won the trick. */
   const lingerExit = $derived(DIR[rel(pub.leader)])
+  /** Won tricks on a team's pile. A trick still lingering on the felt joins the
+   *  pile when it flies off; after the last trick it joins at once for the score. */
+  const pileCount = (team: number) =>
+    pub.tricksWon[team] -
+    (pub.phase === 'PLAYING' && lingerTrick !== null && teamOf(pub.leader) === team ? 1 : 0)
 
   /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
@@ -261,9 +266,10 @@
 {/snippet}
 
 {#snippet trickPile(team: number)}
-  {#if playing && pub.tricksWon[team] > 0}
-    {@const label = `${teamName(team)} — ${$t.tricks}: ${pub.tricksWon[team]}`}
-    <!-- The ring repeats the team colour of the nameplates. -->
+  {#if playing && pileCount(team) > 0}
+    {@const label = `${teamName(team)} — ${$t.tricks}: ${pileCount(team)}`}
+    <!-- The ring repeats the team colour of the nameplates. The wrapper has its
+         own transition: a local one on the first card would not play. -->
     <div
       class="trick-pile"
       class:decl={team === playingTeam}
@@ -271,11 +277,12 @@
       role="img"
       title={label}
       aria-label={label}
+      in:scale={{ start: 0.6, duration: 220 }}
     >
-      {#each Array(pub.tricksWon[team]) as _, k (k)}
+      {#each Array(pileCount(team)) as _, k (k)}
         <div
           class="pile-card"
-          style="translate: {k * 3}px {-k * 4}px; rotate: {PILE_TILT[k % PILE_TILT.length]}deg"
+          style="translate: calc(var(--cw) * {k * 0.12}) calc(var(--cw) * {-k * 0.16}); rotate: {PILE_TILT[k]}deg"
           in:scale={{ start: 0.6, duration: 220 }}
         >
           <div class="card-back"></div>
