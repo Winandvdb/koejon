@@ -349,7 +349,26 @@ const sameResult = (r: HandResult, k: KjnResult) => {
  * records that pass this.
  */
 export function replayKjn(m: KjnMatch): State {
+  return runKjn(m, () => {})
+}
+
+/**
+ * The engine state after each recorded action: the deal, each bid, the
+ * dealer choice, troefke and each card (the last card ends the hand).
+ * Trick acknowledgements are folded into the next card. Throws like `replayKjn`.
+ */
+export function replaySteps(m: KjnMatch): State[] {
+  const steps: State[] = []
+  runKjn(m, (s) => steps.push(s))
+  return steps
+}
+
+function runKjn(m: KjnMatch, step: (s: State) => void): State {
   let s = createMatch(0)
+  const act = (a: Action) => {
+    s = apply(s, a)
+    step(s)
+  }
   m.hands.forEach((h, i) => {
     const n = i + 1
     const lead = (h.dealer + 1) % 4
@@ -376,22 +395,24 @@ export function replayKjn(m: KjnMatch): State {
       tricksWon: [0, 0],
       points: [0, 0],
       piles: [[], []],
+      log: [...s.log, { t: 'deal', seat: h.dealer, card: h.turned[0] }],
     }
-    for (const b of h.auction.flat()) s = apply(s, { type: 'bid', ...b })
-    if (h.choice !== undefined) s = apply(s, { type: 'choose', seat: h.dealer, suit: h.choice })
+    step(s)
+    for (const b of h.auction.flat()) act({ type: 'bid', ...b })
+    if (h.choice !== undefined) act({ type: 'choose', seat: h.dealer, suit: h.choice })
     if (!h.contract) {
       if (s.phase !== 'CUTTING' || h.result) fail(`hand ${n}: not a passed hand`)
       return
     }
     const c = h.contract
     if (s.bidder !== c.bidder || s.trump !== c.trump || s.level !== c.level) fail(`hand ${n}: contract differs`)
-    if (h.troefke) s = apply(s, { type: 'troefke', seat: c.bidder })
+    if (h.troefke) act({ type: 'troefke', seat: c.bidder })
     for (const t of h.tricks) {
       if (s.turn !== t.leader) fail(`hand ${n}: wrong leader`)
       for (const card of t.cards) {
         // Trick acknowledgements are not part of the notation.
         for (const seat of [0, 1, 2, 3]) if (!s.trickAcks.includes(seat)) s = apply(s, { type: 'ack', seat })
-        s = apply(s, { type: 'play', seat: s.turn, card })
+        act({ type: 'play', seat: s.turn, card })
       }
     }
     if (!h.result || !s.lastResult || !sameResult(s.lastResult, h.result)) fail(`hand ${n}: result differs`)
@@ -401,4 +422,20 @@ export function replayKjn(m: KjnMatch): State {
     if (s.lines[0] !== m.lines![0] || s.lines[1] !== m.lines![1]) fail('final lines differ')
   }
   return s
+}
+
+/** A finished match from untrusted text (a shared file); throws when it is not one. */
+export function loadKjn(text: string): KjnMatch {
+  if (text.length > KJN_MAX_CHARS) fail('too large')
+  // Editors and file sync on Windows rewrite line endings; the moves stay the same.
+  const m = parseKjn(text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trimEnd() + '\n')
+  if (m.winner === null) fail('unfinished match')
+  replayKjn(m)
+  return m
+}
+
+/** Reads a `.kjn` file in the browser only; a too large file is refused unread. */
+export async function readKjnFile(file: Blob): Promise<KjnMatch> {
+  if (file.size > KJN_MAX_CHARS) fail('too large')
+  return loadKjn(await file.text())
 }
