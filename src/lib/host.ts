@@ -1,4 +1,4 @@
-import { apply, createMatch, pendingSeats, toPublic, visibleHand } from '../engine'
+import { apply, createMatch, legalActions, pendingSeats, toPublic, visibleHand } from '../engine'
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
@@ -480,6 +480,9 @@ export class HostGame {
     while (this.state.phase === 'PLAYING') {
       const seat = this.autoSeat()
       if (seat === undefined || !this.seats[seat]?.bot) return
+      // Ask the bot only when it can ack: a move thrown away would still draw
+      // from this.rand, and a seeded game would then depend on extra commits.
+      if (!legalActions(this.state, seat).some((x) => x.type === 'ack' || x.type === 'troefke')) return
       const a = this.botMove(seat)
       if ((a.type !== 'ack' && a.type !== 'troefke') || !this.tryApply(a)) return
     }
