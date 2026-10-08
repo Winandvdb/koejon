@@ -1,6 +1,6 @@
 ---
 name: start-issue
-description: Start and finish one GitHub issue of this repo end to end. Claims the issue (assigns it to the logged-in gh user), makes a git worktree from develop, plans, implements, tests and opens a PR into develop. Use when the user says "start issue 52", "pick up #52", "work on issue #52", "start task 52" or runs /start-issue.
+description: Start and finish one GitHub issue of this repo end to end. Claims the issue (assigns it to the logged-in gh user), makes a git worktree from develop, plans, implements, tests, opens a PR into develop and records its own review (human-review plugin). Use when the user says "start issue 52", "pick up #52", "work on issue #52", "start task 52" or runs /start-issue.
 argument-hint: <issue number, e.g. 52 or #52>
 ---
 
@@ -117,7 +117,7 @@ cd <REPO>
 git check-ignore -q .worktrees/x || echo "NOT IGNORED"
 ```
 
-If this prints `NOT IGNORED`, add the line `.worktrees/` to `<REPO>/.gitignore` before you continue. Do not commit that change in `<REPO>`. Tell the user about it in step 10.
+If this prints `NOT IGNORED`, add the line `.worktrees/` to `<REPO>/.gitignore` before you continue. Do not commit that change in `<REPO>`. Tell the user about it in step 11.
 
 ```bash
 git fetch origin
@@ -272,7 +272,31 @@ Add flags to that command from this table. Use the first row that is true:
 
 A draft PR always means that something is wrong. A **Manual check** alone is not a reason for a draft.
 
-## Step 10: Report to the user
+## Step 10: Record the review
+
+The human-review plugin (`docs/human-review.md`) shows a reviewer what you fixed, declined and assumed. Only this session knows that, so record it now, after the PR exists: CI runs only on pull requests, and the review waits for CI.
+
+Skip this step, and say why in step 11, when:
+
+- the issue has label `question` (a spike: no code to review), or
+- the plugin is not installed: `$HUMAN_REVIEW_HOME/../record-review/prompt.md` does not exist.
+
+Otherwise read `$HUMAN_REVIEW_HOME/../record-review/SKILL.md` and `prompt.md`, and follow `prompt.md` from `<WT>`:
+
+- Put the plugin's venv first on `PATH` (`docs/human-review.md`, setup step 2). `RR` is `$HUMAN_REVIEW_HOME/../record-review/record-review.py`.
+- `RR prepare --base origin/develop --ticket "<issue title and body>"`. Step 9 merged `develop`, so the diff is this branch's work only. Check that the files `prepare` lists are the ones you changed.
+- In Claude Code, the review pass is `/code-review high <PR number>`, never with `--fix`. You decide every finding.
+- Anchor each `file:line` where the code reads now. Exception: on the first `RR finish` (the file has no front-matter yet), write an **assumption's** lines as they read in the implementation commit; `finish` carries them forward. Check every anchor after `finish`.
+- `RR ci --push`: a CI failure in a test that your change does not touch and that is known to be flaky is not a fix round. Decline it in `review-points.md` with the issue that fixes it.
+- After three red rounds, or when CI never starts (exit 2), stop: `gh pr ready <PR number> --undo` and say why in step 11.
+
+If the fixes changed code, run `npm test` and `npm run build` again. Then fetch the PR body, add one line under `## Tests`, and save it with `gh pr edit <PR number> --body-file <file>`:
+
+```
+- Review: recorded in `review-points.md` (`[auto-fix]` <sha>): <n> fixed, <n> declined, <n> assumptions; CI <green|red: why>
+```
+
+## Step 11: Report to the user
 
 Give, in short sentences:
 
@@ -280,6 +304,7 @@ Give, in short sentences:
 - Branch `<BRANCH>`, worktree `<WT>`.
 - PR link. If it is a draft, why. If it has the label `needs manual check`, which criteria.
 - Result of `npm test` and `npm run build`.
+- The review record (step 10): the counts and the CI result, or why it was skipped.
 - What the user must check by hand.
 - If you added `.worktrees/` to `<REPO>/.gitignore` in step 4: the user must commit that.
 - After the merge, remove the worktree with `git worktree remove <WT>`.

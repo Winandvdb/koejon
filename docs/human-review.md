@@ -21,6 +21,7 @@ an app with no backend, phone viewport, ESM film scripts).
    ```bash
    git clone --depth 1 -b koejon-spike https://github.com/Winandvdb/human-review.git ~/tools/human-review
    ln -s ~/tools/human-review/skills/human-review ~/.claude/skills/human-review
+   ln -s ~/tools/human-review/skills/record-review ~/.claude/skills/record-review
    export HUMAN_REVIEW_HOME=~/tools/human-review/skills/human-review   # in your shell profile
    ```
 
@@ -33,7 +34,7 @@ an app with no backend, phone viewport, ESM film scripts).
      the rewrite rule does not match that form, and the public fork needs no login.
    - Do not use `/plugin marketplace add Winandvdb/human-review`: it installs the fork's default
      branch, which does not have the patches.
-   - Restart Claude Code after the skill link, so it offers `/human-review`.
+   - Restart Claude Code after the skill links, so it offers `/human-review` and `/record-review`.
 2. Python 3.10 or newer, in a venv that comes first on `PATH` (the scripts call `python3`):
 
    ```bash
@@ -45,6 +46,14 @@ an app with no backend, phone viewport, ESM film scripts).
 3. `npm install` (the dev dependencies `playwright` and `@vitest/coverage-istanbul`), then
    `npx playwright install chromium` once.
 4. `ffmpeg` (`brew install ffmpeg`). The narration uses the macOS `say` voice.
+
+## Record the review (in the coding session)
+
+The Review tab shows what the coding agent fixed, declined and assumed, from `review-points.md`
+at the repo root. Only the session that wrote the code can write that file. The `start-issue`
+skill does it as its step 10, after it opens the PR (CI runs only on pull requests). For work
+outside `start-issue`, run `/record-review origin/develop` in the coding session after the PR is
+open. A stacked branch uses the branch below it as the base. Each PR overwrites the file.
 
 ## Run
 

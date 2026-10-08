@@ -87,7 +87,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - To create an issue, use the `create-issue` skill (`.agents/skills/create-issue/SKILL.md`).
 - Before you edit an issue (title, body, labels), fetch it again with `gh issue view <n> --json title,body,labels,updatedAt`. Make your change on that fresh copy, never on a copy from earlier in the session. Other people or agents can change the issue at any time, and `gh issue edit --body` replaces the full body.
 - An assigned issue is taken. Do not work on an issue that is assigned to someone else.
-- To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body.
+- To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body. When the human-review plugin is installed, it records its own review in `review-points.md` after it opens the PR (`docs/human-review.md`).
 - `develop` is the default branch, so `Closes #<issue>` closes the issue when the PR merges.
 - To release `develop` to `main`, use the `release-pr` skill (`.agents/skills/release-pr/SKILL.md`). It opens the PR `develop` → `main` with a description of all changes and the checks. It never merges: the merge deploys live.
 - Older issues start with `Backlog: task-<T>` and can name other work as `task-<T>`. Find that issue with `gh issue list --state all --search '"Backlog: task-<T>" in:body'`.
