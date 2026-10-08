@@ -46,8 +46,8 @@
     { x: 180, y: 0 },
   ]
   const TILT = [-4, 3, -2, 5]
-  /** Won tricks lie a bit askew on the pile, like a hand-collected stack. */
-  const PILE_TILT = [-6, 4, -2, 7, -4, 2]
+  /** Each won trick lies clearly askew on the pile, so the tricks can be counted. */
+  const PILE_TILT = [-16, 12, -8, 18, -12, 6]
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
@@ -263,11 +263,19 @@
 {#snippet trickPile(team: number)}
   {#if playing && pub.tricksWon[team] > 0}
     {@const label = `${teamName(team)} — ${$t.tricks}: ${pub.tricksWon[team]}`}
-    <div class="trick-pile" role="img" title={label} aria-label={label}>
+    <!-- The ring repeats the team colour of the nameplates. -->
+    <div
+      class="trick-pile"
+      class:decl={team === playingTeam}
+      class:def={team !== playingTeam}
+      role="img"
+      title={label}
+      aria-label={label}
+    >
       {#each Array(pub.tricksWon[team]) as _, k (k)}
         <div
           class="pile-card"
-          style="translate: 0 {-k * 2}px; rotate: {PILE_TILT[k % PILE_TILT.length]}deg"
+          style="translate: {k * 3}px {-k * 4}px; rotate: {PILE_TILT[k % PILE_TILT.length]}deg"
           in:scale={{ start: 0.6, duration: 220 }}
         >
           <div class="card-back"></div>
@@ -284,10 +292,10 @@
       {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
         <div class="opp-card"><div class="card-back"></div></div>
       {/each}
+      <!-- One pile per team, right by the hand: ours at my partner, theirs at the left opponent. -->
+      {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
     </div>
     {@render turnedAt(seat)}
-    <!-- One pile per team: ours beside my partner, theirs by the left opponent. -->
-    {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
   </div>
 {/snippet}
 

@@ -1477,9 +1477,9 @@ button.tag {
   translate: -50% 0;
 }
 
-/* Won tricks: one face-down card per trick. Out of the flow, so a growing
-   pile never moves the seat. */
-.seat {
+/* Won tricks: one face-down card per trick, next to the hand. Out of the
+   flow, so a growing pile never moves the seat. */
+.opp-hand {
   position: relative;
 }
 
@@ -1495,16 +1495,25 @@ button.tag {
   inset: 0;
 }
 
+.trick-pile.decl .card-back {
+  box-shadow: 0 0 0 2px var(--team-decl), 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.trick-pile.def .card-back {
+  box-shadow: 0 0 0 2px var(--team-def), 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* Room for the skewed cards, which fan out to the right and upwards. */
 .seat-p2 .trick-pile {
-  right: 4px;
+  left: calc(100% + 20px);
   top: 50%;
-  margin-top: calc(var(--cw) * -0.7);
+  margin-top: calc(var(--cw) * -0.5);
 }
 
 .seat-p1 .trick-pile {
-  bottom: 6px;
+  top: calc(100% + 28px);
   left: 50%;
-  margin-left: calc(var(--cw) * -0.5);
+  margin-left: calc(var(--cw) * -0.7);
 }
 
 /* ---------- Trick area ---------- */
