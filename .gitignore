@@ -83,3 +83,6 @@ firestore-debug.log
 
 # Agent issue worktrees (start-issue skill)
 .worktrees/
+
+# Review pages of the human-review plugin (docs/human-review.md)
+.human-review/

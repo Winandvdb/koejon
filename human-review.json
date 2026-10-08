@@ -1,0 +1,33 @@
+{
+  "//": "Config for the human-review Claude Code plugin (fork Winandvdb/human-review, branch koejon-spike). See docs/human-review.md.",
+  "base": "origin/develop",
+  "ci": {"workflows": ["firebase-hosting-pull-request.yml"]},
+  "steps": {
+    "video": {
+      "out": ".human-review/assets/feature.webm",
+      "app": {
+        "up": "bash scripts/review-app.sh up {sha}",
+        "url": "bash scripts/review-app.sh url {shortsha}",
+        "down": "bash scripts/review-app.sh down {shortsha}",
+        "//reset": "Solo state lives in the browser's localStorage, and every film opens a fresh browser context.",
+        "reset": "true",
+        "env": {
+          "BASE_URL": "{url}",
+          "API_URL": "{url}",
+          "HUMAN_REVIEW_API_PROBE": "",
+          "HUMAN_REVIEW_VIDEO_VIEWPORT": "390x844",
+          "HUMAN_REVIEW_NODE_PATH": "node_modules",
+          "NARRATION_FISH": "off"
+        }
+      }
+    },
+    "testcov": {
+      "sources": ["src/**"],
+      "exclude": ["**/*.test.ts"],
+      "vitest": [
+        {"label": "Vitest", "cwd": ".",
+         "command": "npx vitest run --exclude tests/simulation.test.ts --exclude tests/e2e.emulator.test.ts {vitest}"}
+      ]
+    }
+  }
+}

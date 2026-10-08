@@ -23,6 +23,8 @@
     "@tsconfig/svelte": "5.0.8",
     "@types/node": "24.13.6",
     "@types/qrcode": "1.5.6",
+    "@vitest/coverage-istanbul": "4.1.11",
+    "playwright": "1.56.0",
     "svelte": "5.57.1",
     "svelte-check": "4.7.6",
     "typescript": "6.0.3",

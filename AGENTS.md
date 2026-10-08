@@ -49,6 +49,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
 | `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | |
+| `human-review.json`, `scripts/review-app.sh`, `docs/human-review.md` | Review pages with the human-review Claude Code plugin (fork `Winandvdb/human-review`, branch `koejon-spike`): the Tests tab (per-test vitest coverage) and the Demo film of a seeded solo game. `review-app.sh` builds and serves one commit. Setup, commands and the solo flow for film scripts: `docs/human-review.md`. | Output goes to `.human-review/` (ignored). `npm test` and `npm run build` never need the plugin. |
 | `docs/spikes/` | Spike write-ups (issues with label `question`), one file per issue: `<issue>-<slug>.md`. | The result of a spike is a write-up here, not code. |
 | `IMPLEMENTATION_PROMPT.md` | The original build spec. Historical. | Where it differs from the code or README, the code and README are correct. |
 
