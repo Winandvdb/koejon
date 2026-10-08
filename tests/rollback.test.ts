@@ -4,8 +4,9 @@ import { createMatch, toPublic } from '../src/engine'
 import type { Card } from '../src/engine'
 import { HostGame } from '../src/lib/host'
 import { localLinks, SOLO_CODE } from '../src/lib/link-local'
+import { FirestoreGuestLink } from '../src/lib/link-firestore'
 import { P2PGuestLink, P2PHostLink } from '../src/lib/link-p2p'
-import type { HandDoc, RoomDoc } from '../src/lib/net-types'
+import type { HandDoc, Intent, RoomDoc, SeatInfo } from '../src/lib/net-types'
 import { ACT_ACK_MS, newRoomDoc, RoomSession } from '../src/lib/room'
 import type { GuestEvents, GuestLink, HostLink } from '../src/lib/transport'
 import { C, memoryStore, playingState } from './helpers'
@@ -245,5 +246,127 @@ describe('act waits for the host', () => {
     ev.room({ ...playing, seq: 6 })
     await vi.advanceTimersByTimeAsync(ACT_ACK_MS)
     await done
+  })
+})
+
+describe('guest seat after the host was away (#54)', () => {
+  const botMe = (room: RoomDoc): RoomDoc => ({
+    ...room,
+    seats: room.seats.map((s) => (s?.uid === ME ? { ...s, bot: true } : s)),
+  })
+
+  function guestSession() {
+    let ev!: GuestEvents
+    const sent: Intent[] = []
+    const link: GuestLink = {
+      start: (e) => (ev = e),
+      send: async (i) => void sent.push(i),
+      dispose: () => {},
+    }
+    const session = new RoomSession(CODE, ME, link)
+    ev.room(roomAt(4))
+    return { session, ev, sent }
+  }
+
+  test('a bot in our own seat with our uid makes the session reclaim it', async () => {
+    const { ev, sent } = guestSession()
+    ev.room(botMe(roomAt(5)))
+    ev.room(botMe(roomAt(6)))
+    await tick()
+    // One join per takeover, with the seat's name: the host keeps it.
+    expect(sent).toEqual([{ kind: 'join', name: 'Me' }])
+
+    ev.room(roomAt(7))
+    ev.room(botMe(roomAt(8)))
+    await tick()
+    expect(sent).toHaveLength(2)
+  })
+
+  test('no reclaim after the player left on purpose', async () => {
+    const { session, ev, sent } = guestSession()
+    await session.leave()
+    ev.room(botMe(roomAt(5)))
+    await tick()
+    expect(sent).toEqual([{ kind: 'leave' }])
+  })
+
+  test('a missing room from the local cache does not end the session', () => {
+    const link = new FirestoreGuestLink(CODE, ME)
+    const rooms: (RoomDoc | null)[] = []
+    link.start({ room: (r) => rooms.push(r), hand: () => {}, lost: () => {}, hostStale: () => {} })
+    const room = fake.listeners.get(`rooms/${CODE}`)!
+    const missing = (fromCache: boolean) => ({ exists: () => false, data: () => null, metadata: { fromCache } })
+    room(snap(roomAt(3)))
+    room(missing(true))
+    expect(rooms).toHaveLength(1)
+    // The server says it is gone: the host closed the room.
+    room(missing(false))
+    expect(rooms).toEqual([roomAt(3), null])
+    link.dispose()
+  })
+
+  test('a reloaded host keeps its own seats over an older room doc', async () => {
+    const storage = memoryStore()
+    const links = localLinks(ME, storage, newRoomDoc(SOLO_CODE, ME, 'Me'))!
+    let intent!: (uid: string, i: Intent) => Promise<void>
+    // What Firestore holds once the host's writes stop landing.
+    let frozen: RoomDoc | null = null
+    const seats: (SeatInfo | null)[][] = []
+    const link: HostLink = {
+      ...links.host,
+      onIntent: (cb) => {
+        intent = cb
+        links.host.onIntent(cb)
+      },
+      load: async () => structuredClone(frozen ?? (await links.host.load())),
+      publish: async (u, h) => {
+        seats.push(structuredClone(u.seats))
+        await links.host.publish(u, h)
+      },
+    }
+    const opts = { storage, botDelay: () => 1e9 }
+    const host = await HostGame.attach(SOLO_CODE, ME, link, opts)
+    await intent('G', { kind: 'join', name: 'Guest' })
+    host.addBot(2)
+    host.addBot(3)
+    host.startGame()
+    await vi.waitFor(() => expect(seats).toHaveLength(4))
+    await intent('G', { kind: 'leave' })
+    frozen = structuredClone(await links.host.load())
+    expect(frozen!.seats[1]).toMatchObject({ uid: 'G', bot: true })
+    // The guest is back, but this write never reaches the room doc.
+    await intent('G', { kind: 'join', name: 'Guest' })
+    host.dispose()
+
+    const again = await HostGame.attach(SOLO_CODE, ME, link, opts)
+    await vi.waitFor(() => expect(seats).toHaveLength(7))
+    expect(seats[6][1]).toEqual({ uid: 'G', name: 'Guest', bot: false })
+    again.dispose()
+  })
+
+  test('a human seat that turns bot is logged with the reason', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const storage = memoryStore()
+    const links = localLinks(ME, storage, newRoomDoc(SOLO_CODE, ME, 'Me'))!
+    let intent!: (uid: string, i: Intent) => Promise<void>
+    const link: HostLink = {
+      ...links.host,
+      onIntent: (cb) => {
+        intent = cb
+        links.host.onIntent(cb)
+      },
+    }
+    const host = await HostGame.attach(SOLO_CODE, ME, link, { storage, botDelay: () => 1e9 })
+    await intent('G', { kind: 'join', name: 'Guest' })
+    await intent('H', { kind: 'join', name: 'Other' })
+    host.addBot(3)
+    host.startGame()
+    await intent('G', { kind: 'leave' })
+    host.kickSeat(2)
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledTimes(2))
+    expect(warn.mock.calls[0].join(' ')).toMatch(/seat 1 .*G.* leave/)
+    expect(warn.mock.calls[1].join(' ')).toMatch(/seat 2 .*H.* kick/)
+    host.dispose()
+    warn.mockRestore()
   })
 })

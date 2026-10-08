@@ -78,7 +78,10 @@ export class RoomSession {
     readonly hostLink?: HostLink,
   ) {
     link.start({
-      room: (r) => this.room.set(r),
+      room: (r) => {
+        this.room.set(r)
+        this.reclaim(r)
+      },
       hand: (h) => this.handDoc.set(h),
       lost: () => this.connLost.set(true),
       hostStale: (s) => this.hostStale.set(s),
@@ -93,6 +96,26 @@ export class RoomSession {
         return { room, hand, mySeat, state, legal, hostStale, offline: connLost }
       },
     )
+  }
+
+  /** Set once this player leaves on purpose: the bot in their seat stays. */
+  private left = false
+  /** A join for the current bot takeover is out. */
+  private reclaiming = false
+
+  /** A bot holds our seat under our uid while we are still here (the host
+   *  took it over behind our back): ask for it back, as a rejoin would. Without
+   *  this the table shows no hand and only a manual rejoin helps. */
+  private reclaim(r: RoomDoc | null): void {
+    const seat = r?.seats.find((s) => s?.uid === this.uid)
+    if (!seat?.bot) {
+      this.reclaiming = false
+      return
+    }
+    if (this.left || this.reclaiming) return
+    this.reclaiming = true
+    console.warn('[room] own seat is held by a bot, reclaiming it')
+    this.send({ kind: 'join', name: seat.name }).catch(() => (this.reclaiming = false))
   }
 
   send(intent: Intent): Promise<void> {
@@ -126,6 +149,7 @@ export class RoomSession {
   }
 
   leave(): Promise<void> {
+    this.left = true
     return this.send({ kind: 'leave' })
   }
 

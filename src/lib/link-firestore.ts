@@ -150,6 +150,9 @@ export class FirestoreGuestLink implements GuestLink {
       onSnapshot(
         roomRef(this.code),
         (snap) => {
+          // Only the server can say the room is gone. A cache without the doc
+          // (bad connection) would send the player to the start screen.
+          if (!snap.exists() && snap.metadata.fromCache) return
           const room = snap.exists() ? (snap.data() as RoomDoc) : null
           this.lastBeat = room?.heartbeat ?? null
           ev.room(room)

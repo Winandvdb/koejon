@@ -51,6 +51,7 @@ export interface HostOptions {
 const engineKey = (code: string) => `koejon-engine-${code}`
 const seqKey = (code: string) => `koejon-seq-${code}`
 const quotesKey = (code: string) => `koejon-quotes-${code}`
+const seatsKey = (code: string) => `koejon-seats-${code}`
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -142,6 +143,9 @@ export class HostGame {
     const saved = inLobby ? null : this.readEngine()
     if (saved) {
       this.state = saved
+      // The P2P host writes the room doc only on a lobby-view change, and a
+      // failed write waits for the next one: its seats can be older than ours.
+      this.seats = this.readSeats() ?? this.seats
       this.quoteBook = this.readQuotes() ?? this.quoteBook
     } else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
@@ -300,6 +304,7 @@ export class HostGame {
       } else {
         // Unlike a voluntary leave, the seat gets a bot uid: a kicked player
         // cannot reclaim it by rejoining. The next publish drops their hand.
+        console.warn('[host] seat', seat, 'uid', s.uid, 'turns bot: kick')
         this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}`, name: s.name, bot: true }
       }
       await this.commit()
@@ -315,6 +320,7 @@ export class HostGame {
       this.storage?.removeItem(engineKey(this.code))
       this.storage?.removeItem(seqKey(this.code))
       this.storage?.removeItem(quotesKey(this.code))
+      this.storage?.removeItem(seatsKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -353,6 +359,7 @@ export class HostGame {
           // Mid-game leave: a bot holds the seat, but the uid stays so the
           // player can reclaim it by rejoining the room. The next publish
           // drops their hand.
+          if (!this.seats[i]!.bot) console.warn('[host] seat', i, 'uid', uid, 'turns bot: leave intent')
           this.seats[i] = { uid, name: this.seats[i]!.name, bot: true }
         }
         await this.commit()
@@ -393,6 +400,15 @@ export class HostGame {
     }
   }
 
+  private readSeats(): (SeatInfo | null)[] | null {
+    try {
+      const json = this.storage?.getItem(seatsKey(this.code))
+      return json ? (JSON.parse(json) as (SeatInfo | null)[]) : null
+    } catch {
+      return null
+    }
+  }
+
   private readSeq(): number {
     try {
       return Number(this.storage?.getItem(seqKey(this.code)) ?? 0) || 0
@@ -425,6 +441,7 @@ export class HostGame {
     try {
       this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
       this.storage?.setItem(seqKey(this.code), String(seq))
+      this.storage?.setItem(seatsKey(this.code), JSON.stringify(this.seats))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
