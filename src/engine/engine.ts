@@ -3,9 +3,9 @@ import { rngShuffle } from './rng'
 import type { Action, BoomkeMark, Card, State, Suit } from './types'
 import { START_LINES } from './types'
 
-const freshMarks = (): BoomkeMark[] =>
+const freshMarks = (startLines: number): BoomkeMark[] =>
   [0, 1].flatMap((team) =>
-    Array.from({ length: START_LINES }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
+    Array.from({ length: startLines }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
   )
 
 export class IllegalActionError extends Error {
@@ -41,9 +41,10 @@ export function liftRange(s: State, seat: number): number[] {
 /**
  * Create a fresh match in phase LOBBY.
  * `drawers` optionally fixes which seat draws for each team
- * (default: lowest seat of each team).
+ * (default: lowest seat of each team). `startLines` is the boomke length
+ * per team; the line marks keep it for the whole match.
  */
-export function createMatch(seed: number, drawers?: [number, number]): State {
+export function createMatch(seed: number, drawers?: [number, number], startLines = START_LINES): State {
   return {
     phase: 'LOBBY',
     rng: seed | 0,
@@ -76,8 +77,8 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     tricksWon: [0, 0],
     piles: [[], []],
     points: [0, 0],
-    lines: [START_LINES, START_LINES],
-    marks: freshMarks(),
+    lines: [startLines, startLines],
+    marks: freshMarks(startLines),
     koeien: [0, 0],
     lastResult: null,
     winner: null,

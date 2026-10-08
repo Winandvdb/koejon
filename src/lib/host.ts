@@ -1,4 +1,4 @@
-import { apply, createMatch, legalActions, pendingSeats, toPublic, visibleHand } from '../engine'
+import { apply, createMatch, legalActions, pendingSeats, START_LINES, toPublic, visibleHand } from '../engine'
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
@@ -9,6 +9,7 @@ import { gameDoc, newKjn, recordAction } from './kjn'
 import type { GameDoc, KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
 import { safeStorage } from './storage'
+import { DEV_DEFAULTS, type DevSettings } from './devsettings'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
 
@@ -54,6 +55,9 @@ export interface HostOptions {
   hurryMs?: number
   /** Test hook: called after every landed commit. */
   onCommit?: () => void
+  /** Dev build test shortcuts, read at each use so a change applies at once
+   *  (tree length: from the next match). Default: none (DEV_DEFAULTS). */
+  dev?: () => DevSettings
 }
 
 const engineKey = (code: string) => `koejon-engine-${code}`
@@ -95,6 +99,7 @@ export class HostGame {
   private quoteRand: () => number
   private rand: () => number
   private hurryMs: number
+  private dev: () => DevSettings
   private quoteBook = new QuoteBook()
   /** Quotes fired this match, newest last — published on every update. */
   private quoteLog: QuoteEvent[] = []
@@ -125,6 +130,7 @@ export class HostGame {
     this.quoteRand = opts.quoteRand ?? Math.random
     this.rand = opts.rand ?? Math.random
     this.hurryMs = opts.hurryMs ?? 9000
+    this.dev = opts.dev ?? (() => DEV_DEFAULTS)
   }
 
   /** Load persisted engine state and room seats, then start listening. */
@@ -317,12 +323,15 @@ export class HostGame {
       this.seats.findIndex((s, i) => i % 2 === team && s !== null && !s.bot)
     const drawerA = humanSeat(0)
     const drawerB = humanSeat(1)
-    this.state = createMatch(seed, [drawerA >= 0 ? drawerA : 0, drawerB >= 0 ? drawerB : 1])
+    const dev = this.dev()
+    this.state = createMatch(seed, [drawerA >= 0 ? drawerA : 0, drawerB >= 0 ? drawerB : 1], dev.treeLength)
     // A new match resets which lines were said.
     this.quoteBook.reset()
     this.quoteLog = []
-    // A link that cannot upload (tests, bench) keeps no record.
-    this.kjn = this.link.saveGame ? newKjn(APP_VERSION, this.seatKinds()) : null
+    // A link that cannot upload (tests, bench) keeps no record. KJN/1 is frozen
+    // and has no field for another tree length or a bot on the host's seat.
+    const normal = dev.treeLength === START_LINES && !dev.autoplay
+    this.kjn = this.link.saveGame && normal ? newKjn(APP_VERSION, this.seatKinds()) : null
     this.finalKjn = null
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
@@ -594,17 +603,28 @@ export class HostGame {
 
   /** Seat the host should act for: any bot, plus the deal itself for anyone.
    *  Lifting a packet and picking the dealer stay real choices, and a scored
-   *  hand stays up until a human clicks "next hand". */
+   *  hand stays up until a human clicks "next hand" — unless a dev setting
+   *  hands these to the bot logic. */
   private autoSeat(): number | undefined {
-    if (this.state.phase === 'SCORED') return undefined
+    const dev = this.dev()
     const pend = pendingSeats(this.state)
-    const bot = pend.find((i) => this.seats[i]?.bot)
+    const bot = pend.find((i) => this.isBot(i))
+    if (this.state.phase === 'SCORED') return dev.autoplay ? bot : undefined
     if (bot !== undefined) return bot
     if (this.state.phase === 'DEALING') return pend[0]
+    if (!dev.interactiveDraws && (this.state.phase === 'DEALER_DRAW' || this.state.phase === 'CUTTING')) return pend[0]
     return undefined
   }
 
+  /** A bot seat, or the host's own seat while dev autoplay is on. */
+  private isBot(seat: number): boolean {
+    const s = this.seats[seat]
+    return !!s?.bot || (!!s && s.uid === this.uid && this.dev().autoplay)
+  }
+
   private botMove(seat: number): Action {
+    // Autoplay turned on mid-match: the record would call a bot move human.
+    if (!this.seats[seat]?.bot && this.seats[seat]?.uid === this.uid && this.dev().autoplay) this.kjn = null
     return botAction(this.state, seat, this.rand, this.seats[seat]?.botLevel ?? 'normal')
   }
 
@@ -613,8 +633,16 @@ export class HostGame {
    *  troefke confirms too: dropping it would make the bot roll again later. */
   private drainBotAcks(): void {
     while (this.state.phase === 'PLAYING') {
+      // Dev "skip Gezien": a plain ack for each waiting human. Troefke stays
+      // theirs to ask: it is legal until the partner's first lead.
+      if (this.dev().skipSeen) {
+        const human = pendingSeats(this.state).find(
+          (i) => !this.isBot(i) && legalActions(this.state, i).some((x) => x.type === 'ack'),
+        )
+        if (human !== undefined && this.tryApply({ type: 'ack', seat: human })) continue
+      }
       const seat = this.autoSeat()
-      if (seat === undefined || !this.seats[seat]?.bot) return
+      if (seat === undefined || !this.isBot(seat)) return
       // Ask the bot only when it can ack: a move thrown away would still draw
       // from this.rand, and a seeded game would then depend on extra commits.
       if (!legalActions(this.state, seat).some((x) => x.type === 'ack' || x.type === 'troefke')) return
@@ -641,11 +669,10 @@ export class HostGame {
       lastEv === 'draw' ||
       lastEv === 'draw-tie' ||
       lastEv === 'draw-win'
-    const wait = Math.max(
-      this.botDelay(),
-      drawLinger ? this.drawLingerMs : 0,
-      bidLinger ? this.bidLingerMs : 0,
-    )
+    const speed = this.dev().speed
+    const wait =
+      Math.max(this.botDelay(), drawLinger ? this.drawLingerMs : 0, bidLinger ? this.bidLingerMs : 0) *
+      (speed === 'instant' ? 0 : 1 / speed)
     this.botTimer = setTimeout(() => {
       this.botTimer = null
       this.enqueue(async () => {
