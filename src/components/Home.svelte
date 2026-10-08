@@ -199,7 +199,7 @@
         </ul>
       {/if}
       <button class="btn" onclick={() => fileInput?.click()}>📂 {$t.openKjn}</button>
-      <input bind:this={fileInput} type="file" accept=".kjn,text/plain" hidden onchange={openFile} />
+      <input bind:this={fileInput} type="file" accept=".kjn" hidden onchange={openFile} />
     </div>
     </div>
   {/if}

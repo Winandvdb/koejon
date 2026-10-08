@@ -1818,7 +1818,7 @@ button.tag {
 }
 
 .iline {
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .nw {
