@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
@@ -47,9 +48,20 @@ function serviceWorker(): Plugin {
   }
 }
 
+/** Short commit of the build, stored with each game record. */
+function appVersion(): string {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte(), devBranding(), serviceWorker()],
+  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   test: {
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
     environment: 'node',

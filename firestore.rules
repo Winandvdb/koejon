@@ -62,5 +62,21 @@ service cloud.firestore {
         allow delete: if signedIn() && (request.auth.uid == uid || isHost(code));
       }
     }
+
+    // Finished matches as KJN records (see README). Write-once: the app never
+    // reads, changes or deletes them. Every build still in use writes here, and
+    // the rules deploy only from main, so check only what must never change:
+    // auth, write-once, size and a format tag. The record shape is tested in
+    // tests/kjn.test.ts. Records are untrusted input for analysis.
+    match /games/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll(['format', 'kjn'])
+        && request.resource.data.keys().size() <= 12
+        && request.resource.data.format is string
+        && request.resource.data.format.matches('KJN/[0-9]+')
+        && request.resource.data.kjn is string
+        && request.resource.data.kjn.size() <= 100000;
+      allow read, update, delete: if false;
+    }
   }
 }
