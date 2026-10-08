@@ -102,7 +102,10 @@ export class RoomSession {
         return { room, hand, mySeat, state, legal, hostStale, offline: connLost }
       },
     )
-    this.unsubHistory = this.room.subscribe((r) => this.keepRecord(r))
+    this.unsubHistory = this.room.subscribe((r) => {
+      this.keepRecord(r)
+      this.reclaim(r)
+    })
   }
 
   /** A seated human keeps the finished match on this device. */
@@ -113,6 +116,27 @@ export class RoomSession {
     if (seat < 0 || room.seats[seat]!.bot) return
     addHistory({ seat, names: room.seats.map((s) => s?.name ?? ''), kjn: room.kjn }, this.history)
     this.savedKjn = room.kjn
+  }
+
+  /** Set once this player leaves on purpose: the bot in their seat stays. */
+  private left = false
+  /** A join for the current bot takeover is out. */
+  private reclaiming = false
+
+  /** A bot holds our seat under our uid while we are still here (the host
+   *  took it over behind our back): ask for it back, as a rejoin would. Without
+   *  this the table shows no hand and only a manual rejoin helps. */
+  private reclaim(r: RoomDoc | null): void {
+    const seat = r?.seats.find((s) => s?.uid === this.uid)
+    if (!seat?.bot) {
+      this.reclaiming = false
+      return
+    }
+    // The host tab drives its own seat through the host: nobody takes it over.
+    if (this.left || this.reclaiming || this.hostLink) return
+    this.reclaiming = true
+    console.warn('[room] own seat is held by a bot, reclaiming it')
+    this.send({ kind: 'join', name: seat.name }).catch(() => (this.reclaiming = false))
   }
 
   send(intent: Intent): Promise<void> {
@@ -146,6 +170,7 @@ export class RoomSession {
   }
 
   leave(): Promise<void> {
+    this.left = true
     return this.send({ kind: 'leave' })
   }
 
