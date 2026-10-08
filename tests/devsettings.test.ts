@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import type { Action } from '../src/engine'
-import { DEV_DEFAULTS, parseDev, type DevSettings } from '../src/lib/devsettings'
+import { get } from 'svelte/store'
+import { DEV_DEFAULTS, devSettings, parseDev, setDev, type BotSpeed, type DevSettings } from '../src/lib/devsettings'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import type { GameDoc } from '../src/lib/kjn'
 import { localLinks, SOLO_CODE } from '../src/lib/link-local'
@@ -51,7 +52,7 @@ async function solo(dev: Partial<DevSettings>, click: (a: Action) => boolean, op
     host.dispose()
     session.dispose()
   }
-  return { pub: () => latest?.room?.pub, room: () => latest?.room, games, storage, refused, close }
+  return { host, pub: () => latest?.room?.pub, room: () => latest?.room, games, storage, refused, close }
 }
 
 afterEach(() => vi.restoreAllMocks())
@@ -113,8 +114,29 @@ describe('dev settings', () => {
     // Our seat was asked to draw or cut, and the host did it.
     expect(g.refused.some((a) => a.type === 'draw')).toBe(true)
     expect(g.refused.some((a) => a.type === 'cut')).toBe(true)
+    // Bot choices for a human seat: the record would be wrong, so none is uploaded.
+    await until(() => g.pub()?.phase === 'GAME_OVER', 60_000)
+    expect(g.games).toEqual([])
+    g.close()
+  }, 90_000)
+
+  test('a setting changed in SCORED acts at once', async () => {
+    const dev: Partial<DevSettings> = {}
+    const g = await solo(dev, (a) => a.type !== 'next')
+    await until(() => g.pub()?.phase === 'SCORED')
+    dev.autoplay = true
+    g.host.devChanged()
+    await until(() => (g.pub()?.phase ?? 'SCORED') !== 'SCORED')
     g.close()
   }, 30_000)
+
+  test('setDev stores an invalid value as its default', () => {
+    setDev({ treeLength: 0, speed: 3 as BotSpeed })
+    expect(get(devSettings)).toMatchObject({ treeLength: 13, speed: 1 })
+    setDev({ treeLength: 2 })
+    expect(get(devSettings).treeLength).toBe(2)
+    setDev(DEV_DEFAULTS)
+  })
 
   test('autoplay: a solo match runs to GAME_OVER without a click, and no record is uploaded', async () => {
     const g = await solo({ autoplay: true }, () => false)

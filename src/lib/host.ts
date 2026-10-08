@@ -294,6 +294,17 @@ export class HostGame {
     })
   }
 
+  /** A dev setting changed: act on it now, not at the next move. A waiting
+   *  bot timer restarts with the new speed; the commit drains acks and
+   *  schedules the seats that the new settings hand to the bot logic. */
+  devChanged(): void {
+    this.enqueue(async () => {
+      if (this.botTimer) clearTimeout(this.botTimer)
+      this.botTimer = null
+      if (this.state.phase !== 'LOBBY' && this.state.phase !== 'GAME_OVER') await this.commit()
+    })
+  }
+
   /** Swap two seats — or move into an empty one. */
   swapSeats(a: number, b: number): void {
     this.enqueue(async () => {
@@ -640,8 +651,9 @@ export class HostGame {
   }
 
   private botMove(seat: number): Action {
-    // Autoplay turned on mid-match: the record would call a bot move human.
-    if (!this.seats[seat]?.bot && this.seats[seat]?.uid === this.uid && this.dev().autoplay) this.kjn = null
+    // Dev autoplay or draws off: the record would call a bot choice human.
+    // The deal is no choice, so it keeps the record.
+    if (!this.seats[seat]?.bot && this.state.phase !== 'DEALING') this.kjn = null
     return botAction(this.state, seat, this.rand, this.seats[seat]?.botLevel ?? 'normal')
   }
 
@@ -687,9 +699,8 @@ export class HostGame {
       lastEv === 'draw-tie' ||
       lastEv === 'draw-win'
     const speed = this.dev().speed
-    const wait =
-      Math.max(this.botDelay(), drawLinger ? this.drawLingerMs : 0, bidLinger ? this.bidLingerMs : 0) *
-      (speed === 'instant' ? 0 : 1 / speed)
+    const base = Math.max(this.botDelay(), drawLinger ? this.drawLingerMs : 0, bidLinger ? this.bidLingerMs : 0)
+    const wait = speed === 'instant' ? 0 : base / speed
     this.botTimer = setTimeout(() => {
       this.botTimer = null
       this.enqueue(async () => {

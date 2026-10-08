@@ -51,11 +51,11 @@ export function parseDev(json: string | null): DevSettings {
 /** Per browser, like the other preferences. */
 export const devSettings = writable<DevSettings>(parseDev(safeStorage.getItem(KEY)))
 
-/** Change one or more settings; only a change writes storage, so a production
- *  build never stores anything. */
+/** Change one or more settings; an invalid value falls back to its default.
+ *  Only a change writes storage, so a production build never stores anything. */
 export function setDev(patch: Partial<DevSettings>): void {
   devSettings.update((v) => {
-    const next = { ...v, ...patch }
+    const next = parseDev(JSON.stringify({ ...v, ...patch }))
     safeStorage.setItem(KEY, JSON.stringify(next))
     return next
   })

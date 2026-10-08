@@ -179,6 +179,9 @@
     history.replaceState(null, '', appUrl())
   }
 
+  // A changed dev setting acts at once on a running host.
+  if (DEV) onMount(() => devSettings.subscribe(() => host?.devChanged()))
+
   let hostPromise: Promise<HostGame> | null = null
 
   function ensureHost(): Promise<HostGame> {

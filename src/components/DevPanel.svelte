@@ -1,13 +1,13 @@
 <script lang="ts">
+  import { get } from 'svelte/store'
   import { t } from '../lib/i18n'
   import { START_LINES } from '../engine'
   import { BOT_SPEEDS, devSettings, setDev } from '../lib/devsettings'
 
   function setTreeLength(input: HTMLInputElement) {
-    const n = Math.round(input.valueAsNumber)
-    const len = Number.isFinite(n) ? Math.min(START_LINES, Math.max(1, n)) : START_LINES
-    setDev({ treeLength: len })
-    input.value = String(len)
+    setDev({ treeLength: input.valueAsNumber })
+    // An invalid entry fell back to the default: show what counts.
+    input.value = String(get(devSettings).treeLength)
   }
 </script>
 
