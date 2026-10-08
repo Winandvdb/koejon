@@ -64,8 +64,10 @@ export interface SessionView {
 }
 
 export class RoomSession {
-  readonly room = writable<RoomDoc | null>(null)
-  readonly handDoc = writable<HandDoc | null>(null)
+  /** One store, so a link can set room and hand without a view in between. */
+  private readonly latest = writable<{ room: RoomDoc | null; hand: HandDoc | null }>({ room: null, hand: null })
+  readonly room = derived(this.latest, (l) => l.room)
+  readonly handDoc = derived(this.latest, (l) => l.hand)
   readonly hostStale = writable(false)
   readonly connLost = writable(false)
   readonly view: Readable<SessionView>
@@ -78,14 +80,15 @@ export class RoomSession {
     readonly hostLink?: HostLink,
   ) {
     link.start({
-      room: (r) => this.room.set(r),
-      hand: (h) => this.handDoc.set(h),
+      room: (r) => this.latest.update((l) => ({ ...l, room: r })),
+      hand: (h) => this.latest.update((l) => ({ ...l, hand: h })),
+      state: (r, h) => this.latest.set({ room: r, hand: h }),
       lost: () => this.connLost.set(true),
       hostStale: (s) => this.hostStale.set(s),
     })
     this.view = derived(
-      [this.room, this.handDoc, this.hostStale, this.connLost],
-      ([room, hd, hostStale, connLost]) => {
+      [this.latest, this.hostStale, this.connLost],
+      ([{ room, hand: hd }, hostStale, connLost]) => {
         const mySeat = seatOf(room, uid)
         const hand = hd?.cards ?? null
         const state = room?.pub && mySeat >= 0 ? clientState(room.pub, mySeat, hand) : null

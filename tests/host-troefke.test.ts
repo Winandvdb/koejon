@@ -39,7 +39,13 @@ async function bidderAsks(): Promise<boolean> {
   ]
   let latest: RoomDoc | null = null
   const links = localLinks(UID, storage, room)!
-  links.guest.start({ room: (r) => (latest = r), hand: () => {}, lost: () => {}, hostStale: () => {} })
+  links.guest.start({
+    room: (r) => (latest = r),
+    hand: () => {},
+    state: (r) => (latest = r),
+    lost: () => {},
+    hostStale: () => {},
+  })
   const host = await HostGame.attach(SOLO_CODE, UID, links.host, {
     storage,
     botDelay: () => 0,
