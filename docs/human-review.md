@@ -19,13 +19,21 @@ an app with no backend, phone viewport, ESM film scripts).
    tell its scripts where they are:
 
    ```bash
-   git clone -b koejon-spike https://github.com/Winandvdb/human-review.git ~/tools/human-review
+   git clone --depth 1 -b koejon-spike https://github.com/Winandvdb/human-review.git ~/tools/human-review
    ln -s ~/tools/human-review/skills/human-review ~/.claude/skills/human-review
    export HUMAN_REVIEW_HOME=~/tools/human-review/skills/human-review   # in your shell profile
    ```
 
-   Do not use `/plugin marketplace add Winandvdb/human-review`: it installs the fork's default
-   branch, which does not have the patches.
+   - Use `--depth 1`. The repo is large (about 150 MB even shallow, because of demo files), and a
+     full clone can stall. Run `git -C ~/tools/human-review fetch --unshallow` later if you need
+     the history.
+   - If your git config rewrites `https://github.com/` to SSH (`url.git@github.com:.insteadOf`),
+     the clone uses SSH and can hang on a key or host prompt in a shell without a terminal (for
+     example `!` in Claude Code). Write the URL as `https://<your-user>@github.com/Winandvdb/human-review.git`:
+     the rewrite rule does not match that form, and the public fork needs no login.
+   - Do not use `/plugin marketplace add Winandvdb/human-review`: it installs the fork's default
+     branch, which does not have the patches.
+   - Restart Claude Code after the skill link, so it offers `/human-review`.
 2. Python 3.10 or newer, in a venv that comes first on `PATH` (the scripts call `python3`):
 
    ```bash
