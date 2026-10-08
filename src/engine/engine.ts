@@ -8,7 +8,7 @@ const freshMarks = (): BoomkeMark[] =>
     Array.from({ length: START_LINES }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
   )
 
-const freshStats = (): MatchStats => ({
+export const freshStats = (): MatchStats => ({
   doubles: [0, 0],
   triples: [0, 0],
   bidsMade: [0, 0, 0, 0],

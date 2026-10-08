@@ -48,7 +48,8 @@ export function matchKey(code: string, pub: PublicState): string {
 /** Adds the numbers of `seat` from a finished match, once per match.
  *  Returns true when it counted. */
 export function recordMatch(code: string, pub: PublicState, seat: number, storage?: KeyValueStore): boolean {
-  if (pub.phase !== 'GAME_OVER' || pub.winner === null) return false
+  // A host on an older build (prod and dev share one database) sends no stats.
+  if (pub.phase !== 'GAME_OVER' || pub.winner === null || !pub.stats) return false
   const s = read(storage)
   const key = matchKey(code, pub)
   if (s.last === key) return false

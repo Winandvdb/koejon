@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apply, clientState, matchScore, toPublic } from '../src/engine'
-import type { MatchStats, State } from '../src/engine'
+import type { MatchStats, PublicState, State } from '../src/engine'
 import { loadStats, recordMatch } from '../src/lib/stats'
 import type { KeyValueStore } from '../src/lib/link-local'
 import { biddingState, C, lastTrickState, playingState } from './helpers'
@@ -72,6 +72,21 @@ describe('engine match stats', () => {
     expect(s2.stats.bidsWon).toEqual([1, 0, 0, 0])
   })
 
+  it('doubled first card + kapot: a triple', () => {
+    const s = lastTrickState({ bidder: 0, multiplier: 2, points: [40, 0], tricksWon: [5, 0], trick: TEAM0_TRICK, turn: 0, card: C('S', 'Q') })
+    const s2 = apply(s, { type: 'play', seat: 0, card: C('S', 'Q') })
+    expect(s2.lastResult!.erased).toBe(3)
+    expect(s2.stats.triples).toEqual([1, 0])
+    expect(s2.stats.doubles).toEqual([0, 0])
+  })
+
+  it('counts by the stake, also when the team had only 1 line left', () => {
+    const s = lastTrickState({ bidder: 1, level: 2, points: [10, 30], tricksWon: [2, 3], lines: [13, 1], trick: TRICK, turn: 0, card: C('S', 'K') })
+    const s2 = apply(s, { type: 'play', seat: 0, card: C('S', 'K') })
+    expect(s2.lines[1]).toBe(0)
+    expect(s2.stats.doubles).toEqual([0, 1])
+  })
+
   it('20-20: no crosses, bid not won', () => {
     const s = lastTrickState({ bidder: 1, points: [20, 20], trick: TRICK, turn: 0, card: C('S', 'K') })
     const s2 = apply(s, { type: 'play', seat: 0, card: C('S', 'K') })
@@ -91,6 +106,11 @@ describe('engine match stats', () => {
     const { stats: _, ...old } = biddingState(C('H', '9'), C('S', '9'))
     const s = apply(old as State, { type: 'bid', seat: 1, play: true })
     expect(s.stats.bidsMade).toEqual([0, 1, 0, 0])
+  })
+
+  it('a reloaded host publishes zero counts for a state saved before stats existed', () => {
+    const { stats: _, ...old } = playingState()
+    expect(toPublic(old as State).stats).toEqual({ doubles: [0, 0], triples: [0, 0], bidsMade: [0, 0, 0, 0], bidsWon: [0, 0, 0, 0] })
   })
 })
 
@@ -151,6 +171,13 @@ describe('recordMatch', () => {
   it('counts nothing before GAME_OVER', () => {
     const st = memStore()
     expect(recordMatch('ABCDE', toPublic(playingState()), 0, st)).toBe(false)
+    expect(st.data.size).toBe(0)
+  })
+
+  it('a host without stats (older build) counts nothing and does not throw', () => {
+    const st = memStore()
+    const { stats: _, ...old } = finished()
+    expect(recordMatch('ABCDE', old as PublicState, 0, st)).toBe(false)
     expect(st.data.size).toBe(0)
   })
 

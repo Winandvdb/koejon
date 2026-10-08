@@ -1,4 +1,4 @@
-import { pendingSeats } from './engine'
+import { freshStats, pendingSeats } from './engine'
 import type {
   BoomkeMark,
   Card,
@@ -81,7 +81,9 @@ export function toPublic(s: State): PublicState {
     koeien: s.koeien,
     lastResult: s.lastResult,
     winner: s.winner,
-    stats: s.stats,
+    // A host reloaded with a state saved before stats existed publishes it
+    // before any apply; Firestore refuses an undefined field.
+    stats: s.stats ?? freshStats(),
     actionSeats: pendingSeats(s),
     log: s.log,
   }
