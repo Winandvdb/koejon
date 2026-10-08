@@ -106,4 +106,10 @@ describe('createMatch', () => {
     expect(s.lines).toEqual([13, 13])
     expect(s.multiplier).toBe(1)
   })
+
+  it('takes a shorter tree length', () => {
+    const s = createMatch(1, undefined, 2)
+    expect(s.lines).toEqual([2, 2])
+    for (const team of [0, 1]) expect(s.marks.filter((m) => m.team === team && m.t === 'line')).toHaveLength(2)
+  })
 })

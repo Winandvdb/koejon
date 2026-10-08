@@ -423,6 +423,34 @@ input[type='checkbox'] {
   cursor: pointer;
 }
 
+/* Dev builds only: a narrow phone keeps the popover inside the screen. */
+.dev-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+}
+
+.settings-pop label + .dev-settings,
+.settings-pop .segmented + .dev-settings {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.dev-settings input[type='number'] {
+  width: 4em;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+
+.dev-settings small {
+  color: var(--muted);
+}
+
 /* ---------- Home ---------- */
 
 .home {
