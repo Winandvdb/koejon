@@ -158,7 +158,9 @@ export class FirestoreGuestLink implements GuestLink {
     private uid: string,
   ) {}
 
-  start(ev: GuestEvents): void {
+  /** Never sends `state`: room and hand are two docs with two listeners. A
+   *  version on the hand doc would cost a hand write on every commit. */
+  start(ev: Omit<GuestEvents, 'state'>): void {
     const lost = (label: string) => (err: unknown) => {
       console.error(`[room] ${label} listener error`, err)
       ev.lost()

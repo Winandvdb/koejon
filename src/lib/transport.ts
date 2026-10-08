@@ -26,6 +26,9 @@ export interface HostLink {
 export interface GuestEvents {
   room(r: RoomDoc | null): void
   hand(h: HandDoc | null): void
+  /** Room and own hand of one version, as one update: with `room` then
+   *  `hand` the view shows the new room with the old hand in between. */
+  state(r: RoomDoc, h: HandDoc | null): void
   /** Updates stopped (listener died, offline, quota). */
   lost(): void
   hostStale(stale: boolean): void
