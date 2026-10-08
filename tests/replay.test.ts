@@ -54,6 +54,13 @@ describe('loading a match to replay', () => {
     expect(loadKjn(kjn)).toEqual(m)
   })
 
+  test('a file saved with Windows line endings, a BOM or no final newline loads', () => {
+    const m = loadKjn(kjn)
+    expect(loadKjn(kjn.replace(/\n/g, '\r\n'))).toEqual(m)
+    expect(loadKjn('\uFEFF' + kjn.trimEnd())).toEqual(m)
+    expect(loadKjn(kjn + '\n\n')).toEqual(m)
+  })
+
   test('an invalid record is refused', async () => {
     await expect(readKjnFile(new Blob(['hello\n']))).rejects.toThrow()
     expect(() => loadKjn(kjn.replace('KJN/1', 'KJN/2'))).toThrow()

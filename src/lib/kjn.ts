@@ -427,7 +427,8 @@ function runKjn(m: KjnMatch, step: (s: State) => void): State {
 /** A finished match from untrusted text (a shared file); throws when it is not one. */
 export function loadKjn(text: string): KjnMatch {
   if (text.length > KJN_MAX_CHARS) fail('too large')
-  const m = parseKjn(text)
+  // Editors and file sync on Windows rewrite line endings; the moves stay the same.
+  const m = parseKjn(text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trimEnd() + '\n')
   if (m.winner === null) fail('unfinished match')
   replayKjn(m)
   return m
