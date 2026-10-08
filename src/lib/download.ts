@@ -8,8 +8,8 @@ export function kjnFile(kjn: string, now = new Date()): File {
 }
 
 /** Share sheet where the device can share files (most phones), else a plain download. */
-export async function downloadKjn(kjn: string): Promise<void> {
-  const file = kjnFile(kjn)
+export async function downloadKjn(kjn: string, at = new Date()): Promise<void> {
+  const file = kjnFile(kjn, at)
   if (navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] })

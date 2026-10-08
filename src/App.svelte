@@ -21,9 +21,12 @@
   import { safeStorage } from './lib/storage'
   import { theme } from './lib/theme'
   import type { Action } from './engine'
+  import type { HistoryEntry } from './lib/history'
+  import { loadKjn, readKjnFile, type KjnMatch } from './lib/kjn'
   import Home from './components/Home.svelte'
   import Lobby from './components/Lobby.svelte'
   import Table from './components/Table.svelte'
+  import Replay from './components/Replay.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
 
   /** Dev builds (the vite dev server, or VITE_APP_VARIANT=dev: the dev
@@ -293,6 +296,32 @@
   function onNewMatch() {
     host?.newMatch()
   }
+
+  // Replay is local only: no session, no host, no network.
+  // Raw: the engine structuredClones the match, which a deep $state proxy breaks.
+  let replay = $state.raw<{ match: KjnMatch; seat: number; names: string[]; label: string } | null>(null)
+
+  function onReplay(e: HistoryEntry) {
+    err = ''
+    try {
+      const label = new Date(e.finishedAt).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+      replay = { match: loadKjn(e.kjn), seat: e.seat, names: e.names, label }
+    } catch {
+      err = $t.invalidKjn
+    }
+  }
+
+  async function onOpenFile(file: File) {
+    err = ''
+    try {
+      replay = { match: await readKjnFile(file), seat: 0, names: [], label: file.name }
+    } catch {
+      err = $t.invalidKjn
+    }
+  }
 </script>
 
 <header class="topbar">
@@ -366,8 +395,10 @@
     <div class="connecting">
       {#if err}{err}{:else}<span class="spinner"></span>{$t.connection}{/if}
     </div>
+  {:else if replay && !session}
+    <Replay match={replay.match} seat={replay.seat} names={replay.names} label={replay.label} onclose={() => (replay = null)} />
   {:else if !session}
-    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} />
+    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} onreplay={onReplay} onopenfile={onOpenFile} />
   {:else if !view || !view.room}
     <!-- Attaching, or the room doc just vanished — teardown runs in the
          effect; never mount Home here or the invite view flashes. -->

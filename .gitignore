@@ -83,3 +83,4 @@ firestore-debug.log
 
 # Agent issue worktrees (start-issue skill)
 .worktrees/
+.vscode/settings.json

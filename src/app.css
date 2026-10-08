@@ -519,6 +519,83 @@ input[type='checkbox'] {
   font-weight: 700 !important;
 }
 
+/* Played matches on this device. */
+.home-cols {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Wide screens: start and history side by side; the history takes the
+   start panel's height and scrolls inside it. */
+@media (min-width: 900px) {
+  .home:has(.home-cols) {
+    max-width: 940px;
+  }
+
+  .home-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: stretch;
+  }
+
+  .home-history {
+    contain: size;
+    min-height: 260px;
+  }
+
+  .home-history .match-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+}
+
+.match-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.match-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.match-list li:first-child {
+  padding-top: 0;
+}
+
+.match-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.match-teams {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.match-teams .win {
+  font-weight: 800;
+}
+
+.match-teams .win::after {
+  content: ' 🏆';
+}
+
+.match-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 /* ---------- Lobby ---------- */
 
 .lobby {
@@ -1449,6 +1526,82 @@ button.tag {
 .opp-card > .card-back {
   width: 100%;
   height: 100%;
+}
+
+/* Replay: open hands overlap less so each card's corner stays readable. */
+.opp-hand.open .opp-card {
+  --cw: calc(var(--card) * 0.6);
+}
+
+.opp-hand.open .opp-card > * {
+  width: 100%;
+  height: 100%;
+}
+
+.opp-hand.open.horizontal .opp-card + .opp-card {
+  margin-left: calc(var(--cw) * -0.5);
+}
+
+.opp-hand.open.vertical .opp-card + .opp-card {
+  margin-top: calc(var(--cw) * -1);
+}
+
+.replay-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: 'title controls close';
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 0;
+  flex: none;
+}
+
+.replay-title {
+  grid-area: title;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.replay-controls {
+  grid-area: controls;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.replay-controls .icon-btn {
+  font-size: 18px;
+}
+
+.replay-close {
+  grid-area: close;
+  justify-self: end;
+}
+
+/* Phones: the title gets its own row above the controls. */
+@media (max-width: 560px) {
+  .replay-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title close'
+      'controls controls';
+  }
+}
+
+.replay-label {
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.replay-bar .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* The dealer's turned cards sit at the dealer's seat during bidding. */
