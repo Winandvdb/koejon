@@ -46,8 +46,21 @@
     { x: 180, y: 0 },
   ]
   const TILT = [-4, 3, -2, 5]
-  /** Each won trick lies clearly askew on the pile, so the tricks can be counted. */
-  const PILE_TILT = [-16, 12, -8, 18, -12, 6]
+  /** Each won trick lies clearly askew on the pile, so the tricks can be counted. The skew
+   *  differs per hand, team and trick, but is derived, not random: a redraw must not move
+   *  a card, and every client must see the same pile. Neighbours turn opposite ways. */
+  const pileSkew = (hand: number, team: number, k: number) => {
+    let h = Math.imul(hand + 1, 0x9e3779b1) ^ Math.imul(team + 1, 0x85ebca6b) ^ Math.imul(k + 1, 0xc2b2ae35)
+    const next = () => {
+      h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d)
+      h = Math.imul(h ^ (h >>> 12), 0x297a2d39)
+      return ((h ^= h >>> 15) >>> 0) / 2 ** 32
+    }
+    const turn = (k % 2 ? 1 : -1) * (6 + next() * 14)
+    const x = k * 0.12 + (next() - 0.5) * 0.14
+    const y = -k * 0.16 + (next() - 0.5) * 0.1
+    return `translate: calc(var(--cw) * ${x.toFixed(3)}) calc(var(--cw) * ${y.toFixed(3)}); rotate: ${turn.toFixed(1)}deg`
+  }
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
@@ -282,7 +295,7 @@
       {#each Array(pileCount(team)) as _, k (k)}
         <div
           class="pile-card"
-          style="translate: calc(var(--cw) * {k * 0.12}) calc(var(--cw) * {-k * 0.16}); rotate: {PILE_TILT[k]}deg"
+          style={pileSkew(pub.handNumber, team, k)}
           in:scale={{ start: 0.6, duration: 220 }}
         >
           <div class="card-back"></div>
