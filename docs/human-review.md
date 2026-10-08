@@ -53,7 +53,18 @@ The Review tab shows what the coding agent fixed, declined and assumed, from `re
 at the repo root. Only the session that wrote the code can write that file. The `start-issue`
 skill does it as its step 10, after it opens the PR (CI runs only on pull requests). For work
 outside `start-issue`, run `/record-review origin/develop` in the coding session after the PR is
-open. A stacked branch uses the branch below it as the base. Each PR overwrites the file.
+open. A stacked branch uses the branch below it as the base.
+
+`review-points.md` and `review-cost.json` stay on this Mac: `.git/info/exclude` lists them (and
+`.human-review/`), so `finish` commits the fixes and the trailers without them. The page reads
+the file from disk. A worktree's copy is gone after `git worktree remove`, so build the page
+first. Add the three lines to `.git/info/exclude` in a new clone:
+
+```
+/review-points.md
+/review-cost.json
+/.human-review/
+```
 
 ## Run
 
