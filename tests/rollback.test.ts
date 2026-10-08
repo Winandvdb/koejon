@@ -296,12 +296,14 @@ describe('guest seat after the host was away (#54)', () => {
     link.start({ room: (r) => rooms.push(r), hand: () => {}, lost: () => {}, hostStale: () => {} })
     const room = fake.listeners.get(`rooms/${CODE}`)!
     const missing = (fromCache: boolean) => ({ exists: () => false, data: () => null, metadata: { fromCache } })
-    room(snap(roomAt(3)))
+    // One object: roomAt stamps the clock, so two calls can differ.
+    const r3 = roomAt(3)
+    room(snap(r3))
     room(missing(true))
     expect(rooms).toHaveLength(1)
     // The server says it is gone: the host closed the room.
     room(missing(false))
-    expect(rooms).toEqual([roomAt(3), null])
+    expect(rooms).toEqual([r3, null])
     link.dispose()
   })
 
