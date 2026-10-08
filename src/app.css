@@ -430,12 +430,10 @@ input[type='checkbox'] {
   cursor: pointer;
 }
 
-/* Dev builds only: a narrow phone keeps the popover inside the screen. */
 .dev-settings {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: calc(100vw - 32px);
 }
 
 .settings-pop label + .dev-settings,
@@ -2160,6 +2158,7 @@ button.tag {
   .settings-pop {
     right: 16px;
     max-width: calc(100% - 32px);
+    max-height: calc(100vh - 72px);
     max-height: calc(100dvh - 72px);
     overflow-y: auto;
   }
