@@ -6,6 +6,9 @@ import type { HandDoc, Intent, RoomDoc } from './net-types'
 import { DEFAULT_ROOM_OPTS } from './net-types'
 import { FirestoreGuestLink, roomRef } from './link-firestore'
 import { P2P_ENABLED, P2PGuestLink, P2PHostLink } from './link-p2p'
+import { addHistory } from './history'
+import type { KeyValueStore } from './link-local'
+import { safeStorage } from './storage'
 import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -71,6 +74,8 @@ export class RoomSession {
   readonly hostStale = writable(false)
   readonly connLost = writable(false)
   readonly view: Readable<SessionView>
+  private unsubHistory: () => void
+  private savedKjn: string | null = null
 
   constructor(
     readonly code: string,
@@ -78,6 +83,7 @@ export class RoomSession {
     private link: GuestLink,
     /** Set when this tab is the host: `link` is then fed in-tab by it. */
     readonly hostLink?: HostLink,
+    private history: KeyValueStore = safeStorage,
   ) {
     link.start({
       room: (r) => this.latest.update((l) => ({ ...l, room: r })),
@@ -96,6 +102,17 @@ export class RoomSession {
         return { room, hand, mySeat, state, legal, hostStale, offline: connLost }
       },
     )
+    this.unsubHistory = this.room.subscribe((r) => this.keepRecord(r))
+  }
+
+  /** A seated human keeps the finished match on this device. */
+  private keepRecord(room: RoomDoc | null): void {
+    if (!room?.kjn || room.pub?.phase !== 'GAME_OVER') return
+    if (room.kjn === this.savedKjn) return
+    const seat = seatOf(room, this.uid)
+    if (seat < 0 || room.seats[seat]!.bot) return
+    addHistory({ seat, names: room.seats.map((s) => s?.name ?? ''), kjn: room.kjn }, this.history)
+    this.savedKjn = room.kjn
   }
 
   send(intent: Intent): Promise<void> {
@@ -133,6 +150,7 @@ export class RoomSession {
   }
 
   dispose(): void {
+    this.unsubHistory()
     this.link.dispose()
   }
 }
