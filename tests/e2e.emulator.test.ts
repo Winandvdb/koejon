@@ -8,10 +8,9 @@ import { describe, expect, test } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import { app, signIn } from '../src/lib/firebase'
 import { HostGame } from '../src/lib/host'
-import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
-import { db } from '../src/lib/firebase'
+import { deleteDoc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { parseKjn, type GameDoc } from '../src/lib/kjn'
-import { handRef, newGameRef, roomRef } from '../src/lib/link-firestore'
+import { gameRef, handRef, roomRef } from '../src/lib/link-firestore'
 import type { RoomDoc } from '../src/lib/net-types'
 import { createRoom, type SessionView } from '../src/lib/room'
 import { memoryStore, until } from './helpers'
@@ -67,9 +66,9 @@ describe('emulator e2e', () => {
     const uploads: GameDoc[] = []
     const link = session.hostLink!
     const save = link.saveGame!.bind(link)
-    link.saveGame = (g) => {
+    link.saveGame = (id, g) => {
       uploads.push(g)
-      return save(g)
+      return save(id, g)
     }
     const saved = memoryStore()
     let commits = 0
@@ -148,7 +147,7 @@ describe('emulator e2e', () => {
       expect(fsRoom.version).toBeLessThan(10)
       expect(fsRoom.pub?.phase).not.toBe('LOBBY')
       // The finished match landed as exactly one games doc, accepted by the rules.
-      await until(() => saved.getItem(`koejon-kjn-${session.code}`) === null, 10_000)
+      await until(() => saved.getItem('koejon-games-pending') === null, 10_000)
       expect(uploads).toHaveLength(1)
       expect(await gameCount()).toBe(gamesBefore + 1)
       const rec = parseKjn(uploads[0].kjn)
@@ -168,12 +167,13 @@ describe('emulator e2e', () => {
     }
   }, 300_000)
 
-  test('games rules: create only a well-formed record, nothing else', async (ctx) => {
+  test('games rules: write-once, size and format tag only', async (ctx) => {
     if (!(await emulatorUp())) {
       if (process.env.E2E_REQUIRED === 'true') throw new Error('Firestore emulator not reachable')
       return ctx.skip()
     }
     await signIn()
+    const fresh = () => gameRef(crypto.randomUUID())
     const kjn = '[Format "KJN/1"]\n[App "test"]\n[Seats "human human human human"]\n'
     const good: GameDoc = {
       format: 'KJN/1',
@@ -183,15 +183,19 @@ describe('emulator e2e', () => {
       hands: 1,
       kjn,
     }
-    const ref = newGameRef()
+    const ref = fresh()
     await setDoc(ref, good)
+    // Write-once: a second write of the same id (a retried upload) is denied.
+    expect(await denied(setDoc(ref, good))).toBe(true)
     expect(await denied(getDoc(ref))).toBe(true)
     expect(await denied(updateDoc(ref, { winner: 1 }))).toBe(true)
     expect(await denied(deleteDoc(ref))).toBe(true)
-    expect(await denied(setDoc(newGameRef(), { ...good, room: 'ABCDE' }))).toBe(true)
-    expect(await denied(setDoc(newGameRef(), { ...good, format: 'KJN/2' }))).toBe(true)
-    expect(await denied(setDoc(newGameRef(), { ...good, seats: ['human', 'x', 'human', 'human'] }))).toBe(true)
-    expect(await denied(setDoc(newGameRef(), { ...good, kjn: kjn + 'x'.repeat(40_000) }))).toBe(true)
-    expect(await denied(setDoc(doc(db, 'games', 'x'), { ...good, kjn: 'hello' }))).toBe(true)
+    // Newer builds may add fields, seat kinds or a format version.
+    await setDoc(fresh(), { ...good, format: 'KJN/2', seats: ['human', 'bot-pro', 'human', 'human'], extra: 1 })
+    expect(await denied(setDoc(fresh(), { format: 'KJN/1' }))).toBe(true)
+    expect(await denied(setDoc(fresh(), { ...good, format: 'v1' }))).toBe(true)
+    expect(await denied(setDoc(fresh(), { ...good, kjn: 'x'.repeat(100_001) }))).toBe(true)
+    const many = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`f${i}`, i]))
+    expect(await denied(setDoc(fresh(), { ...good, ...many }))).toBe(true)
   }, 30_000)
 })

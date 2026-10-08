@@ -257,8 +257,8 @@ export class P2PHostLink implements HostLink {
     await this.inner.destroy(humanUids)
   }
 
-  saveGame(game: GameDoc): Promise<void> {
-    return this.inner.saveGame(game)
+  saveGame(id: string, game: GameDoc): Promise<void> {
+    return this.inner.saveGame(id, game)
   }
 
   dispose(): void {

@@ -4,7 +4,16 @@ import type { Action, Card, HandResult, State } from '../src/engine'
 import { botAction } from '../src/bots/bot'
 import { HostGame } from '../src/lib/host'
 import type { GameDoc, KjnMatch } from '../src/lib/kjn'
-import { gameDoc, newKjn, parseKjn, recordAction, serializeKjn } from '../src/lib/kjn'
+import {
+  gameDoc,
+  KJN_MAX_CHARS,
+  newKjn,
+  parseKjn,
+  recordAction,
+  replayKjn,
+  SEAT_KINDS,
+  serializeKjn,
+} from '../src/lib/kjn'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import type { HostLink } from '../src/lib/transport'
@@ -58,57 +67,6 @@ function resultOf(r: HandResult) {
   return { playing: r.playingTeam, points: r.points, crossed, kapot: r.kapot, koei: r.koei }
 }
 
-/** Replays a record through the engine from its dealt cards only: no seed, no cut. */
-function replay(m: KjnMatch): State {
-  let s = createMatch(0)
-  for (const h of m.hands) {
-    const lead = (h.dealer + 1) % 4
-    s = {
-      ...s,
-      phase: 'BIDDING_R1',
-      handNumber: s.handNumber + 1,
-      dealer: h.dealer,
-      dealerDraw: null,
-      hands: structuredClone(h.deal),
-      turned: { first: h.turned[0], second: h.turned[1], secondUp: false },
-      trump: null,
-      level: 0,
-      bidder: null,
-      bidIndex: 0,
-      turn: lead,
-      leader: lead,
-      trick: [],
-      lastTrick: null,
-      prevTrick: null,
-      trickAcks: [lead],
-      troefkeAsked: false,
-      tricksPlayed: 0,
-      tricksWon: [0, 0],
-      points: [0, 0],
-      piles: [[], []],
-    }
-    for (const b of h.auction.flat()) s = apply(s, { type: 'bid', ...b })
-    if (h.choice !== undefined) s = apply(s, { type: 'choose', seat: h.dealer, suit: h.choice })
-    if (!h.contract) {
-      expect(s.phase).toBe('CUTTING')
-      expect(h.result).toBeNull()
-      continue
-    }
-    expect({ bidder: s.bidder, trump: s.trump, level: s.level }).toEqual(h.contract)
-    if (h.troefke) s = apply(s, { type: 'troefke', seat: h.contract.bidder })
-    for (const t of h.tricks) {
-      expect(s.turn).toBe(t.leader)
-      for (const card of t.cards) {
-        // Trick acknowledgements are not part of the notation.
-        for (const seat of [0, 1, 2, 3]) if (!s.trickAcks.includes(seat)) s = apply(s, { type: 'ack', seat })
-        s = apply(s, { type: 'play', seat: s.turn, card })
-      }
-    }
-    expect(resultOf(s.lastResult!)).toEqual(h.result)
-  }
-  return s
-}
-
 describe('KJN/1 from bot matches', () => {
   it(`records ${MATCHES} complete matches canonically and replays them`, () => {
     const seen = { passed: 0, level1: 0, level2: 0, round2: 0, choice: 0, troefke: 0 }
@@ -138,7 +96,7 @@ describe('KJN/1 from bot matches', () => {
       expect(parsed.winner).toBe(final.winner)
       expect(parsed.lines).toEqual(final.lines)
 
-      const end = replay(parsed)
+      const end = replayKjn(parsed)
       expect(end.phase).toBe('GAME_OVER')
       expect(end.winner).toBe(final.winner)
       expect(end.lines).toEqual(final.lines)
@@ -216,23 +174,56 @@ describe('KJN/1 format', () => {
     expect(doc.hands).toBe(rec.hands.length)
     expect(gameDoc({ ...rec, winner: null, lines: null })).toBeNull()
   })
+
+  // The Firestore rules check only auth, size and the format tag; the shape
+  // of what a build writes is checked here.
+  it('writes games documents in the agreed shape', () => {
+    const doc = gameDoc({ ...runMatch(4).rec, seats: ['human', 'bot-easy', 'mixed', 'bot-hard'] })!
+    expect(doc.format).toMatch(/^KJN\/[0-9]+$/)
+    expect(doc.app).toMatch(/^[A-Za-z0-9._-]{1,40}$/)
+    expect(doc.seats).toHaveLength(4)
+    for (const s of doc.seats) expect(SEAT_KINDS).toContain(s)
+    expect([0, 1]).toContain(doc.winner)
+    expect(doc.hands).toBeGreaterThan(0)
+    expect(doc.kjn.startsWith(`[Format "${doc.format}"]\n`)).toBe(true)
+    expect(doc.kjn.length).toBeLessThanOrEqual(KJN_MAX_CHARS)
+    expect(Object.keys(doc).length).toBeLessThanOrEqual(12)
+  })
+
+  it('replay rejects a record that the engine does not reproduce', () => {
+    const { rec } = runMatch(5)
+    const played = rec.hands.findIndex((h) => h.result)
+    const fakeScore = structuredClone(rec)
+    fakeScore.hands[played].result!.points = [40, 0]
+    expect(() => replayKjn(fakeScore)).toThrow(/result differs/)
+    const fakeWinner = { ...structuredClone(rec), winner: 1 - rec.winner! }
+    expect(() => replayKjn(fakeWinner)).toThrow(/match result/)
+    const fakeCard = structuredClone(rec)
+    const t = fakeCard.hands[played].tricks[0]
+    ;[t.cards[0], t.cards[1]] = [t.cards[1], t.cards[0]]
+    expect(() => replayKjn(fakeCard)).toThrow()
+  })
 })
 
 // ---- host ----
 
 const UID = 'me'
+const PENDING = 'koejon-games-pending'
 
-/** A host on an in-memory link; `games` set means the link can upload (multiplayer). */
-async function open(storage: KeyValueStore, fresh: boolean, games?: GameDoc[]) {
+type Save = (id: string, g: GameDoc) => Promise<void>
+
+/** A save that always lands, collecting what it stored. */
+const collect =
+  (games: GameDoc[], ids: string[] = []): Save =>
+  async (id, g) => {
+    ids.push(id)
+    games.push(g)
+  }
+
+/** A host on an in-memory link; without `save` the link cannot upload. */
+async function open(storage: KeyValueStore, fresh: boolean, save?: Save) {
   const links = localLinks(UID, storage, fresh ? newRoomDoc(SOLO_CODE, UID, 'Me') : undefined)!
-  const link: HostLink = games
-    ? {
-        ...links.host,
-        saveGame: async (g) => {
-          games.push(g)
-        },
-      }
-    : links.host
+  const link: HostLink = save ? { ...links.host, saveGame: save } : links.host
   const session = new RoomSession(SOLO_CODE, UID, links.guest, link)
   const host = await HostGame.attach(SOLO_CODE, UID, link, {
     storage,
@@ -248,6 +239,8 @@ async function open(storage: KeyValueStore, fresh: boolean, games?: GameDoc[]) {
     latest = v
     const pub = v.room?.pub
     if (!pub || !v.state || pub.phase === 'LOBBY' || pub.phase === 'GAME_OVER') return
+    // After a leave a bot holds our seat and we no longer see its hand.
+    if (v.room!.seats[v.mySeat]?.bot) return
     if (pub.actionSeats.includes(v.mySeat)) host.submit({ kind: 'act', action: botAction(v.state, v.mySeat) })
   })
   const close = () => {
@@ -259,19 +252,23 @@ async function open(storage: KeyValueStore, fresh: boolean, games?: GameDoc[]) {
 }
 
 describe('host game records', () => {
+  async function startBots(g: Awaited<ReturnType<typeof open>>) {
+    g.host.addBot(1, 'easy')
+    g.host.addBot(2)
+    g.host.addBot(3, 'hard')
+    g.host.startGame()
+  }
+
   test('a match survives a host reload and is uploaded exactly once', async () => {
     const storage = memoryStore()
     const games: GameDoc[] = []
-    const first = await open(storage, true, games)
-    first.host.addBot(1, 'easy')
-    first.host.addBot(2)
-    first.host.addBot(3, 'hard')
-    first.host.startGame()
+    const first = await open(storage, true, collect(games))
+    await startBots(first)
     await until(() => (first.view()?.room?.pub?.handNumber ?? 0) >= 2)
     first.close()
     expect(storage.getItem(`koejon-kjn-${SOLO_CODE}`)).not.toBeNull()
 
-    const second = await open(storage, false, games)
+    const second = await open(storage, false, collect(games))
     await until(() => second.view()?.room?.pub?.phase === 'GAME_OVER')
     await until(() => games.length > 0)
     const pub = second.view()!.room!.pub!
@@ -288,18 +285,87 @@ describe('host game records', () => {
     expect(games[0].kjn).not.toContain(SOLO_CODE)
     expect(games[0].kjn).not.toContain(UID)
     expect(storage.getItem(`koejon-kjn-${SOLO_CODE}`)).toBeNull()
+    expect(storage.getItem(PENDING)).toBeNull()
     second.close()
   }, 60_000)
 
-  test('a solo match keeps no record', async () => {
+  test('a failed upload survives a new match and is retried with the same id', async () => {
+    const storage = memoryStore()
+    const tried: string[] = []
+    const ids: string[] = []
+    const games: GameDoc[] = []
+    const land = collect(games, ids)
+    const save: Save = async (id, g) => {
+      tried.push(id)
+      if (tried.length === 1) throw Object.assign(new Error('offline'), { code: 'unavailable' })
+      await land(id, g)
+    }
+    const g = await open(storage, true, save)
+    await startBots(g)
+    await until(() => g.view()?.room?.pub?.phase === 'GAME_OVER')
+    await until(() => tried.length === 1)
+    const firstHands = g.view()!.room!.pub!.handNumber
+    expect(storage.getItem(PENDING)).not.toBeNull()
+    g.host.newMatch()
+    await until(() => games.length > 0)
+    expect(ids[0]).toBe(tried[0])
+    expect(games[0].hands).toBe(firstHands)
+    g.close()
+  }, 60_000)
+
+  test('a denied upload is dropped, not retried forever', async () => {
+    const storage = memoryStore()
+    let tries = 0
+    const g = await open(storage, true, async () => {
+      tries++
+      throw Object.assign(new Error('denied'), { code: 'permission-denied' })
+    })
+    await startBots(g)
+    await until(() => g.view()?.room?.pub?.phase === 'GAME_OVER')
+    await until(() => tries === 1 && storage.getItem(PENDING) === null)
+    g.close()
+  }, 60_000)
+
+  test('a seat that leaves and comes back within a hand is recorded as mixed', async () => {
+    const games: GameDoc[] = []
+    const g = await open(memoryStore(), true, collect(games))
+    await startBots(g)
+    await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 1)
+    const seatIsBot = () => !!g.view()?.room?.seats[0]?.bot
+    g.host.submit({ kind: 'leave' })
+    await until(seatIsBot)
+    // Reclaim before the next deal: only a check on every seat change sees it.
+    g.host.submit({ kind: 'join', name: 'Me' })
+    await until(() => !seatIsBot())
+    await until(() => games.length > 0)
+    expect(parseKjn(games[0].kjn).seats).toEqual(['mixed', 'bot-easy', 'bot-normal', 'bot-hard'])
+    g.close()
+  }, 60_000)
+
+  test('a broken record never stops the match', async () => {
+    const storage = memoryStore()
+    const games: GameDoc[] = []
+    const first = await open(storage, true, collect(games))
+    await startBots(first)
+    await until(() => (first.view()?.room?.pub?.handNumber ?? 0) >= 1)
+    first.close()
+    const key = `koejon-kjn-${SOLO_CODE}`
+    storage.setItem(key, JSON.stringify({ ...JSON.parse(storage.getItem(key)!), hands: null }))
+
+    const second = await open(storage, false, collect(games))
+    await until(() => second.view()?.room?.pub?.phase === 'GAME_OVER')
+    expect(games).toHaveLength(0)
+    expect(storage.getItem(PENDING)).toBeNull()
+    second.close()
+  }, 60_000)
+
+  test('a link that cannot upload keeps no record', async () => {
     const storage = memoryStore()
     const g = await open(storage, true)
-    g.host.addBot(1)
-    g.host.addBot(2)
-    g.host.addBot(3)
-    g.host.startGame()
+    await startBots(g)
     await until(() => g.view()?.room?.pub?.phase === 'GAME_OVER')
     expect(storage.getItem(`koejon-kjn-${SOLO_CODE}`)).toBeNull()
+    expect(storage.getItem(PENDING)).toBeNull()
     g.close()
   }, 60_000)
 })

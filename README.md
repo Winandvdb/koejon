@@ -129,8 +129,9 @@ host's kick button (lobby seat list or in-game nameplate).
 
 ## Game records (KJN/1)
 
-Every finished multiplayer match is stored once as a KJN/1 record, for later
-analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`, `parseKjn`).
+Every finished match, multiplayer and solo, is stored once as a KJN/1 record, for
+later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
+`parseKjn`, `replayKjn`).
 
 ### Format
 
@@ -180,17 +181,30 @@ KJN/1 sample that must keep parsing to the same text.
 
 ### The `games` collection
 
-At `GAME_OVER` the host writes one document `games/{random id}`:
+At `GAME_OVER` the host queues one document `games/{random id}`:
 `format`, `app`, `seats`, `winner`, `hands` (count) and `kjn` (the full text, about
-6 KB; at most 40 000 characters). The in-progress record lives next to the engine
+6 KB; at most 100 000 characters). The in-progress record lives next to the engine
 state in the host's `localStorage` (`koejon-kjn-<code>`), so a host reload loses
-no hands; it is removed once the upload landed. A failed upload is retried on the
-next commit or reload.
+no hands. A finished record moves to an upload queue (`koejon-games-pending`, at
+most 20, shared by all rooms), so a new match never replaces one that did not
+upload yet. The queue uploads on every host commit, when the browser comes back
+online, and when a host starts. Each record keeps its doc id across retries: a
+retry of a write that already landed is denied (write-once) and dropped, so a
+match is never stored twice. A denied write is dropped too; other failures stay
+in the queue.
 
-Not stored: solo games (offline), unfinished matches, matches the host began on
-an older build, and bot-only matches from tests or `npm run bench`. The rules
-allow only a create of a well-formed document; the app cannot read, change or
-delete games.
+Solo play stays offline; only the finished match is uploaded, signing in first
+when the match started offline. If the queue is lost while offline (storage
+cleared), the record is lost, which is acceptable.
+
+Not stored: unfinished matches, matches the host began on an older build, and
+bot-only matches from tests or `npm run bench`.
+
+The rules check only what every build must keep: signed in, create only (the app
+cannot read, change or delete games), at most 12 fields, a `format` of the form
+`KJN/<n>` and a `kjn` string of at most 100 000 characters. Newer builds can add
+fields or a new format version without a rules change. The exact document shape
+is checked in `tests/kjn.test.ts`.
 
 ### Export for analysis
 
@@ -214,7 +228,13 @@ writeFileSync('games.kjn', snap.docs.map((d) => d.get('kjn')).join('\n'))
 ```
 
 Records in the file are separated by an empty line before each `[Format` tag.
-`parseKjn` in `src/lib/kjn.ts` reads one record.
+
+**`games` is untrusted input.** Any signed-in client (every visitor has an
+anonymous uid) can create documents, so a record can be fabricated. Keep only
+records that `parseKjn` accepts and that `replayKjn` confirms: it plays the record
+through the engine from the dealt cards and throws when a move is illegal or a
+hand result or the match result differs. Filter by `format` first. If abuse shows
+up, Firebase App Check on this collection is the next step.
 
 ### Privacy decision
 

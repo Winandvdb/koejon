@@ -9,7 +9,7 @@ import {
   writeBatch,
   type Unsubscribe,
 } from './fs'
-import { db } from './firebase'
+import { auth, db, signIn } from './firebase'
 import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
 import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from './transport'
@@ -18,8 +18,18 @@ export const roomRef = (code: string) => doc(db, 'rooms', code)
 export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
 export const actionRef = (code: string, uid: string) => doc(db, 'rooms', code, 'actions', uid)
 export const actionsCol = (code: string) => collection(db, 'rooms', code, 'actions')
-/** A random id: nothing ties a game to its room. */
-export const newGameRef = () => doc(collection(db, 'games'))
+export const gameRef = (id: string) => doc(db, 'games', id)
+
+/**
+ * Store a finished match. The caller keeps `id` across retries, so a write
+ * that lands twice hits the same doc and the second is denied (write-once).
+ * No timeout: the SDK keeps a queued write, so a timeout would only start a
+ * second upload next to it. Solo may still lack a uid when it started offline.
+ */
+export async function saveGame(id: string, game: GameDoc): Promise<void> {
+  if (!auth.currentUser) await signIn()
+  await setDoc(gameRef(id), game)
+}
 
 /** Three missed host beats (15 s each) before guests call the host gone. */
 export const HEARTBEAT_MS = 15_000
@@ -120,8 +130,8 @@ export class FirestoreHostLink implements HostLink {
     await batch.commit()
   }
 
-  async saveGame(game: GameDoc): Promise<void> {
-    await withTimeout(setDoc(newGameRef(), game))
+  saveGame(id: string, game: GameDoc): Promise<void> {
+    return saveGame(id, game)
   }
 
   dispose(): void {

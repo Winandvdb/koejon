@@ -36,7 +36,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/link-p2p.ts` | Multiplayer over WebRTC. Firestore only for lobby and signaling. | |
 | `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
 | `src/lib/fs.ts`, `firebase.ts` | Firestore wrapper (counts reads and writes), Firebase init, emulator auto-connect. | |
-| `src/lib/kjn.ts` | KJN/1 game records: `recordAction` (host builds the record), `serializeKjn`, `parseKjn`, `gameDoc`. The host uploads one `games/{id}` doc per finished multiplayer match. Format spec in `README.md`. | KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. |
+| `src/lib/kjn.ts` | KJN/1 game records: `recordAction` (host builds the record), `serializeKjn`, `parseKjn`, `gameDoc`, `replayKjn` (engine check for analysis). The host queues one `games/{id}` doc per finished match (multiplayer and solo) and uploads it. Format spec in `README.md`. | KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. A record error must never stop a match. |
 | `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
@@ -48,7 +48,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`, and `mulberry`, `memoryStore`, `blockStorage`, `until`. | Reuse the helpers. |
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
-| `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | |
+| `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | Prod, dev and PR previews share one database, and CI deploys the rules only from `main`. A rules change must accept every write of every build that is still in use. Keep the rules to auth, ownership, write-once and size limits. Check the exact data shape in tests, not in the rules. To make a rule stricter, first release a build that already writes the new shape, then tighten the rule in a later release. |
 | `docs/spikes/` | Spike write-ups (issues with label `question`), one file per issue: `<issue>-<slug>.md`. | The result of a spike is a write-up here, not code. |
 | `IMPLEMENTATION_PROMPT.md` | The original build spec. Historical. | Where it differs from the code or README, the code and README are correct. |
 

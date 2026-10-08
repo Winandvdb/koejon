@@ -4,11 +4,12 @@
  * engine build that produced it. Incompatible changes need a new format
  * version: KJN/1 records must keep parsing exactly as they do today.
  */
+import { apply, createMatch } from '../engine'
 import type { Action, Card, HandResult, Rank, State, Suit } from '../engine'
 
 export const KJN_FORMAT = 'KJN/1'
 /** Upper bound on the serialized text; the Firestore rules enforce the same. */
-export const KJN_MAX_CHARS = 40_000
+export const KJN_MAX_CHARS = 100_000
 
 export const SEAT_KINDS = ['human', 'bot-easy', 'bot-normal', 'bot-hard', 'mixed'] as const
 /** `mixed`: the seat switched between human and bot (or bot level) mid-match. */
@@ -325,4 +326,79 @@ export function gameDoc(m: KjnMatch): GameDoc | null {
   const kjn = serializeKjn(m)
   if (kjn.length > KJN_MAX_CHARS) return null
   return { format: m.format, app: m.app, seats: [...m.seats], winner: m.winner, hands: m.hands.length, kjn }
+}
+
+const sameResult = (r: HandResult, k: KjnResult) => {
+  const crossed = [0, 0]
+  crossed[r.winnerTeam] = r.erased
+  return (
+    r.playingTeam === k.playing &&
+    r.points[0] === k.points[0] &&
+    r.points[1] === k.points[1] &&
+    crossed[0] === k.crossed[0] &&
+    crossed[1] === k.crossed[1] &&
+    r.kapot === k.kapot &&
+    r.koei === k.koei
+  )
+}
+
+/**
+ * Plays a record through the engine from its dealt cards only (no seed) and
+ * returns the final state. Throws when a move is illegal or a recorded result
+ * differs: `games` is open to any signed-in client, so analysis keeps only
+ * records that pass this.
+ */
+export function replayKjn(m: KjnMatch): State {
+  let s = createMatch(0)
+  m.hands.forEach((h, i) => {
+    const n = i + 1
+    const lead = (h.dealer + 1) % 4
+    s = {
+      ...s,
+      phase: 'BIDDING_R1',
+      handNumber: s.handNumber + 1,
+      dealer: h.dealer,
+      dealerDraw: null,
+      hands: h.deal.map((d) => d.map(copy)),
+      turned: { first: h.turned[0], second: h.turned[1], secondUp: false },
+      trump: null,
+      level: 0,
+      bidder: null,
+      bidIndex: 0,
+      turn: lead,
+      leader: lead,
+      trick: [],
+      lastTrick: null,
+      prevTrick: null,
+      trickAcks: [lead],
+      troefkeAsked: false,
+      tricksPlayed: 0,
+      tricksWon: [0, 0],
+      points: [0, 0],
+      piles: [[], []],
+    }
+    for (const b of h.auction.flat()) s = apply(s, { type: 'bid', ...b })
+    if (h.choice !== undefined) s = apply(s, { type: 'choose', seat: h.dealer, suit: h.choice })
+    if (!h.contract) {
+      if (s.phase !== 'CUTTING' || h.result) fail(`hand ${n}: not a passed hand`)
+      return
+    }
+    const c = h.contract
+    if (s.bidder !== c.bidder || s.trump !== c.trump || s.level !== c.level) fail(`hand ${n}: contract differs`)
+    if (h.troefke) s = apply(s, { type: 'troefke', seat: c.bidder })
+    for (const t of h.tricks) {
+      if (s.turn !== t.leader) fail(`hand ${n}: wrong leader`)
+      for (const card of t.cards) {
+        // Trick acknowledgements are not part of the notation.
+        for (const seat of [0, 1, 2, 3]) if (!s.trickAcks.includes(seat)) s = apply(s, { type: 'ack', seat })
+        s = apply(s, { type: 'play', seat: s.turn, card })
+      }
+    }
+    if (!h.result || !s.lastResult || !sameResult(s.lastResult, h.result)) fail(`hand ${n}: result differs`)
+  })
+  if (m.winner !== null) {
+    if (s.phase !== 'GAME_OVER' || s.winner !== m.winner) fail('match result differs')
+    if (s.lines[0] !== m.lines![0] || s.lines[1] !== m.lines![1]) fail('final lines differ')
+  }
+  return s
 }
