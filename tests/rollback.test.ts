@@ -206,6 +206,60 @@ describe('no rollback on a flaky connection', () => {
   })
 })
 
+describe('room and hand reach the view together', () => {
+  /** Every view the session emits, as [room seq, hand]. */
+  function record(session: RoomSession) {
+    const seen: [number | undefined, HandDoc | null][] = []
+    session.view.subscribe((v) => seen.push([v.room?.seq, v.hand && { cards: v.hand }]))
+    return seen
+  }
+  const a: HandDoc = { cards: [C('H', 'A'), C('S', '9')] }
+  const b: HandDoc = { cards: [C('S', '9')] }
+
+  test('local link: one view per publish', async () => {
+    const links = localLinks(ME, memoryStore(), roomAt(4))!
+    const seen = record(new RoomSession(SOLO_CODE, ME, links.guest, links.host))
+    await links.host.publish(roomAt(5), new Map([[ME, a]]))
+    await links.host.publish(roomAt(6), new Map([[ME, b]]))
+    expect(seen).toEqual([
+      [4, null],
+      [5, a],
+      [6, b],
+    ])
+  })
+
+  test('p2p host tab: one view per publish', async () => {
+    const link = new P2PHostLink(CODE, ME, false)
+    const session = new RoomSession(CODE, ME, link.guest, link)
+    await link.load()
+    const seen = record(session)
+    await link.publish(roomAt(5), new Map([[ME, a]]))
+    await link.publish(roomAt(6), new Map([[ME, b]]))
+    expect(seen.slice(-2)).toEqual([
+      [5, a],
+      [6, b],
+    ])
+    link.dispose()
+  })
+
+  test('p2p guest: one view per channel message', async () => {
+    vi.stubGlobal('RTCPeerConnection', FakePC)
+    const session = new RoomSession(CODE, ME, new P2PGuestLink(CODE, ME))
+    await tick()
+    const ch = pcs[0].ch
+    ch.readyState = 'open'
+    ch.onopen!()
+    const seen = record(session)
+    ch.onmessage!({ data: JSON.stringify({ t: 'state', room: roomAt(5), hand: a }) })
+    ch.onmessage!({ data: JSON.stringify({ t: 'state', room: roomAt(6), hand: b }) })
+    expect(seen.slice(1)).toEqual([
+      [5, a],
+      [6, b],
+    ])
+    session.dispose()
+  })
+})
+
 describe('act waits for the host', () => {
   function fakeSession() {
     let ev!: GuestEvents

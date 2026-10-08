@@ -44,6 +44,8 @@ export interface RoomDoc {
   opts?: RoomOpts
   /** Quotes fired this match, newest last. Kept short; reset on a new match. */
   quotes?: QuoteEvent[]
+  /** Canonical KJN/1 text of the finished match; only set in GAME_OVER. */
+  kjn?: string | null
 }
 
 /** rooms/{code}/hands/{uid} */

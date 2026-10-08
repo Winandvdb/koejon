@@ -6,6 +6,7 @@ import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
+import { seededRandom } from '../src/lib/seed'
 import { safeStorage } from '../src/lib/storage'
 import { blockStorage, failLocks, memoryStore, until } from './helpers'
 
@@ -23,6 +24,7 @@ async function open(
   fresh: boolean,
   hostOpts: HostOptions = {},
   drive = true,
+  ownRand: () => number = Math.random,
 ) {
   const links = localLinks(UID, storage, fresh ? newRoomDoc(SOLO_CODE, UID, 'Me') : undefined)!
   const session = new RoomSession(SOLO_CODE, UID, links.guest, links.host)
@@ -42,14 +44,15 @@ async function open(
     latest = v
     const pub = v.room?.pub
     if (!pub || !v.state || pub.phase === 'LOBBY' || pub.phase === 'GAME_OVER') return
-    if (drive && pub.actionSeats.includes(v.mySeat)) host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat) }))
+    if (drive && pub.actionSeats.includes(v.mySeat))
+      host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat, ownRand) }))
   })
   const close = () => {
     unsub()
     host.dispose()
     session.dispose()
   }
-  return { host, view: () => latest, close }
+  return { host, session, view: () => latest, close }
 }
 
 describe('offline solo', () => {
@@ -107,6 +110,61 @@ describe('offline solo', () => {
       restore()
     }
   })
+
+  /** Bot names and every card played in the first two hands. `toggle` flips a
+   *  display option (an extra commit) whenever a bot is about to play. */
+  async function playTwoHands(rand?: () => number, ownRand?: () => number, toggle = false): Promise<string[]> {
+    const g = await open(memoryStore(), true, { rand }, true, ownRand)
+    const log: string[] = []
+    const seen = new Set<string>()
+    const toggled = new Set<string>()
+    const unsub = g.session.view.subscribe((v) => {
+      const pub = v.room?.pub
+      if (!pub || pub.handNumber > 2) return
+      const botToPlay = pub.phase === 'PLAYING' && pub.actionSeats.some((s) => v.room!.seats[s]?.bot)
+      const at = `${pub.handNumber}/${pub.tricksPlayed}/${pub.trick.length}`
+      if (toggle && botToPlay && !toggled.has(at)) {
+        toggled.add(at)
+        g.host.setOption('score', toggled.size % 2 === 1)
+      }
+      for (const tc of pub.trick) {
+        const key = `${pub.handNumber}/${pub.tricksPlayed}/${tc.seat}${tc.card.s}${tc.card.r}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        log.push(key)
+      }
+    })
+    g.host.addBot(1)
+    g.host.addBot(2)
+    g.host.addBot(3)
+    g.host.startGame()
+    await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 3)
+    unsub()
+    log.unshift(g.view()!.room!.seats.map((s) => s?.name).join(','))
+    await g.host.destroyRoom()
+    g.close()
+    return log
+  }
+
+  test('a seeded host plays the same game every time', async () => {
+    const a = await playTwoHands(seededRandom(1), seededRandom(99))
+    const b = await playTwoHands(seededRandom(1), seededRandom(99))
+    expect(a.length).toBeGreaterThan(10)
+    expect(b).toEqual(a)
+    // The host's seed decides it, not our own seat's moves.
+    expect(await playTwoHands(seededRandom(2), seededRandom(99))).not.toEqual(a)
+  }, 60_000)
+
+  test('extra commits (a display toggle) do not change a seeded game', async () => {
+    const plain = await playTwoHands(seededRandom(1), seededRandom(99))
+    expect(await playTwoHands(seededRandom(1), seededRandom(99), true)).toEqual(plain)
+  }, 60_000)
+
+  test('without a seed, games differ', async () => {
+    const a = await playTwoHands()
+    const b = await playTwoHands()
+    expect(b).not.toEqual(a)
+  }, 60_000)
 
   test('fired quotes ride on the room doc, so every client sees the same', async () => {
     const g = await open(memoryStore(), true, { quoteRand: () => 0 })
