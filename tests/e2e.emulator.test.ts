@@ -6,10 +6,11 @@
 import { createConnection } from 'node:net'
 import { describe, expect, test } from 'vitest'
 import { botAction } from '../src/bots/bot'
-import { signIn } from '../src/lib/firebase'
+import { app, signIn } from '../src/lib/firebase'
 import { HostGame } from '../src/lib/host'
-import { getDoc } from 'firebase/firestore'
-import { handRef, roomRef } from '../src/lib/link-firestore'
+import { deleteDoc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { parseKjn, type GameDoc } from '../src/lib/kjn'
+import { gameRef, handRef, roomRef } from '../src/lib/link-firestore'
 import type { RoomDoc } from '../src/lib/net-types'
 import { createRoom, type SessionView } from '../src/lib/room'
 import { memoryStore, until } from './helpers'
@@ -33,6 +34,24 @@ function emulatorUp(): Promise<boolean> {
   })
 }
 
+/** Number of `games` docs, read past the rules with the emulator's owner token. */
+async function gameCount(): Promise<number> {
+  const port = Number(process.env.VITE_EMULATOR_FIRESTORE_PORT || 8180)
+  const url = `http://127.0.0.1:${port}/v1/projects/${app.options.projectId}/databases/(default)/documents/games?pageSize=1000`
+  const res = await fetch(url, { headers: { Authorization: 'Bearer owner' } })
+  const body = (await res.json()) as { documents?: unknown[] }
+  return body.documents?.length ?? 0
+}
+
+async function denied(p: Promise<unknown>): Promise<boolean> {
+  try {
+    await p
+    return false
+  } catch (e) {
+    return (e as { code?: string }).code === 'permission-denied'
+  }
+}
+
 describe('emulator e2e', () => {
   test('host + 3 bots play a full match to GAME_OVER', async (ctx) => {
     if (!(await emulatorUp())) {
@@ -42,10 +61,18 @@ describe('emulator e2e', () => {
     }
 
     const uid = await signIn()
+    const gamesBefore = await gameCount()
     const session = await createRoom(uid, 'Host')
+    const uploads: GameDoc[] = []
+    const link = session.hostLink!
+    const save = link.saveGame!.bind(link)
+    link.saveGame = (id, g) => {
+      uploads.push(g)
+      return save(id, g)
+    }
     const saved = memoryStore()
     let commits = 0
-    const host = await HostGame.attach(session.code, uid, session.hostLink!, {
+    const host = await HostGame.attach(session.code, uid, link, {
       botDelay: () => 5,
       heartbeatMs: 60_000,
       drawLingerMs: 20,
@@ -119,6 +146,15 @@ describe('emulator e2e', () => {
       const fsRoom = (await getDoc(roomRef(session.code))).data() as RoomDoc
       expect(fsRoom.version).toBeLessThan(10)
       expect(fsRoom.pub?.phase).not.toBe('LOBBY')
+      // The finished match landed as exactly one games doc, accepted by the rules.
+      await until(() => saved.getItem('koejon-games-pending') === null, 10_000)
+      expect(uploads).toHaveLength(1)
+      expect(await gameCount()).toBe(gamesBefore + 1)
+      const rec = parseKjn(uploads[0].kjn)
+      expect(rec.hands).toHaveLength(pub.handNumber)
+      expect(rec.seats).toEqual(['human', 'bot-normal', 'bot-normal', 'bot-normal'])
+      expect(JSON.stringify(uploads[0])).not.toContain(uid)
+      expect(JSON.stringify(uploads[0])).not.toContain(session.code)
       console.log(
         `[e2e] match done: winner=team${pub.winner}, hands=${pub.handNumber}, lines=${pub.lines}, commits/hand=${perHand.toFixed(1)}`,
       )
@@ -130,4 +166,36 @@ describe('emulator e2e', () => {
       session.dispose()
     }
   }, 300_000)
+
+  test('games rules: write-once, size and format tag only', async (ctx) => {
+    if (!(await emulatorUp())) {
+      if (process.env.E2E_REQUIRED === 'true') throw new Error('Firestore emulator not reachable')
+      return ctx.skip()
+    }
+    await signIn()
+    const fresh = () => gameRef(crypto.randomUUID())
+    const kjn = '[Format "KJN/1"]\n[App "test"]\n[Seats "human human human human"]\n'
+    const good: GameDoc = {
+      format: 'KJN/1',
+      app: 'test',
+      seats: ['human', 'human', 'human', 'human'],
+      winner: 0,
+      hands: 1,
+      kjn,
+    }
+    const ref = fresh()
+    await setDoc(ref, good)
+    // Write-once: a second write of the same id (a retried upload) is denied.
+    expect(await denied(setDoc(ref, good))).toBe(true)
+    expect(await denied(getDoc(ref))).toBe(true)
+    expect(await denied(updateDoc(ref, { winner: 1 }))).toBe(true)
+    expect(await denied(deleteDoc(ref))).toBe(true)
+    // Newer builds may add fields, seat kinds or a format version.
+    await setDoc(fresh(), { ...good, format: 'KJN/2', seats: ['human', 'bot-pro', 'human', 'human'], extra: 1 })
+    expect(await denied(setDoc(fresh(), { format: 'KJN/1' }))).toBe(true)
+    expect(await denied(setDoc(fresh(), { ...good, format: 'v1' }))).toBe(true)
+    expect(await denied(setDoc(fresh(), { ...good, kjn: 'x'.repeat(100_001) }))).toBe(true)
+    const many = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`f${i}`, i]))
+    expect(await denied(setDoc(fresh(), { ...good, ...many }))).toBe(true)
+  }, 30_000)
 })

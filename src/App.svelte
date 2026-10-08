@@ -10,7 +10,7 @@
     RoomSession,
     type SessionView,
   } from './lib/room'
-  import { roomRef } from './lib/link-firestore'
+  import { roomRef, saveGame } from './lib/link-firestore'
   import { localLinks, SOLO_CODE } from './lib/link-local'
   import { appUrl, P2P_ENABLED } from './lib/link-p2p'
   import type { RoomDoc } from './lib/net-types'
@@ -84,9 +84,10 @@
     const code = urlCode || safeStorage.getItem('koejon-room')
     try {
       if (code === SOLO_CODE) {
-        // Offline solo: resume from this browser's storage, no Firestore.
+        // Offline solo: resume from this browser's storage; Firestore only
+        // receives the finished match.
         const links = localLinks(uid, safeStorage)
-        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
         else forgetRoom()
       } else if (code && authed) {
         // Return to a room in progress only when our seat is still ours.
@@ -236,7 +237,8 @@
         seed = null
       }
       // attach() runs teardown() which resets soloStarting — set it after.
-      attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+      // Play stays offline; only the finished match is uploaded, when online.
+      attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
       soloStarting = true
       const h = await ensureHost()
       h.addBot(1, level)
