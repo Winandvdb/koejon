@@ -12,7 +12,7 @@
   } from './lib/room'
   import { roomRef, saveGame } from './lib/link-firestore'
   import { localLinks, SOLO_CODE } from './lib/link-local'
-  import { appUrl, P2P_ENABLED } from './lib/link-p2p'
+  import { appUrl } from './lib/link-p2p'
   import type { RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
