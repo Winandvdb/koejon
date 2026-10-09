@@ -1,7 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition'
   import { lang, t } from '../lib/i18n'
-  import { downloadKjn } from '../lib/download'
   import { readHistory, removeHistory, type HistoryEntry } from '../lib/history'
   import { parseKjn } from '../lib/kjn'
   import { appUrl } from '../lib/link-p2p'
@@ -18,14 +17,12 @@
     onjoin,
     onsolo,
     onreplay,
-    onopenfile,
   }: {
     error?: string
     oncreate: (name: string) => void
     onjoin: (code: string, name: string) => void
     onsolo: (name: string, level: BotLevel) => void
     onreplay: (entry: HistoryEntry) => void
-    onopenfile: (file: File) => void
   } = $props()
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
@@ -75,7 +72,6 @@
         }
       })
   let matches = $state(readMatches())
-  let fileInput = $state<HTMLInputElement>()
 
   const seatName = (e: HistoryEntry, i: number) => e.names[i] || `${$t.player} ${i + 1}`
   const when = (ms: number) =>
@@ -84,13 +80,6 @@
   function remove(id: string) {
     removeHistory(id)
     matches = readMatches()
-  }
-
-  function openFile(e: Event & { currentTarget: HTMLInputElement }) {
-    const file = e.currentTarget.files?.[0]
-    // Clear so the same file can be opened again.
-    e.currentTarget.value = ''
-    if (file) onopenfile(file)
   }
 </script>
 
@@ -191,15 +180,12 @@
               </div>
               <div class="match-actions">
                 <button class="btn tiny primary" onclick={() => onreplay(e)}>{$t.replay}</button>
-                <button class="btn tiny" onclick={() => downloadKjn(e.kjn, new Date(e.finishedAt))}>{$t.download}</button>
                 <button class="btn tiny" onclick={() => remove(e.id)}>{$t.deleteMatch}</button>
               </div>
             </li>
           {/each}
         </ul>
       {/if}
-      <button class="btn" onclick={() => fileInput?.click()}>📂 {$t.openKjn}</button>
-      <input bind:this={fileInput} type="file" accept=".kjn" hidden onchange={openFile} />
     </div>
     </div>
   {/if}

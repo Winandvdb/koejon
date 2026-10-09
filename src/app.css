@@ -1608,9 +1608,32 @@ button.tag {
   font-size: 18px;
 }
 
-.replay-close {
+.replay-end {
   grid-area: close;
   justify-self: end;
+  display: flex;
+  align-items: center;
+}
+
+.replay-menu {
+  position: relative;
+}
+
+.replay-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.replay-alert {
+  margin: 6px 10px 0;
+  flex: none;
 }
 
 /* Phones: the title gets its own row above the controls. */

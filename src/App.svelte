@@ -25,7 +25,7 @@
   import { theme } from './lib/theme'
   import type { Action } from './engine'
   import type { HistoryEntry } from './lib/history'
-  import { loadKjn, readKjnFile, type KjnMatch } from './lib/kjn'
+  import { loadKjn, readKjnFile, serializeKjn, type KjnMatch } from './lib/kjn'
   import Home from './components/Home.svelte'
   import Lobby from './components/Lobby.svelte'
   import Table from './components/Table.svelte'
@@ -319,7 +319,14 @@
 
   // Replay is local only: no session, no host, no network.
   // Raw: the engine structuredClones the match, which a deep $state proxy breaks.
-  let replay = $state.raw<{ match: KjnMatch; seat: number; names: string[]; label: string } | null>(null)
+  let replay = $state.raw<{
+    match: KjnMatch
+    kjn: string
+    at?: Date
+    seat: number
+    names: string[]
+    label: string
+  } | null>(null)
 
   function onReplay(e: HistoryEntry) {
     err = ''
@@ -328,7 +335,7 @@
         dateStyle: 'medium',
         timeStyle: 'short',
       })
-      replay = { match: loadKjn(e.kjn), seat: e.seat, names: e.names, label }
+      replay = { match: loadKjn(e.kjn), kjn: e.kjn, at: new Date(e.finishedAt), seat: e.seat, names: e.names, label }
     } catch {
       err = $t.invalidKjn
     }
@@ -337,8 +344,11 @@
   async function onOpenFile(file: File) {
     err = ''
     try {
-      replay = { match: await readKjnFile(file), seat: 0, names: [], label: file.name }
+      const match = await readKjnFile(file)
+      // The parsed match, not the raw file text: clean line endings, no BOM.
+      replay = { match, kjn: serializeKjn(match), seat: 0, names: [], label: file.name }
     } catch {
+      // The current replay stays open; Replay shows the error.
       err = $t.invalidKjn
     }
   }
@@ -413,9 +423,22 @@
       {#if err}{err}{:else}<span class="spinner"></span>{$t.connection}{/if}
     </div>
   {:else if replay && !session}
-    <Replay match={replay.match} seat={replay.seat} names={replay.names} label={replay.label} onclose={() => (replay = null)} />
+    <!-- A newly opened file starts again at the first step. -->
+    {#key replay.match}
+      <Replay
+        match={replay.match}
+        kjn={replay.kjn}
+        at={replay.at}
+        seat={replay.seat}
+        names={replay.names}
+        label={replay.label}
+        error={err}
+        onopenfile={onOpenFile}
+        onclose={() => ((replay = null), (err = ''))}
+      />
+    {/key}
   {:else if !session}
-    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} onreplay={onReplay} onopenfile={onOpenFile} />
+    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} onreplay={onReplay} />
   {:else if !view || !view.room}
     <!-- Attaching, or the room doc just vanished — teardown runs in the
          effect; never mount Home here or the invite view flashes. -->
