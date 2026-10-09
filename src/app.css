@@ -580,14 +580,22 @@ input[type='checkbox'] {
 
 .match-list li {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .match-list li:first-child {
   padding-top: 0;
+}
+
+.match-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .match-meta {
@@ -611,10 +619,8 @@ input[type='checkbox'] {
   content: ' 🏆';
 }
 
-.match-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.match-replay {
+  color: var(--accent);
 }
 
 /* ---------- Lobby ---------- */
@@ -1608,9 +1614,32 @@ button.tag {
   font-size: 18px;
 }
 
-.replay-close {
+.replay-end {
   grid-area: close;
   justify-self: end;
+  display: flex;
+  align-items: center;
+}
+
+.replay-menu {
+  position: relative;
+}
+
+.replay-menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.replay-alert {
+  margin: 6px 10px 0;
+  flex: none;
 }
 
 /* Phones: the title gets its own row above the controls. */

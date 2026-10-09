@@ -4,7 +4,6 @@
   import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { SUIT_GLYPH, t } from '../lib/i18n'
-  import { downloadKjn } from '../lib/download'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
@@ -504,15 +503,9 @@
               {$t.nextHand}
             </button>
           </div>
-        {:else if pub.phase === 'GAME_OVER' && (isHost || room.kjn)}
+        {:else if pub.phase === 'GAME_OVER' && isHost}
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
-            {#if room.kjn}
-              {@const kjn = room.kjn}
-              <button class="fab" onclick={() => downloadKjn(kjn)}>{$t.downloadMatch}</button>
-            {/if}
-            {#if isHost}
-              <button class="fab primary" onclick={onnewmatch}>{$t.newMatch}</button>
-            {/if}
+            <button class="fab primary" onclick={onnewmatch}>{$t.newMatch}</button>
           </div>
         {/if}
 

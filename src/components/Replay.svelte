@@ -1,6 +1,7 @@
 <script lang="ts">
   import { shownHand, teamOf, toPublic, turnedVisible } from '../engine'
   import { replaySteps, type KjnMatch } from '../lib/kjn'
+  import { downloadKjn } from '../lib/download'
   import { t } from '../lib/i18n'
   import { arrangeHand, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
@@ -10,20 +11,41 @@
 
   let {
     match,
+    kjn,
+    at,
     seat: my,
     names,
     label,
+    error = '',
+    onopenfile,
     onclose,
   }: {
     match: KjnMatch
+    /** KJN/1 text of the match, for the download. */
+    kjn: string
+    /** When the match finished; unknown for a file. */
+    at?: Date
     /** Seat shown at the bottom. */
     seat: number
     /** Seat names; empty for a file, which has none. */
     names: string[]
     /** Where the match comes from: its date and time, or the file name. */
     label: string
+    error?: string
+    onopenfile: (file: File) => void
     onclose: () => void
   } = $props()
+
+  let menuOpen = $state(false)
+  let menu = $state<HTMLElement>()
+  let fileInput = $state<HTMLInputElement>()
+
+  function openFile(e: Event & { currentTarget: HTMLInputElement }) {
+    const file = e.currentTarget.files?.[0]
+    // Clear so the same file can be opened again.
+    e.currentTarget.value = ''
+    if (file) onopenfile(file)
+  }
 
   const steps = $derived(replaySteps(match))
   /** Index of the first step of each hand. */
@@ -128,6 +150,15 @@
   </div>
 {/snippet}
 
+<svelte:window
+  onpointerdown={(e) => {
+    if (menuOpen && !menu?.contains(e.target as Node)) menuOpen = false
+  }}
+  onkeydown={(e) => {
+    if (e.key === 'Escape') menuOpen = false
+  }}
+/>
+
 <div class="table-wrap replay">
   <div class="replay-bar">
     <span class="replay-title" title="{$t.replayOf} {label}"><b>{$t.replayOf}</b> {label}</span>
@@ -145,8 +176,32 @@
       <button class="icon-btn" title={$t.nextHand} aria-label={$t.nextHand} disabled={i === last} onclick={nextHand}>⏭</button>
       <span class="replay-label">{$t.hand} {hand} {$t.of} {match.hands.length}</span>
     </div>
-    <button class="icon-btn replay-close" title={$t.close} aria-label={$t.close} onclick={onclose}>✕</button>
+    <div class="replay-end">
+      <div class="replay-menu" bind:this={menu}>
+        <button
+          class="icon-btn"
+          title={$t.moreActions}
+          aria-label={$t.moreActions}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onclick={() => (menuOpen = !menuOpen)}>⋯</button
+        >
+        {#if menuOpen}
+          <div class="replay-menu-pop panel" role="menu">
+            <button class="btn tiny" role="menuitem" onclick={() => ((menuOpen = false), downloadKjn(kjn, at))}>
+              {$t.download}
+            </button>
+            <button class="btn tiny" role="menuitem" onclick={() => ((menuOpen = false), fileInput?.click())}>
+              {$t.openKjn}
+            </button>
+          </div>
+        {/if}
+        <input bind:this={fileInput} type="file" accept=".kjn" hidden onchange={openFile} />
+      </div>
+      <button class="icon-btn" title={$t.close} aria-label={$t.close} onclick={onclose}>✕</button>
+    </div>
   </div>
+  {#if error}<div class="alert replay-alert">{error}</div>{/if}
 
   <div class="table">
     <div class="felt">

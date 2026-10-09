@@ -1,8 +1,7 @@
 <script lang="ts">
   import { fly } from 'svelte/transition'
   import { lang, t } from '../lib/i18n'
-  import { downloadKjn } from '../lib/download'
-  import { readHistory, removeHistory, type HistoryEntry } from '../lib/history'
+  import { readHistory, type HistoryEntry } from '../lib/history'
   import { parseKjn } from '../lib/kjn'
   import { appUrl } from '../lib/link-p2p'
   import { CODE_LENGTH } from '../lib/room'
@@ -18,14 +17,12 @@
     onjoin,
     onsolo,
     onreplay,
-    onopenfile,
   }: {
     error?: string
     oncreate: (name: string) => void
     onjoin: (code: string, name: string) => void
     onsolo: (name: string, level: BotLevel) => void
     onreplay: (entry: HistoryEntry) => void
-    onopenfile: (file: File) => void
   } = $props()
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
@@ -63,35 +60,20 @@
   }
 
   /** Newest first, with winner and final lines read from the record. */
-  const readMatches = () =>
-    readHistory()
-      .reverse()
-      .map((e) => {
-        try {
-          const m = parseKjn(e.kjn)
-          return { e, winner: m.winner, lines: m.lines }
-        } catch {
-          return { e, winner: null, lines: null }
-        }
-      })
-  let matches = $state(readMatches())
-  let fileInput = $state<HTMLInputElement>()
+  const matches = readHistory()
+    .reverse()
+    .map((e) => {
+      try {
+        const m = parseKjn(e.kjn)
+        return { e, winner: m.winner, lines: m.lines }
+      } catch {
+        return { e, winner: null, lines: null }
+      }
+    })
 
   const seatName = (e: HistoryEntry, i: number) => e.names[i] || `${$t.player} ${i + 1}`
   const when = (ms: number) =>
     new Date(ms).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })
-
-  function remove(id: string) {
-    removeHistory(id)
-    matches = readMatches()
-  }
-
-  function openFile(e: Event & { currentTarget: HTMLInputElement }) {
-    const file = e.currentTarget.files?.[0]
-    // Clear so the same file can be opened again.
-    e.currentTarget.value = ''
-    if (file) onopenfile(file)
-  }
 </script>
 
 <svelte:window ononline={() => (online = true)} onoffline={() => (online = false)} />
@@ -180,26 +162,22 @@
         <ul class="match-list">
           {#each matches as { e, winner, lines } (e.id)}
             <li>
-              <div class="match-meta small muted">
-                <span>{when(e.finishedAt)}</span>
-                {#if lines}<span>{$t.boomke} {lines[0]}–{lines[1]}</span>{/if}
+              <div class="match-info">
+                <div class="match-meta small muted">
+                  <span>{when(e.finishedAt)}</span>
+                  {#if lines}<span>{$t.boomke} {lines[0]}–{lines[1]}</span>{/if}
+                </div>
+                <div class="match-teams">
+                  <span class:win={winner === 0}>{seatName(e, 0)} &amp; {seatName(e, 2)}</span>
+                  <span class="muted">–</span>
+                  <span class:win={winner === 1}>{seatName(e, 1)} &amp; {seatName(e, 3)}</span>
+                </div>
               </div>
-              <div class="match-teams">
-                <span class:win={winner === 0}>{seatName(e, 0)} &amp; {seatName(e, 2)}</span>
-                <span class="muted">–</span>
-                <span class:win={winner === 1}>{seatName(e, 1)} &amp; {seatName(e, 3)}</span>
-              </div>
-              <div class="match-actions">
-                <button class="btn tiny primary" onclick={() => onreplay(e)}>{$t.replay}</button>
-                <button class="btn tiny" onclick={() => downloadKjn(e.kjn, new Date(e.finishedAt))}>{$t.download}</button>
-                <button class="btn tiny" onclick={() => remove(e.id)}>{$t.deleteMatch}</button>
-              </div>
+              <button class="icon-btn match-replay" title={$t.replay} aria-label={$t.replay} onclick={() => onreplay(e)}>▶</button>
             </li>
           {/each}
         </ul>
       {/if}
-      <button class="btn" onclick={() => fileInput?.click()}>📂 {$t.openKjn}</button>
-      <input bind:this={fileInput} type="file" accept=".kjn" hidden onchange={openFile} />
     </div>
     </div>
   {/if}
