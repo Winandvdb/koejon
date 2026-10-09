@@ -580,14 +580,22 @@ input[type='checkbox'] {
 
 .match-list li {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .match-list li:first-child {
   padding-top: 0;
+}
+
+.match-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .match-meta {
@@ -611,10 +619,8 @@ input[type='checkbox'] {
   content: ' 🏆';
 }
 
-.match-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.match-replay {
+  color: var(--accent);
 }
 
 /* ---------- Lobby ---------- */
