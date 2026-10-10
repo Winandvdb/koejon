@@ -124,6 +124,29 @@ describe('sampleWorld', () => {
     expect(checked).toBeGreaterThan(0) // the positions really showed voids
   })
 
+  it('gives the cards only one seat may hold to that seat', () => {
+    // Match 144, trick 3: seats 2 and 3 are out of clubs and seat 1 is out
+    // of hearts and diamonds, so seat 1 must hold the three clubs left.
+    // Match 94, trick 5: seat 1 may hold only spades and needs two, so it
+    // must hold both spades left. A random deal with retries finds these
+    // rarely (1 time in 56 for match 144) and gave up after 50 dead ends.
+    const cases = [
+      { seed: 144, played: 10, last: 'S10', seat: 0, forced: ['CA', 'CJ', 'CK'] },
+      { seed: 94, played: 18, last: 'HA', seat: 2, forced: ['SA', 'SK'] },
+    ]
+    for (const { seed, played, last, seat, forced } of cases) {
+      const pos = positions(seed).find(
+        (p) => p.played.length === played && keyOf(p.played[played - 1].card) === last,
+      )!
+      const obs = observe(pos.s, seat)
+      const rand = seededRandom(1)
+      for (let i = 0; i < 2000; i++) {
+        const world = sampleWorld(obs, rand)
+        expect(world.hands[1].map(keyOf).sort()).toEqual(forced)
+      }
+    }
+  })
+
   it('plays every sampled world to the end of the hand', () => {
     const rand = seededRandom(31)
     const picks = POSITIONS.filter((_, i) => i % 19 === 0)

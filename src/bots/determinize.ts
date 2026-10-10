@@ -3,14 +3,14 @@ import {
   fullDeck,
   RANK_ORDER,
   sameCard,
+  SUITS,
   teamOf,
   trickWinnerIndex,
 } from '../engine'
 import type { Card, State, Suit, TrickCard } from '../engine'
 import type { Observation } from './observation'
 
-/** Tries before a sampler gives up: a failure then means the constraints
- *  contradict each other (a bug), never bad luck. */
+/** Worlds a `weight` may reject before the sampler keeps the last one. */
 const MAX_TRIES = 50
 
 const key = (c: Card): string => c.s + c.r
@@ -73,9 +73,11 @@ function voidSuits(played: TrickCard[], trump: Suit | null): Set<Suit>[] {
 /**
  * Fill the hands nobody may see. Own hand, the played cards and the turned
  * cards still at the dealer's seat are fixed; the rest of the deck is dealt
- * to the other seats within the voids their plays revealed. The most
- * constrained seat is served first; a random restart repairs the rare dead
- * end.
+ * to the other seats within the voids their plays revealed. The deal goes
+ * card by card; each card picks a seat by its free places (without voids
+ * that is a fair deal), among the `seatsThatFit`: the seats after which
+ * the other cards can still fill the hands. So a deal never runs into a
+ * dead end.
  */
 function hiddenHands(obs: Observation, played: TrickCard[], rand: () => number): Card[][] {
   const taken = new Set<string>()
@@ -91,34 +93,68 @@ function hiddenHands(obs: Observation, played: TrickCard[], rand: () => number):
   }
   const hands = [0, 1, 2, 3].map((i) => [...(i === obs.seat ? obs.hand : []), ...must[i]])
   const need = obs.handCounts.map((n, i) => n - hands[i].length)
-  if (need.some((n) => n < 0)) {
-    throw new Error('sampleWorld: the observation fixes more cards than a hand can hold')
-  }
   const voids = voidSuits(played, obs.trump)
   const pool = fullDeck().filter((c) => !taken.has(key(c)))
-  const seats = [0, 1, 2, 3].filter((i) => need[i] > 0)
-  for (let tries = 0; tries < MAX_TRIES; tries++) {
-    const order = take(seats, seats.length, rand).sort((a, b) => voids[b].size - voids[a].size)
-    let rest = pool
-    let stuck = false
-    const drew: Card[][] = [[], [], [], []]
-    for (const i of order) {
-      const allowed = rest.filter((c) => !voids[i].has(c.s))
-      if (allowed.length < need[i]) {
-        stuck = true
-        break
-      }
-      const got = take(allowed, need[i], rand)
-      const drop = new Set(got.map(key))
-      rest = rest.filter((c) => !drop.has(key(c)))
-      drew[i] = got
-    }
-    if (!stuck) {
-      for (const i of seats) hands[i].push(...drew[i])
-      return hands
-    }
+  // Seat 4 sets aside the cards no hand gets: without a log, the cards
+  // played before the visible tricks are unknown and stay in the pool.
+  const free = [...need, pool.length - need.reduce((a, b) => a + b, 0)]
+  const holders = { S: 0, H: 0, D: 0, C: 0 }
+  const left = { S: 0, H: 0, D: 0, C: 0 }
+  for (const s of SUITS) {
+    for (let i = 0; i < 5; i++) if (i === 4 || !voids[i].has(s)) holders[s] |= 1 << i
   }
-  throw new Error(`sampleWorld: no deal fits the constraints after ${MAX_TRIES} tries`)
+  for (const c of pool) left[c.s]++
+  const noDeal = () => new Error('sampleWorld: no deal fits the observation (a bug in the constraints)')
+  if (free.some((n) => n < 0)) throw noDeal()
+  const drew: Card[][] = [[], [], [], [], []]
+  for (const c of pool) {
+    // Each placement keeps the rest fitting, so only the first card can
+    // find no seat: then the observation contradicts itself.
+    const seats = seatsThatFit(c.s, free, left, holders)
+    if (seats === 0) throw noDeal()
+    let r = 0
+    for (let i = 0; i < 5; i++) if (seats & (1 << i)) r += free[i]
+    r *= rand()
+    let seat = 0
+    for (let i = 0; i < 5; i++) {
+      if (!(seats & (1 << i))) continue
+      seat = i
+      r -= free[i]
+      if (r < 0) break
+    }
+    left[c.s]--
+    free[seat]--
+    drew[seat].push(c)
+  }
+  for (let i = 0; i < 4; i++) hands[i].push(...drew[i])
+  return hands
+}
+
+/**
+ * The seats (a bit mask) where a card of `suit` may go so that the cards
+ * `left` still fill every `free` place; 0 when they cannot fill them at
+ * all. `holders` has a bit per seat that may hold a suit. Hall's condition:
+ * each group of seats needs at least as many cards it may hold as free
+ * places, which is enough with as many cards as places in all. A group at
+ * that limit that may hold this card must get it, or it falls short.
+ */
+function seatsThatFit(
+  suit: Suit,
+  free: number[],
+  left: Record<Suit, number>,
+  holders: Record<Suit, number>,
+): number {
+  let seats = holders[suit]
+  for (let i = 0; i < free.length; i++) if (free[i] === 0) seats &= ~(1 << i)
+  for (let group = 1; group < 1 << free.length; group++) {
+    let places = 0
+    for (let i = 0; i < free.length; i++) if (group & (1 << i)) places += free[i]
+    let cards = 0
+    for (const s of SUITS) if (holders[s] & group) cards += left[s]
+    if (places > cards) return 0
+    if (places === cards && holders[suit] & group) seats &= group
+  }
+  return seats
 }
 
 /**
@@ -210,6 +246,9 @@ function hiddenWorld(obs: Observation, rand: () => number): State {
  * does not need get neutral values: `seed`, `rng`, pile order, the draw
  * deck. All randomness comes from `rand` — the same seed gives the same
  * world.
+ *
+ * Like the observation, a world shares arrays (`trick`, `log`, `marks`, …)
+ * with the live engine state: change it only through `apply`, which clones.
  */
 export function sampleWorld(
   obs: Observation,
