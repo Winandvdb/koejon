@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store'
 import { START_LINES } from '../engine'
-import { safeStorage } from './storage'
+import { parseJson, safeStorage } from './storage'
 
 /** Bot speed factor: divides every host pause; 'instant' removes them. */
 export type BotSpeed = 1 | 2 | 5 | 'instant'
@@ -32,12 +32,8 @@ const KEY = 'koejon-dev'
 
 /** A stored value, with every unknown or out-of-range field at its default. */
 export function parseDev(json: string | null): DevSettings {
-  let v: Partial<DevSettings> = {}
-  try {
-    v = (JSON.parse(json ?? '{}') as Partial<DevSettings>) ?? {}
-  } catch {
-    // Broken value: defaults.
-  }
+  // Broken value: defaults.
+  const v = parseJson<Partial<DevSettings> | null>(json, null) ?? {}
   const len = Number(v.treeLength)
   return {
     treeLength: Number.isInteger(len) && len >= 1 && len <= START_LINES ? len : START_LINES,

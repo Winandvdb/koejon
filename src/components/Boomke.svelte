@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n'
-  import { START_LINES, type BoomkeMark } from '../engine'
+  import { START_LINES, type BoomkeMark, type Phase } from '../engine'
 
   let {
     marks,
@@ -9,7 +9,7 @@
   }: {
     marks: BoomkeMark[]
     myTeam: number
-    phase: string
+    phase: Phase
   } = $props()
 
   /** Collapsed during play; opens automatically when a hand is scored. */

@@ -92,7 +92,9 @@ describe('offline solo', () => {
     await second.host.destroyRoom()
     second.close()
     expect(localLinks(UID, storage)).toBeNull()
-    expect(storage.getItem(`koejon-engine-${SOLO_CODE}`)).toBeNull()
+    for (const key of ['engine', 'seq', 'quotes', 'seats', 'kjn', 'kjn-final']) {
+      expect(storage.getItem(`koejon-${key}-${SOLO_CODE}`)).toBeNull()
+    }
     // A whole solo match, reload included, never touched Firestore.
     const { getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot } = firestore
     for (const f of [getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot]) expect(f).not.toHaveBeenCalled()

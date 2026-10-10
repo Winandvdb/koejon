@@ -1,5 +1,5 @@
 import type { HandDoc, Intent, RoomDoc } from './net-types'
-import type { KeyValueStore } from './storage'
+import { readJson, type KeyValueStore } from './storage'
 import type { GuestEvents, GuestLink, HostLink } from './transport'
 
 /** Room code of the one offline solo room per browser. */
@@ -76,11 +76,4 @@ export function localLinks(
   return { host, guest }
 }
 
-function read(storage: KeyValueStore): Saved | null {
-  try {
-    const json = storage.getItem(KEY)
-    return json ? (JSON.parse(json) as Saved) : null
-  } catch {
-    return null
-  }
-}
+const read = (storage: KeyValueStore) => readJson<Saved | null>(storage, KEY, null)
