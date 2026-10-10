@@ -1,5 +1,7 @@
-import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
+
+/** Three missed host beats (15 s each) before guests call the host gone. */
+export const HEARTBEAT_MS = 15_000
 
 /** What the host changes on every commit; the link adds its own heartbeat. */
 export type RoomUpdate = Pick<RoomDoc, 'seats' | 'pub' | 'version' | 'seq' | 'opts' | 'quotes' | 'kjn'>
@@ -17,9 +19,6 @@ export interface HostLink {
   heartbeat(): void
   /** Remove the room for everybody. */
   destroy(humanUids: string[]): Promise<void>
-  /** Store a finished match as `games/{id}`; `id` stays the same on a retry.
-   *  Absent: the host keeps no record (tests, bench). */
-  saveGame?(id: string, game: GameDoc): Promise<void>
   dispose(): void
 }
 

@@ -29,11 +29,13 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 |---|---|---|
 | `src/engine/` | Pure game engine: cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring. Entry: `createMatch`, `legalActions`, `apply`, `toPublic`. | No Firebase, DOM or Svelte imports. Deterministic: use the seeded RNG in `rng.ts`, never `Math.random`. All game rules live here. |
 | `src/bots/bot.ts` | Bot heuristics. Levels `easy`, `normal`, `hard` (`BOT_PROFILES`). Entry: `botAction`. | A bot only picks from `legalActions`. Never read other players' hands. |
-| `src/lib/host.ts` | `HostGame`: the authoritative loop on the host. Applies intents, runs bots, publishes state. | |
-| `src/lib/room.ts` | `RoomSession`: client side of a room (view, send intents). `createRoom`, `joinRoom`. | |
-| `src/lib/transport.ts` | `HostLink` / `GuestLink` interfaces. | |
+| `src/lib/host.ts` | `HostGame`: the authoritative loop on the host. Applies intents, runs bots, publishes state. Uploads finished matches through `HostOptions.saveGame` (none: no KJN record). | Imports no transport implementation. |
+| `src/lib/room.ts` | `RoomSession`: client side of a room (view, send intents). `createRoom`, `joinRoom`, `resumeRoom` (reload: one read of the room doc). | |
+| `src/lib/transport.ts` | `HostLink` / `GuestLink` interfaces and `HEARTBEAT_MS`. | Transport only: no game records, no URLs. |
+| `src/lib/games.ts` | `saveGame`: writes one finished match as `games/{id}` (write-once, the host keeps `id` across retries). `App.svelte` gives it to `HostGame`. | |
+| `src/lib/url.ts` | `appUrl(room?)`: this page's path with `?room=`. Used by `App.svelte`, `Home.svelte` and `Lobby.svelte`. | |
 | `src/lib/link-local.ts` | Solo mode: host and guest in one tab, state in `localStorage`. No network. | |
-| `src/lib/link-p2p.ts` | Multiplayer over WebRTC. Firestore only for lobby and signaling. | |
+| `src/lib/link-p2p.ts` | Multiplayer over WebRTC (on when the browser has WebRTC). Firestore only for lobby and signaling. | |
 | `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
 | `src/lib/firebase.ts` | Firebase init, emulator auto-connect. | |
 | `src/lib/kjn.ts` | KJN/1 game records: `recordAction` (host builds the record), `serializeKjn`, `parseKjn`, `gameDoc`, `replayKjn` (engine check for analysis), `replaySteps` (engine state after each recorded action, for the replay viewer), `loadKjn` / `readKjnFile` (a finished match from untrusted text or a file, size-checked and replayed). The host queues one `games/{id}` doc per finished match that a human played to the end (multiplayer and solo) and uploads it. Format spec in `README.md`. | KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. A record error must never stop a match. Only a match that a human played to the end gets a record (`finishRecord` in `host.ts`: a seat still `human` at `GAME_OVER`, `mixed` does not count); else no upload, no `room.kjn`, no history entry and no download. |
@@ -44,7 +46,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
 | `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
 | `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
-| `src/lib/storage.ts` | `safeStorage`: `localStorage` that never throws (blocked storage reads as empty). | Use it for app storage; never touch `localStorage` directly outside a try/catch. |
+| `src/lib/storage.ts` | `safeStorage`: `localStorage` that never throws (blocked storage reads as empty). `KeyValueStore`: the storage type that modules and tests take. | Use it for app storage; never touch `localStorage` directly outside a try/catch. |
 | `src/lib/devsettings.ts` | Dev build test shortcuts (`DevSettings`): tree length, bot speed, skip "Gezien", interactive card draws, autoplay. Per browser in `localStorage` (`koejon-dev`). `App.svelte` gives them to the host (`HostOptions.dev`) and shows `DevPanel.svelte` in the settings popover, in dev builds only. | Production builds use `DEV_DEFAULTS`. The host uploads no KJN record for a match with another tree length or with autoplay. |
 | `src/lib/seed.ts` | `?seed=N`: a solo game that repeats exactly (deal, bot names, bot plays), for scripted demos. The host's `rand` option carries it. | Solo only. Only in the Vite dev server or a build with `VITE_ALLOW_SEED=1`; never set that flag in a deploy workflow (whoever knows the seed knows every hand). |
 | `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. `Home.svelte` also lists the played matches and opens `.kjn` files. `Replay.svelte` is the read-only replay viewer (all hands open, step / hand / auto-play controls). | Must work at phone width. Replay sends no intents and uses no network. |

@@ -3,6 +3,7 @@
   import { teamOf } from '../engine'
   import { t } from '../lib/i18n'
   import type { RoomDoc } from '../lib/net-types'
+  import { appUrl } from '../lib/url'
 
   let {
     room,
@@ -48,7 +49,7 @@
   const myTeam = $derived(teamOf(mySeat))
   const teamName = (seat: number) => (teamOf(seat) === myTeam ? $t.wij : $t.zij)
 
-  const inviteUrl = $derived(`${location.origin}${location.pathname}?room=${room.code}`)
+  const inviteUrl = $derived(`${location.origin}${appUrl(room.code)}`)
   let qr = $state('')
   let copied = $state(false)
 

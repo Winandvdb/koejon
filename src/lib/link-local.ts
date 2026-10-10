@@ -1,12 +1,11 @@
 import type { HandDoc, Intent, RoomDoc } from './net-types'
+import type { KeyValueStore } from './storage'
 import type { GuestEvents, GuestLink, HostLink } from './transport'
 
 /** Room code of the one offline solo room per browser. */
 export const SOLO_CODE = 'SOLO'
 
 const KEY = 'koejon-solo'
-
-export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 interface Saved {
   room: RoomDoc

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { matchScore } from '../src/engine'
 import { addHistory, HISTORY_KEY, HISTORY_MAX, readHistory } from '../src/lib/history'
 import { parseKjn, replaySteps, type KjnHand, type KjnMatch, type SeatKind } from '../src/lib/kjn'
-import type { KeyValueStore } from '../src/lib/link-local'
+import type { KeyValueStore } from '../src/lib/storage'
 import {
   EMPTY_STATS,
   matchGroup,

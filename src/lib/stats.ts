@@ -1,8 +1,7 @@
 import { matchScore, START_LINES } from '../engine'
 import { parseKjn } from './kjn'
 import type { KjnMatch } from './kjn'
-import type { KeyValueStore } from './link-local'
-import { safeStorage } from './storage'
+import { safeStorage, type KeyValueStore } from './storage'
 
 /** Personal statistics of the player on this device. Team values count for both players. */
 export interface PlayerStats {
