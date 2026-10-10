@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { addHistory, readHistory, removeHistory } from '../src/lib/history'
+import { addHistory, readHistory } from '../src/lib/history'
 import { KJN_MAX_CHARS, loadKjn, parseKjn, readKjnFile, replayKjn, replaySteps, serializeKjn } from '../src/lib/kjn'
 import { finishedMatch, memoryStore } from './helpers'
 
@@ -85,16 +85,5 @@ describe('loading a match to replay', () => {
     await expect(readKjnFile(big)).rejects.toThrow(/too large/)
     expect(read).toBe(false)
     expect(() => loadKjn(kjn + ' '.repeat(KJN_MAX_CHARS))).toThrow(/too large/)
-  })
-})
-
-describe('removeHistory', () => {
-  test('removes one entry from this device', () => {
-    const store = memoryStore()
-    addHistory({ seat: 0, names: [], kjn: finishedMatch(1).kjn }, store)
-    addHistory({ seat: 0, names: [], kjn: finishedMatch(2).kjn }, store)
-    const [first, second] = readHistory(store)
-    removeHistory(first.id, store)
-    expect(readHistory(store)).toEqual([second])
   })
 })

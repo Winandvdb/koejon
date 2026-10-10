@@ -97,8 +97,9 @@
             onclick={() => pickSeat(i)}
           >
             {#if seat}
-              <span class="avatar">{seat.bot ? '🤖' : seat.name.slice(0, 1).toUpperCase()}</span>
-              <span class="seat-nm">{seat.name}</span>
+              {@const nm = seat.name || `${$t.player} ${i + 1}`}
+              <span class="avatar">{seat.bot ? '🤖' : nm.slice(0, 1).toUpperCase()}</span>
+              <span class="seat-nm">{nm}</span>
               {#if i === mySeat}<span class="tag">{$t.you}</span>{/if}
               {#if seat.uid === room.hostUid}<span class="tag">{$t.host}</span>{/if}
               {#if seat.bot}<span class="tag muted">{$t.bot}</span>{/if}

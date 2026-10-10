@@ -37,7 +37,7 @@
   const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
   const playingTeam = $derived(pub.bidder === null ? null : teamOf(pub.bidder))
 
-  const name = (i: number) => seats[i]?.name ?? `#${i}`
+  const name = (i: number) => seats[i] ? seats[i]!.name || `${$t.player} ${i + 1}` : `#${i}`
   /** Relative position: 0 bottom (me), 1 left, 2 top, 3 right. */
   const rel = (seat: number) => (seat - my + 4) % 4
   /** Fly direction from each screen position toward the centre. */

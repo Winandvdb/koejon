@@ -64,7 +64,7 @@
       const kind = match.seats[k]
       const bot = kind.startsWith('bot-')
       const fallback = bot
-        ? `Bot ${k + 1} · ${lvlName[kind.slice(4) as keyof typeof lvlName]}`
+        ? `${$t.botName} ${k + 1} · ${lvlName[kind.slice(4) as keyof typeof lvlName]}`
         : `${$t.player} ${k + 1}`
       return { uid: '', name: names[k] || fallback, bot }
     }),

@@ -19,7 +19,7 @@
 
   let showLast = $state(false)
 
-  const name = (i: number) => seats[i]?.name ?? `#${i}`
+  const name = (i: number) => seats[i] ? seats[i]!.name || `${$t.player} ${i + 1}` : `#${i}`
   const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
 
   const redSuit = (s: string) => s === 'H' || s === 'D'
