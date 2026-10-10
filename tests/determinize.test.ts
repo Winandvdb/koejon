@@ -125,20 +125,42 @@ describe('sampleWorld', () => {
   })
 
   it('gives the cards only one seat may hold to that seat', () => {
-    // Match 144, trick 3: seats 2 and 3 are out of clubs and seat 1 is out
-    // of hearts and diamonds, so seat 1 must hold the three clubs left.
-    // Match 94, trick 5: seat 1 may hold only spades and needs two, so it
-    // must hold both spades left. A random deal with retries finds these
-    // rarely (1 time in 56 for match 144) and gave up after 50 dead ends.
+    // Trick 5, diamonds trump, seat 2 looks: seat 1 is out of clubs and
+    // diamonds and no hearts are left, so it must hold both spades left.
+    // Trick 5, spades trump, seat 3 looks: seat 2 is out of clubs and
+    // diamonds and must take the two hearts left, so seat 1 (out of spades
+    // and diamonds) must hold the two clubs. A random deal with retries
+    // finds such spots rarely and gave up after 50 dead ends. The spots are
+    // built by hand, so a change to the bot's play cannot move them.
     const cases = [
-      { seed: 144, played: 10, last: 'S10', seat: 0, forced: ['CA', 'CJ', 'CK'] },
-      { seed: 94, played: 18, last: 'HA', seat: 2, forced: ['SA', 'SK'] },
-    ]
-    for (const { seed, played, last, seat, forced } of cases) {
-      const pos = positions(seed).find(
-        (p) => p.played.length === played && keyOf(p.played[played - 1].card) === last,
-      )!
-      const obs = observe(pos.s, seat)
+      {
+        trump: 'D', turned: ['DQ', 'C10'], seat: 2, forced: ['SA', 'SQ'],
+        plays: '1S9 2SK 3C10 0S10 2CA 3D9 0D10 1SJ 0DA 1HJ 2DK 3DQ 0H9 1HA 2HQ 3H10',
+        held: ['CK DJ', 'SA SQ', 'HK C9', 'CQ CJ'],
+      },
+      {
+        trump: 'S', turned: ['SK', 'C10'], seat: 3, forced: ['CK', 'CQ'],
+        plays: '2S10 3SK 0SQ 1SJ 3C10 0CA 1C9 2DK 0SA 1D10 2S9 3DQ 0D9 1CJ 2HJ 3DA 3HA 0HK',
+        held: ['DJ', 'CK CQ', 'H9 H10', 'HQ'],
+      },
+    ] as const
+    const cardOf = (k: string): Card => ({ s: k[0] as Suit, r: k.slice(1) as Card['r'] })
+    for (const { trump, turned, seat, forced, plays, held } of cases) {
+      const played = plays.split(' ').map((p) => ({ seat: Number(p[0]), card: cardOf(p.slice(1)) }))
+      const trick = played.slice(played.length - (played.length % 4))
+      // Seat 3 dealt and played both turned cards; seat 1 leads or plays next.
+      const s = playingState({
+        trump,
+        dealer: 3,
+        turned: { first: cardOf(turned[0]), second: cardOf(turned[1]), secondUp: true },
+        hands: held.map((h) => h.split(' ').map(cardOf)),
+        log: [{ t: 'deal', seat: 3 }, ...played.map((tc) => ({ t: 'card', ...tc }))],
+        tricksPlayed: Math.floor(played.length / 4),
+        trick,
+        turn: 1,
+        leader: trick.length ? trick[0].seat : 1,
+      })
+      const obs = observe(s, seat)
       const rand = seededRandom(1)
       for (let i = 0; i < 2000; i++) {
         const world = sampleWorld(obs, rand)
