@@ -19,15 +19,13 @@ function persisted<T extends string | null>(
   key: string,
   parse: (v: string | null) => T | null,
   fallback: T,
-  save: (v: T) => string | null = (v) => v,
 ) {
   const store = writable<T>(parse(safeStorage.getItem(key)) ?? fallback)
   let first = true
   store.subscribe((v) => {
     // The first call is the loaded value: a default is not saved.
     if (first) return void (first = false)
-    const out = save(v)
-    if (out !== null) safeStorage.setItem(key, out)
+    if (v !== null) safeStorage.setItem(key, v)
   })
   return store
 }
@@ -51,8 +49,8 @@ export const botLevel = persisted<BotLevel>(
   'normal',
 )
 
-/** The name of the player, saved trimmed; '' when not set. */
-export const playerName = persisted<string>('koejon-name', (v) => v, '', (v) => v.trim())
+/** The name of the player; '' when not set. Callers set it trimmed. */
+export const playerName = persisted<string>('koejon-name', (v) => v, '')
 
 export const cardKey = (c: Card) => c.s + c.r
 

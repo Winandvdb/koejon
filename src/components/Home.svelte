@@ -49,7 +49,7 @@
   ]
 
   function save() {
-    $playerName = name
+    $playerName = name.trim()
   }
 
   function join(e: SubmitEvent) {

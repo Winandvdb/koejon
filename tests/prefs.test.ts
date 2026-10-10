@@ -115,9 +115,9 @@ describe('saved preferences', () => {
     expect(get(prefs.sortMode)).toBeNull()
   })
 
-  test('the name is saved trimmed', async () => {
+  test('the name is saved', async () => {
     const { store, prefs } = await fresh()
-    prefs.playerName.set('  Jef ')
+    prefs.playerName.set('Jef')
     expect(store.getItem('koejon-name')).toBe('Jef')
   })
 })
