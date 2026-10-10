@@ -31,7 +31,7 @@ describe('download from the replay', () => {
   test('of an opened file: the clean KJN/1 text, also when the file had Windows line endings or a BOM', async () => {
     const { kjn } = finishedMatch(12)
     for (const raw of [kjn, kjn.replace(/\n/g, '\r\n'), '\uFEFF' + kjn]) {
-      expect(serializeKjn(await readKjnFile(new Blob([raw])))).toBe(kjn)
+      expect(serializeKjn((await readKjnFile(new Blob([raw]))).match)).toBe(kjn)
     }
   })
 })

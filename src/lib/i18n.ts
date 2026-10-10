@@ -1,6 +1,7 @@
-import { derived, writable } from 'svelte/store'
+import { derived } from 'svelte/store'
 import type { BotLevel } from '../bots/bot'
 import type { Card, Suit } from '../engine'
+import { lang } from './prefs'
 
 export type Lang = 'nl' | 'en'
 
@@ -303,7 +304,8 @@ const dict = {
 
 export type Dict = (typeof dict)['nl']
 
-export const lang = writable<Lang>('nl')
+// The language is a preference: prefs.ts owns the store and saves it.
+export { lang }
 export const t = derived(lang, (l) => dict[l])
 
 export const levelNames = (d: Record<'lvlEasy' | 'lvlNormal' | 'lvlHard', string>): Record<BotLevel, string> => ({

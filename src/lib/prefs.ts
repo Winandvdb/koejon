@@ -1,6 +1,9 @@
 import { writable } from 'svelte/store'
 import { RANK_ORDER } from '../engine'
 import type { Card, Suit } from '../engine'
+import { BOT_LEVELS, type BotLevel } from '../bots/bot'
+import type { Lang } from './i18n'
+import { safeStorage } from './storage'
 
 /** How the own hand is shown: by suit high→low, by suit low→high, or in the
  *  player's own (dragged) order. */
@@ -9,30 +12,45 @@ export type SortMode = 'high' | 'low' | 'manual'
 export const SORT_MODES: SortMode[] = ['high', 'low', 'manual']
 export const SORT_LABEL = { high: 'sortHigh', low: 'sortLow', manual: 'sortManual' } as const
 
-// A new key: everyone gets the first-deal question once, also players who
-// had the old on/off setting.
-const KEY = 'koejon-sort-mode'
-
-function load(): SortMode | null {
-  try {
-    const v = localStorage.getItem(KEY)
-    return SORT_MODES.includes(v as SortMode) ? (v as SortMode) : null
-  } catch {
-    return null
-  }
+/** A store that starts from the saved value (`parse` returns null for none or
+ *  an unknown value: `fallback` then) and saves each later change. null is not
+ *  saved. Blocked storage: the store works, it just does not persist. */
+function persisted<T extends string | null>(
+  key: string,
+  parse: (v: string | null) => T | null,
+  fallback: T,
+) {
+  const store = writable<T>(parse(safeStorage.getItem(key)) ?? fallback)
+  let first = true
+  store.subscribe((v) => {
+    // The first call is the loaded value: a default is not saved.
+    if (first) return void (first = false)
+    if (v !== null) safeStorage.setItem(key, v)
+  })
+  return store
 }
 
+// A new key: everyone gets the first-deal question once, also players who
+// had the old on/off setting.
 /** Per-player preference. null: not chosen yet, the table asks on the first deal. */
-export const sortMode = writable<SortMode | null>(load())
+export const sortMode = persisted<SortMode | null>(
+  'koejon-sort-mode',
+  (v) => (SORT_MODES.includes(v as SortMode) ? (v as SortMode) : null),
+  null,
+)
 
-sortMode.subscribe((v) => {
-  if (v === null) return
-  try {
-    localStorage.setItem(KEY, v)
-  } catch {
-    // Preferences just won't persist.
-  }
-})
+/** Language of the UI. Without a saved choice the app starts in Dutch. */
+export const lang = persisted<Lang>('koejon-lang', (v) => (v === 'nl' || v === 'en' ? v : null), 'nl')
+
+/** The solo bot level. */
+export const botLevel = persisted<BotLevel>(
+  'koejon-bot-level',
+  (v) => (BOT_LEVELS.includes(v as BotLevel) ? (v as BotLevel) : null),
+  'normal',
+)
+
+/** The name of the player; '' when not set. Callers set it trimmed. */
+export const playerName = persisted<string>('koejon-name', (v) => v, '')
 
 export const cardKey = (c: Card) => c.s + c.r
 

@@ -400,18 +400,21 @@ function runKjn(m: KjnMatch, step: (s: State) => void): State {
   return s
 }
 
-/** A finished match from untrusted text (a shared file); throws when it is not one. */
-export function loadKjn(text: string): KjnMatch {
+/**
+ * A finished match from untrusted text (a shared file), with its replay steps;
+ * throws when it is not one. The engine runs once: the same run checks the
+ * record and gives the steps.
+ */
+export function loadKjn(text: string): { match: KjnMatch; steps: State[] } {
   if (text.length > KJN_MAX_CHARS) fail('too large')
   // Editors and file sync on Windows rewrite line endings; the moves stay the same.
-  const m = parseKjn(text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trimEnd() + '\n')
-  if (m.winner === null) fail('unfinished match')
-  replayKjn(m)
-  return m
+  const match = parseKjn(text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trimEnd() + '\n')
+  if (match.winner === null) fail('unfinished match')
+  return { match, steps: replaySteps(match) }
 }
 
 /** Reads a `.kjn` file in the browser only; a too large file is refused unread. */
-export async function readKjnFile(file: Blob): Promise<KjnMatch> {
+export async function readKjnFile(file: Blob): Promise<{ match: KjnMatch; steps: State[] }> {
   if (file.size > KJN_MAX_CHARS) fail('too large')
   return loadKjn(await file.text())
 }

@@ -148,7 +148,7 @@ describe('no rollback on a flaky connection', () => {
     const link: HostLink = {
       ...links.host,
       // As on the P2P path: the room doc lags behind the game.
-      load: async () => ({ ...(await links.host.load())!, version: 1, seq: undefined }),
+      load: async () => ({ ...(await links.host.load())!, version: 1, seq: 0 }),
       publish: async (u, h) => {
         seqs.push(u.seq!)
         if (fail) throw new Error('firestore-write-timeout')
