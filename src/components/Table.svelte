@@ -117,6 +117,8 @@
   const STACK_FLY = 380
   const STACK_STEP = 260
   const STACK_SQUARE = 200
+  /** The finished deck lies alone for a moment before the cut panel covers the felt. */
+  const STACK_HOLD = 600
   /** Where each trick pile lay, in card widths from the middle: beside my partner
    *  (ours) or under my left opponent (theirs). Hands come in like their cards (DIR). */
   const PILE_FROM = [
@@ -126,7 +128,7 @@
   // Old browsers have no matchMedia.
   const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   const stackLand = $derived(stack ? (stack.length - 1) * STACK_STEP + STACK_FLY : 0)
-  const cutDelay = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE : 0)
+  const cutDelay = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE + STACK_HOLD : 0)
   const stackFrom = (part: StackPart) => {
     if (part.from === 'hand') return `--fx: ${DIR[rel(part.seat)].x}px; --fy: ${DIR[rel(part.seat)].y}px`
     const p = PILE_FROM[part.team === myTeam ? 0 : 1]
