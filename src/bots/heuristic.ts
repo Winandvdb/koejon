@@ -395,7 +395,6 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   }
 
   // Opponent winning: fight for rich tricks, duck the rest.
-  const X: string = (globalThis as any).process?.env?.H152 ?? 'abcde' // TEMP-152
   let winners = legal.filter((c) => wouldWin(s.trick, seat, c, trump))
   if (winners.length === 0) return because(why, 'cannot win: dump', dump(s.trick, seat, legal, trump))
   // A plain dump can still be a low trump that buys the trick: duck with a plain card.
@@ -403,9 +402,9 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   const duck = (reason: string) =>
     because(why, reason, dump(s.trick, seat, plain.length ? plain : legal, trump))
   const partnerToAct = !s.trick.some((tc) => tc.seat === partnerOf(seat))
-  // The partner already played: only our card can still stop their kapot in this trick.
-  const lastChance = antiKapot && !partnerToAct
-  if (X.includes('a') && tPts === 0 && plain.length && !lastChance) {
+  // A trick with no points is worth no trump, unless the partner already played
+  // and only our card can still stop their kapot.
+  if (tPts === 0 && plain.length && !(antiKapot && !partnerToAct)) {
     winners = winners.filter((c) => c.s !== trump)
     if (winners.length === 0) return duck('no points: no trump')
   }
@@ -415,41 +414,21 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   // Without the boss trump and outnumbered in trumps, ours get pulled later
   // anyway — better spend one on a trick with points now.
   const myTrumps = s.hand.filter((c) => c.s === trump)
-  const oppMayTrump = oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump))
   const doomed =
     cheapestWin.s === trump &&
-    oppMayTrump &&
+    oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump)) &&
     !bossTrump(myTrumps, read) &&
     read.trumpsOut >= myTrumps.length
-  const oppTrumped = s.trick[winnerIdx].card.s === trump
-  // A lone trump with points falls to the first trump lead: buy a trick with it first.
-  if (X.includes('b') && doomed && tPts > 0 && !oppTrumped && myTrumps.length === 1 && RANK_POINTS[cheapestWin.r] >= 2)
+  // A lone trump with points falls to the first trump lead: buy a trick with it
+  // first, also when the partner still plays.
+  if (doomed && tPts > 0 && s.trick[winnerIdx].card.s !== trump && myTrumps.length === 1 && RANK_POINTS[cheapestWin.r] >= 2)
     return because(why, `lone high trump: buy ${tPts} points before it is pulled`, cheapestWin)
   const decisive =
     s.points[myTeam] + tPts >= 21 || // win the hand outright
     s.points[1 - myTeam] + tPts >= 21 // deny them the hand
-  // The partner plays 4th: count on them for a cheap trick, also for a kapot.
-  const lim = Number((globalThis as any).process?.env?.H152_LIM ?? opt.contestMin) // TEMP-152
-  if (X.includes('c') && partnerToAct && !decisive && tPts < lim)
-    return duck(`partner plays 4th: duck ${tPts} points`)
-  if (X.includes('k') && oppTrumped && s.trick[0].card.s !== trump && oppToAct.length > 0) {
-    const p4beats = mayHoldTrump(read, oppToAct[0], trump) && !bossTrump([cheapestWin], read)
-    if (!decisive && !lastChance && tPts < opt.contestMin && (tPts < 3 || p4beats))
-      return duck(`no overtrump for ${tPts} points: an opponent plays after`)
-  }
-  if (X.includes('d') && oppTrumped && s.trick[0].card.s !== trump && oppToAct.length > 0) {
-    const ot = Number((globalThis as any).process?.env?.H152_OT ?? opt.contestMin) // TEMP-152
-    if (!X.includes('h') && !decisive && !lastChance && tPts < ot)
-      return duck(`no overtrump for ${tPts} points: an opponent plays after`)
-    if (X.includes('g')) return because(why, `overtrump: ${tPts} points in the trick`, cheapestWin)
-    // The last opponent may overtrump a low trump again: use one they cannot beat.
-    const safe = winners.filter(
-      (c) => c.s === trump && (read.bossOut === null || RANK_ORDER[c.r] > RANK_ORDER[read.bossOut]),
-    )
-    if (safe.length && !bossTrump([cheapestWin], read) && mayHoldTrump(read, oppToAct[0], trump))
-      return because(why, `overtrump: ${tPts} points, above the last opponent`, lowest(safe))
-    return because(why, `overtrump: ${tPts} points in the trick`, cheapestWin)
-  }
+  // The partner plays 4th: count on them for a trick below the cheap-steal
+  // floor, also to keep or stop a kapot.
+  if (partnerToAct && !decisive && tPts < 3) return duck(`partner plays 4th: duck ${tPts} points`)
   const worthIt =
     (tPts > 0 && doomed) ||
     decisive ||
@@ -459,7 +438,7 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
     (tPts >= 3 && winCost(cheapestWin, trump) <= opt.cheapWin)
   return worthIt
     ? because(why, `contest: ${tPts} points in the trick`, cheapestWin)
-    : X.includes('e') ? duck('not worth it: duck') : because(why, 'not worth it: dump', dump(s.trick, seat, legal, trump))
+    : duck('not worth it: duck')
 }
 
 function choosePlayCard(

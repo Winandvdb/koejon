@@ -388,29 +388,19 @@ describe('bot card play', () => {
     expect(botAction(kapot, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
   })
 
-  it('as player 3 does not overtrump a cheap trick while the last opponent may overtrump', () => {
-    // Partner seat 3 leads SK (3 points), opponent seat 0 trumps with H9.
-    const trick = [
-      { seat: 3, card: C('S', 'K') },
-      { seat: 0, card: C('H', '9') },
-    ]
-    const cheap = followState(trick, [C('H', '10'), C('D', '9'), C('C', '9')], { leader: 3 })
-    expect(botAction(cheap, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
-    // A rich trick (SA + HJ = 5 points): overtrump with a trump seat 2 cannot
-    // beat (HA), not with the HQ that seat 2 may top with the HK.
-    const rich = followState(
-      [{ seat: 3, card: C('S', 'A') }, { seat: 0, card: C('H', 'J') }],
-      [C('H', 'Q'), C('H', 'A'), C('D', '9'), C('C', '9')],
-      { leader: 3 },
-    )
-    expect(botAction(rich, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
-    // As the last card the cheap overtrump is still fine.
-    const last = followState(
-      [{ seat: 2, card: C('S', 'K') }, { seat: 3, card: C('S', '9') }, { seat: 0, card: C('H', '9') }],
-      [C('H', '10'), C('D', '9'), C('C', '9')],
+  it('ducks a trick not worth it with a plain card, not with a low trump', () => {
+    // A 2-point trick; the boss HA keeps the H9 from being doomed. The H9 is
+    // the cheapest card, but it would buy the trick: throw the DJ.
+    const s = followState(
+      [
+        { seat: 2, card: C('S', 'Q') },
+        { seat: 3, card: C('S', '9') },
+        { seat: 0, card: C('S', '10') },
+      ],
+      [C('H', '9'), C('H', 'A'), C('D', 'J'), C('C', 'Q')],
       { leader: 2 },
     )
-    expect(botAction(last, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '10') })
+    expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', 'J') })
   })
 
   it('buys an early trick with a lone high trump that the ace will pull', () => {
