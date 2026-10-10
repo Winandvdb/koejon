@@ -100,6 +100,10 @@
     ],
   ] as const)
 
+  /** Phones show the newest few; wide screens scroll the full list instead. */
+  const PHONE_ROWS = 5
+  let showAll = $state(false)
+
   /** Newest first, with winner and final lines read from the record. */
   const matches = [...kept]
     .reverse()
@@ -218,8 +222,8 @@
         <p class="muted">{$t.noMatches}</p>
       {:else}
         <ul class="match-list">
-          {#each matches as { e, winner, lines } (e.id)}
-            <li>
+          {#each matches as { e, winner, lines }, i (e.id)}
+            <li class:extra={!showAll && i >= PHONE_ROWS}>
               <div class="match-info">
                 <div class="match-meta small muted">
                   <span>{when(e.finishedAt)}</span>
@@ -235,6 +239,11 @@
             </li>
           {/each}
         </ul>
+        {#if matches.length > PHONE_ROWS}
+          <button class="link-btn more-matches" onclick={() => (showAll = !showAll)}>
+            {showAll ? $t.showFewerMatches : `${$t.showAllMatches} (${matches.length})`}
+          </button>
+        {/if}
       {/if}
     </div>
     </div>

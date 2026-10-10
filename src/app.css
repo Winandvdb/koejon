@@ -568,6 +568,20 @@ input[type='checkbox'] {
     min-height: 0;
     overflow-y: auto;
   }
+
+  .more-matches {
+    display: none;
+  }
+}
+
+@media (max-width: 899px) {
+  .match-list li.extra {
+    display: none;
+  }
+}
+
+.more-matches {
+  align-self: flex-start;
 }
 
 .stats h3 {
