@@ -5,8 +5,8 @@ import {
   fullDeck,
   isBidding,
   legalActions,
+  legalCards,
   pendingSeats,
-  RANK_ORDER,
   sameCard,
 } from '../src/engine'
 import type { Card, State, Suit, TrickCard } from '../src/engine'
@@ -14,7 +14,7 @@ import { botAction } from '../src/bots/bot'
 import { sampleWorld } from '../src/bots/determinize'
 import { observe } from '../src/bots/observation'
 import { seededRandom } from '../src/lib/seed'
-import { dealtState } from './helpers'
+import { dealtState, playingState } from './helpers'
 
 interface Position {
   s: State
@@ -42,19 +42,22 @@ function positions(seed: number): Position[] {
 }
 
 /**
- * Suits each seat is known to be out of, read off the recorded plays alone:
- * a card that `legalCards` would forbid while the seat still held the led
- * suit — not led, and not a trump over the trumps down — proves the void.
+ * Suits each seat is known to be out of, read off the recorded plays alone.
+ * The oracle is the engine itself: hand the seat a card of the led suit it
+ * never played and ask `legalCards` whether its card was still legal — if
+ * not, the seat had none of the suit left.
  */
-function voids(played: TrickCard[], trump: Suit | null): Set<Suit>[] {
+function voids(played: TrickCard[], trump: Suit): Set<Suit>[] {
   const out = [new Set<Suit>(), new Set<Suit>(), new Set<Suit>(), new Set<Suit>()]
   for (let i = 0; i + 1 < played.length; i += 4) {
     const led = played[i].card.s
-    let top = played[i].card.s === trump ? RANK_ORDER[played[i].card.r] : 0
     for (let p = 1; p < 4 && i + p < played.length; p++) {
       const { seat, card } = played[i + p]
-      if (card.s !== led && !(card.s === trump && RANK_ORDER[card.r] > top)) out[seat].add(led)
-      if (card.s === trump) top = Math.max(top, RANK_ORDER[card.r])
+      if (card.s === led) continue
+      const hands: Card[][] = [[], [], [], []]
+      hands[seat] = [card, { s: led, r: '9' }]
+      const s = playingState({ trump, trick: played.slice(i, i + p), turn: seat, hands })
+      if (!legalCards(s, seat).some((c) => sameCard(c, card))) out[seat].add(led)
     }
   }
   return out
@@ -81,12 +84,23 @@ describe('sampleWorld', () => {
         expect(world.trick).toEqual(obs.trick)
         expect(world.lastTrick).toEqual(obs.lastTrick)
         expect(legalActions(world, seat)).toEqual(obs.legal)
+        // The played cards sit in the trick piles or the open trick, nowhere else.
+        const seen = [...world.piles.flat(), ...world.trick.map((tc) => tc.card)]
+        expect(seen.map(keyOf).sort()).toEqual(played.map((tc) => keyOf(tc.card)).sort())
         // Unplayed turned cards still sit in the dealer's hand.
         const playedKeys = new Set(played.map((tc) => keyOf(tc.card)))
         for (const c of [obs.turned?.first, obs.turned?.second]) {
           if (c && !playedKeys.has(keyOf(c))) {
             expect(world.hands[obs.dealer].some((h) => sameCard(h, c))).toBe(true)
           }
+        }
+        // A still-hidden second turned card is one of the dealer's cards.
+        if (obs.turned && obs.turned.second === null) {
+          const dealerCards = [
+            ...world.hands[obs.dealer],
+            ...played.filter((tc) => tc.seat === obs.dealer).map((tc) => tc.card),
+          ]
+          expect(dealerCards.some((c) => sameCard(c, world.turned!.second))).toBe(true)
         }
       }
     }
@@ -96,7 +110,7 @@ describe('sampleWorld', () => {
     const rand = seededRandom(23)
     let checked = 0
     for (const { s, played } of POSITIONS.filter((_, i) => i % 9 === 0)) {
-      const v = voids(played, s.trump)
+      const v = voids(played, s.trump!)
       for (const seat of [0, 1, 2, 3]) {
         const world = sampleWorld(observe(s, seat), rand)
         for (let i = 0; i < 4; i++) {
@@ -155,7 +169,10 @@ describe('sampleWorld', () => {
     }
     expect(counts[obs.seat]).toBe(0)
     // Each seat draws its share of the hidden pool: p_i = need_i / pool.
-    const must = obs.turned ? [obs.turned.first, obs.turned.second].filter(Boolean).length : 0
+    const own = new Set(obs.hand.map(keyOf))
+    const must = [obs.turned?.first, obs.turned?.second].filter(
+      (c) => c && !own.has(keyOf(c)),
+    ).length
     const pool = 24 - obs.hand.length - must
     for (const seat of [0, 2, 3]) {
       const need = obs.handCounts[seat] - (seat === obs.dealer ? must : 0)
@@ -189,6 +206,55 @@ describe('sampleWorld', () => {
     const world = sampleWorld(obs, seededRandom(1), () => 0)
     expect(world.hands[0].map(keyOf).sort()).toEqual(obs.hand.map(keyOf).sort())
     for (let i = 0; i < 4; i++) expect(world.hands[i]).toHaveLength(obs.handCounts[i])
+  })
+
+  it('keeps the worlds a weight likes, not the ones it hates', () => {
+    const pos = POSITIONS.find((p) => p.played.length === 0)!
+    const obs = observe(pos.s, 1)
+    const fixed = new Set(obs.hand.map(keyOf))
+    for (const c of [obs.turned?.first, obs.turned?.second]) if (c) fixed.add(keyOf(c))
+    const hidden = fullDeck().filter((c) => !fixed.has(keyOf(c)))[0]
+    const world = sampleWorld(obs, seededRandom(2), (w) =>
+      w.hands[0].some((c) => sameCard(c, hidden)) ? 1 : 0,
+    )
+    expect(world.hands[0].some((c) => sameCard(c, hidden))).toBe(true)
+  })
+
+  it('keeps the lifted cards at their deck positions in a dealer draw', () => {
+    let s = createMatch(3)
+    s = apply(s, { type: 'start', seat: 0 })
+    let guard = 20
+    while (s.dealerDraw && s.dealerDraw.pending !== 2 && guard-- > 0) {
+      const dd = s.dealerDraw
+      s = apply(s, { type: 'draw', seat: dd.drawer[dd.pending as 0 | 1], n: 6 + dd.pending })
+    }
+    const dd = s.dealerDraw!
+    expect(dd.pending).toBe(2)
+    const world = sampleWorld(observe(s, 1), seededRandom(1))
+    const deck = world.dealerDraw!.deck!
+    expect(deck[dd.packetA! - 1]).toEqual(dd.draws[0].card)
+    // Team B lifted 7, so its card sits at packetA + 7 - 1.
+    expect(deck[dd.packetA! + 7 - 1]).toEqual(dd.draws[1].card)
+    expect(new Set(deck.map(keyOf)).size).toBe(24)
+  })
+
+  it('falls back to the visible tricks when the log has no deal', () => {
+    const pos = POSITIONS.find((p) => p.s.prevTrick && p.s.lastTrick)!
+    const s = structuredClone(pos.s)
+    s.log = [] // as if the deal event had rolled out of the capped log
+    const obs = observe(s, 1)
+    const world = sampleWorld(obs, seededRandom(4))
+    expect(world.hands[1]).toEqual(obs.hand)
+    for (let i = 0; i < 4; i++) expect(world.hands[i]).toHaveLength(obs.handCounts[i])
+    // The three visible tricks still fix their cards and their voids.
+    const visible = [...s.prevTrick!, ...s.lastTrick!, ...s.trick]
+    for (const tc of visible) {
+      expect(world.hands.flat().some((c) => sameCard(c, tc.card))).toBe(false)
+    }
+    const v = voids(visible, s.trump!)
+    for (let i = 0; i < 4; i++) {
+      for (const c of world.hands[i]) expect(v[i].has(c.s)).toBe(false)
+    }
   })
 
   it('samples 1000 mid-hand worlds fast enough for search', () => {

@@ -6,7 +6,7 @@ import {
   teamOf,
   trickWinnerIndex,
 } from '../engine'
-import type { Card, DealerDraw, State, Suit, TrickCard } from '../engine'
+import type { Card, State, Suit, TrickCard } from '../engine'
 import type { Observation } from './observation'
 
 /** Tries before a sampler gives up: a failure then means the constraints
@@ -125,14 +125,22 @@ function hiddenHands(obs: Observation, played: TrickCard[], rand: () => number):
  * A dealer-draw deck that shows the cards already lifted at their places.
  * The order around them is neutral — nobody ever saw the deck.
  */
-function drawDeck(dd: DealerDraw, rand: () => number): Card[] {
+function drawDeck(obs: Observation, rand: () => number): Card[] {
+  const dd = obs.dealerDraw!
   const at = new Map<number, Card>()
   if (dd.packetA !== null && dd.draws.length > 0) {
     at.set(dd.packetA - 1, dd.draws[0].card)
     if (dd.draws.length > 1) {
-      // Team B's packet size is not public: any lift in its range explains the card.
-      const max = 24 - dd.packetA - 4
-      const n = 4 + Math.floor(rand() * (max - 3))
+      // The log tells how many cards team B lifted; without it any lift in
+      // its range explains the card.
+      let n = 0
+      for (let i = obs.log.length - 1; i >= 0; i--) {
+        if (obs.log[i].t === 'draw') {
+          n = obs.log[i].n ?? 0
+          break
+        }
+      }
+      if (n === 0) n = 4 + Math.floor(rand() * (24 - dd.packetA - 7))
       at.set(dd.packetA + n - 1, dd.draws[1].card)
     }
   }
@@ -178,7 +186,7 @@ function hiddenWorld(obs: Observation, rand: () => number): State {
     }
     s.turned = { first, second: faceDown, secondUp }
   }
-  if (s.dealerDraw) s.dealerDraw.deck = drawDeck(s.dealerDraw, rand)
+  if (s.dealerDraw) s.dealerDraw.deck = drawDeck(obs, rand)
   return s
 }
 
@@ -190,8 +198,12 @@ function hiddenWorld(obs: Observation, rand: () => number): State {
  *
  * `weight` optionally scores a world: a draw is kept with probability
  * `weight(world)` (clamped to [0,1]), so later inference from bids and
- * plays can steer the sample without changing callers. All randomness
- * comes from `rand` — the same seed gives the same world.
+ * plays can steer the sample without changing callers. A run of
+ * rejections still ends in a world — possibly one the weight scored low —
+ * because the caller always needs one. Hidden fields the rest of the hand
+ * does not need get neutral values: `seed`, `rng`, pile order, the draw
+ * deck. All randomness comes from `rand` — the same seed gives the same
+ * world.
  */
 export function sampleWorld(
   obs: Observation,
