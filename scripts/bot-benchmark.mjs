@@ -12,12 +12,12 @@
 // bidding stats from self-play; with --a/--b also the decision timing and
 // algorithm use of each side.
 import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { availableParallelism, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { Worker } from 'node:worker_threads'
 import { extractRef, parseSpecArg } from './bot-spec.mjs'
-import { newBidStats, runSlice } from './bench-worker.mjs'
+import { runSlice } from './bench-worker.mjs'
 
 const { values: opt } = parseArgs({
   options: {
@@ -30,7 +30,13 @@ const { values: opt } = parseArgs({
   },
 })
 const MATCHES = Number(opt.matches)
-const JOBS = Math.max(1, Math.min(MATCHES, Math.floor(Number(opt.jobs) || 1)))
+const JOBS_OPT = Number(opt.jobs)
+if (!Number.isInteger(MATCHES) || MATCHES < 1)
+  throw new Error(`--matches must be a positive integer, got '${opt.matches}'`)
+if (!Number.isInteger(JOBS_OPT) || JOBS_OPT < 1)
+  throw new Error(`--jobs must be a positive integer, got '${opt.jobs}'`)
+// Each worker boots a vite server: never more workers than cores.
+const JOBS = Math.min(MATCHES, JOBS_OPT, availableParallelism())
 const root = resolve(import.meta.dirname, '..')
 const custom = opt.a != null || opt.b != null
 
@@ -44,7 +50,11 @@ const labels = [opt.a ?? 'this checkout', opt.b ?? opt.base]
 function runWorker(job) {
   return new Promise((resolvePromise, reject) => {
     const w = new Worker(new URL('./bench-worker.mjs', import.meta.url), { workerData: job })
-    w.once('message', resolvePromise)
+    w.once('message', (msg) =>
+      msg != null && typeof msg === 'object' && 'error' in msg
+        ? reject(new Error(String(msg.error)))
+        : resolvePromise(msg),
+    )
     w.once('error', reject)
     w.once('exit', (code) => {
       if (code !== 0) reject(new Error(`worker exited with code ${code}`))
@@ -93,19 +103,21 @@ try {
     if (p.ref != null && refDirs[p.ref] == null) refDirs[p.ref] = extractRef(root, p.ref, tmp)
   const sides = parsed.map((p) => ({ dir: p.ref == null ? null : refDirs[p.ref], spec: p.spec }))
   const seeds = Array.from({ length: MATCHES }, (_, i) => i + 1)
-  const parts =
-    JOBS <= 1
-      ? [await runSlice({ root, sides, level: opt.level, seeds })]
-      : await Promise.all(
-          Array.from({ length: JOBS }, (_, w) =>
-            runWorker({
-              root,
-              sides,
-              level: opt.level,
-              seeds: seeds.filter((_, i) => i % JOBS === w),
-            }),
-          ),
-        )
+  let parts
+  if (JOBS <= 1) {
+    parts = [await runSlice({ root, sides, level: opt.level, seeds })]
+  } else {
+    // allSettled: a failing worker must not have its ref dirs removed while
+    // siblings still read them (the finally below runs once all settled).
+    const settled = await Promise.allSettled(
+      Array.from({ length: JOBS }, (_, w) =>
+        runWorker({ root, sides, level: opt.level, seeds: seeds.filter((_, i) => i % JOBS === w) }),
+      ),
+    )
+    const failed = settled.find((s) => s.status === 'rejected')
+    if (failed) throw failed.reason
+    parts = settled.map((s) => /** @type {PromiseFulfilledResult<import('./bench-worker.mjs').BenchResult>} */ (s).value)
+  }
   const result = mergeParts(parts)
 
   const n = result.n

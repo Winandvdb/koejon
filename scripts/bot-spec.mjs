@@ -4,10 +4,19 @@
 // configuration file. No ref means this checkout. A ref without the bot
 // framework, or no spec at all, falls back to that checkout's botAction.
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** @typedef {import('../src/bots/algorithm.ts').AlgorithmSpec | import('../src/bots/bot.ts').BotConfig} BotSpec */
+
+/** `p` names a regular file: false for missing paths, directories, devices and fifos. */
+function isFile(/** @type {string} */ p) {
+  try {
+    return statSync(p).isFile()
+  } catch {
+    return false
+  }
+}
 
 /**
  * Parse the spec part of a side argument. A leading '{' is inline JSON, a
@@ -18,8 +27,14 @@ import { join } from 'node:path'
  */
 export function parseSpec(text) {
   const s = text.trim()
-  if (s.startsWith('{') || s.endsWith('.json') || existsSync(s))
-    return JSON.parse(s.startsWith('{') ? s : readFileSync(s, 'utf8'))
+  if (s.startsWith('{')) return JSON.parse(s)
+  if (s.endsWith('.json') || isFile(s)) {
+    try {
+      return JSON.parse(readFileSync(s, 'utf8'))
+    } catch (e) {
+      throw new Error(`cannot read bot spec file ${s}: ${e instanceof Error ? e.message : e}`)
+    }
+  }
   return s
 }
 
@@ -31,7 +46,7 @@ export function parseSpec(text) {
  */
 export function parseSpecArg(arg) {
   const at = arg.indexOf('@')
-  if (at > 0 && !arg.startsWith('{') && !existsSync(arg))
+  if (at > 0 && !arg.startsWith('{') && !isFile(arg))
     return { ref: arg.slice(0, at), spec: parseSpec(arg.slice(at + 1)) }
   return { ref: null, spec: parseSpec(arg) }
 }
@@ -44,6 +59,8 @@ export function parseSpecArg(arg) {
  * @param {string} tmp   parent directory for the new directory
  */
 export function extractRef(root, ref, tmp) {
+  // A ref is argv to git archive: a leading '-' would inject options.
+  if (ref.startsWith('-')) throw new Error(`git ref must not start with '-': ${ref}`)
   const dir = mkdtempSync(join(tmp, 'ref-'))
   const tar = join(dir, 'src.tar')
   execFileSync('git', ['archive', '--format=tar', '-o', tar, ref, 'src'], { cwd: root })

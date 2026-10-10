@@ -128,5 +128,9 @@ export async function runSlice(job) {
 
 const port = parentPort
 if (!isMainThread && port) {
-  runSlice(/** @type {BenchJob} */ (workerData)).then((r) => port.postMessage(r))
+  runSlice(/** @type {BenchJob} */ (workerData)).then(
+    (r) => port.postMessage(r),
+    // A rejection must reach the parent: an exit code alone hides the cause.
+    (e) => port.postMessage({ error: String(e instanceof Error ? e.stack ?? e.message : e) }),
+  )
 }
