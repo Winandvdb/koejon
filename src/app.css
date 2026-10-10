@@ -1902,7 +1902,7 @@ button.tag {
 
 @keyframes deal-leave {
   to {
-    visibility: hidden;
+    opacity: 0;
   }
 }
 
