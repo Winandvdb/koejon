@@ -415,7 +415,10 @@ function choosePlayCard(
   const smart =
     s.trick.length === 0 ? leadCard(s, legal, read, opt, why) : followCard(s, legal, read, opt, why)
   // Imperfect on purpose: sometimes fall back to a lazy dump.
-  return rand() < profile.skill ? smart : because(why, 'lazy dump', dump(s.trick, s.seat, legal, s.trump!))
+  if (rand() < profile.skill) return smart
+  // The smart rule did not decide, so its reason stays out of the trace.
+  why.length = 0
+  return because(why, 'lazy dump', dump(s.trick, s.seat, legal, s.trump!))
 }
 
 // ---- Decisions -------------------------------------------------------------------
@@ -523,8 +526,10 @@ function decide(
  */
 export function createHeuristic(variant: string | undefined, options: Record<string, unknown>): Algorithm {
   if (!BOT_LEVELS.includes(variant as BotLevel)) throw new Error(`unknown heuristic level: ${variant}`)
-  for (const k of Object.keys(options)) {
-    if (!(k in HEURISTIC_DEFAULTS)) throw new Error(`unknown heuristic option: ${k}`)
+  for (const [k, v] of Object.entries(options)) {
+    if (!Object.hasOwn(HEURISTIC_DEFAULTS, k)) throw new Error(`unknown heuristic option: ${k}`)
+    // A string from a JSON file would turn the sums into string concatenation.
+    if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`heuristic option ${k} must be a number`)
   }
   const profile = BOT_PROFILES[variant as BotLevel]
   const opt: HeuristicOptions = { ...HEURISTIC_DEFAULTS, ...options }

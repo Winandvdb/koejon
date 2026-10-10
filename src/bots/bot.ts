@@ -57,9 +57,10 @@ function fixedStep(obs: Observation, rand: () => number): Action | null {
 
 /** Build a bot from a configuration, or a pure bot from one algorithm spec. */
 export function createBot(config: BotConfig | AlgorithmSpec): Bot {
+  // A spec always has an id, a configuration never: an option named `rules` stays an option.
   const cfg: BotConfig =
-    typeof config === 'object' && 'rules' in config
-      ? (config as BotConfig)
+    typeof config === 'object' && !('id' in config)
+      ? config
       : { name: typeof config === 'string' ? config : config.id, rules: [{ use: config }] }
   const algorithms = cfg.rules.map((r) => createAlgorithm(r.use))
   return {

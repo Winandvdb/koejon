@@ -10,7 +10,11 @@ export interface TraceCandidate {
   note?: string
 }
 
-/** Optional record of how a decision was made. Algorithms fill it; the bot adds the rule. */
+/**
+ * Optional record of how one decision was made. Algorithms fill it; the bot
+ * adds the rule. Pass a fresh trace per decision: nothing clears it, and a
+ * step without a real choice leaves it untouched.
+ */
 export interface BotTrace {
   candidates: TraceCandidate[]
   notes: string[]
@@ -55,6 +59,7 @@ export function registerAlgorithm(name: string, factory: AlgorithmFactory): void
 
 export function createAlgorithm(spec: AlgorithmSpec): Algorithm {
   const { id, ...options } = typeof spec === 'string' ? { id: spec } : spec
+  if (typeof id !== 'string') throw new Error(`algorithm spec needs a string id: ${JSON.stringify(spec)}`)
   const colon = id.indexOf(':')
   const name = colon < 0 ? id : id.slice(0, colon)
   const variant = colon < 0 ? undefined : id.slice(colon + 1)

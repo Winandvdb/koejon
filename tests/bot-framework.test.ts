@@ -125,6 +125,9 @@ describe('createAlgorithm', () => {
     expect(() => createAlgorithm('heuristic')).toThrow(/unknown heuristic level/)
     expect(() => createAlgorithm('heuristic:expert')).toThrow(/unknown heuristic level/)
     expect(() => createAlgorithm({ id: 'heuristic:hard', contsetMin: 3 })).toThrow(/unknown heuristic option/)
+    expect(() => createAlgorithm({ id: 'heuristic:hard', toString: 3 } as never)).toThrow(/unknown heuristic option/)
+    expect(() => createAlgorithm({ id: 'heuristic:hard', clearBid: '3' })).toThrow(/clearBid must be a number/)
+    expect(() => createAlgorithm({ name: 'heuristic:hard' } as never)).toThrow(/needs a string id/)
     expect(() => registerAlgorithm('heuristic', () => first)).toThrow(/already registered/)
   })
 
@@ -153,15 +156,18 @@ describe('createBot', () => {
     expect(bot.name).toBe('last')
     expect(bot.decide(bidding, 1, () => 0)).toEqual(pass)
     expect(createBot({ id: 'wrap:y', inner: 'first' }).name).toBe('wrap:y')
+    // An option named `rules` does not make a spec a configuration.
+    expect(createBot({ id: 'wrap:z', inner: 'last', rules: 'strict' }).decide(bidding, 1, () => 0)).toEqual(pass)
   })
 
   it('the first rule whose phase matches decides', () => {
     const bot = createBot({ name: 'split', rules: [{ when: { phase: 'play' }, use: 'last' }, { use: 'first' }] })
-    const tr = trace()
-    expect(bot.decide(bidding, 1, () => 0, tr)).toEqual(go)
-    expect(tr).toMatchObject({ rule: 1, algorithm: 'first' })
-    expect(bot.decide(play, 1, () => 0, tr)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
-    expect(tr).toMatchObject({ rule: 0, algorithm: 'last' })
+    const tb = trace()
+    expect(bot.decide(bidding, 1, () => 0, tb)).toEqual(go)
+    expect(tb).toMatchObject({ rule: 1, algorithm: 'first' })
+    const tp = trace()
+    expect(bot.decide(play, 1, () => 0, tp)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+    expect(tp).toMatchObject({ rule: 0, algorithm: 'last' })
   })
 
   it('skips a rule whose algorithm does not support the decision', () => {
@@ -204,6 +210,11 @@ describe('heuristic trace', () => {
     const tc = trace()
     expect(createBot('heuristic:hard').decide(s, 2, () => 0, tc)).toEqual({ type: 'play', seat: 2, card: C('H', '9') })
     expect(tc.notes).toEqual(['contest: 4 points in the trick'])
+
+    // A lazy dump overrides the smart card: only the dump is in the trace.
+    const tl = trace()
+    expect(createBot('heuristic:hard').decide(s, 2, () => 0.99, tl)).toEqual({ type: 'play', seat: 2, card: C('S', '9') })
+    expect(tl.notes).toEqual(['lazy dump'])
   })
 })
 
