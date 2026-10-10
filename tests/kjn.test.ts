@@ -15,7 +15,8 @@ import {
   SEAT_KINDS,
   serializeKjn,
 } from '../src/lib/kjn'
-import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
+import { localLinks, SOLO_CODE } from '../src/lib/link-local'
+import type { KeyValueStore } from '../src/lib/storage'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import type { GuestEvents, GuestLink, HostLink } from '../src/lib/transport'
 import { seededRandom } from '../src/lib/seed'
@@ -223,7 +224,7 @@ const collect =
     games.push(g)
   }
 
-/** A host on an in-memory link; without `save` the link cannot upload.
+/** A host on an in-memory link; without `save` the host cannot upload.
  *  `join` seats a second human on its own session, who plays every turn it
  *  gets: the local link itself serves one uid only. */
 async function open(storage: KeyValueStore, fresh: boolean, save?: Save, opts: HostOptions = {}) {
@@ -232,7 +233,6 @@ async function open(storage: KeyValueStore, fresh: boolean, save?: Save, opts: H
   let otherEv: GuestEvents | null = null
   const link: HostLink = {
     ...links.host,
-    ...(save && { saveGame: save }),
     onIntent: (cb) => {
       intentCb = cb
       links.host.onIntent(cb)
@@ -249,6 +249,7 @@ async function open(storage: KeyValueStore, fresh: boolean, save?: Save, opts: H
     drawLingerMs: 0,
     bidLingerMs: 0,
     dealLingerMs: 0,
+    ...(save && { saveGame: save }),
     ...opts,
   })
   host.onError = (e) => {

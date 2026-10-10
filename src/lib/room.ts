@@ -7,8 +7,7 @@ import { DEFAULT_ROOM_OPTS } from './net-types'
 import { FirestoreGuestLink, roomRef } from './link-firestore'
 import { P2P_ENABLED, P2PGuestLink, P2PHostLink } from './link-p2p'
 import { addHistory } from './history'
-import type { KeyValueStore } from './link-local'
-import { safeStorage } from './storage'
+import { safeStorage, type KeyValueStore } from './storage'
 import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -207,7 +206,19 @@ export async function joinRoom(code: string, uid: string, name: string): Promise
   code = code.trim().toUpperCase()
   const snap = await getDoc(roomRef(code))
   if (!snap.exists()) throw new Error('room-not-found')
+  return enterRoom(snap.data() as RoomDoc, code, uid, name)
+}
+
+/** Back into a room after a reload, with one read: null unless the seat is
+ *  still ours. A seat that turned bot meanwhile is reclaimed. */
+export async function resumeRoom(code: string, uid: string, name: string): Promise<RoomSession | null> {
+  const snap = await getDoc(roomRef(code))
+  if (!snap.exists()) return null
   const room = snap.data() as RoomDoc
+  return seatOf(room, uid) >= 0 ? enterRoom(room, code, uid, name) : null
+}
+
+async function enterRoom(room: RoomDoc, code: string, uid: string, name: string): Promise<RoomSession> {
   // Back to our own room (reload): this tab hosts it again.
   if (room.hostUid === uid) return hostSession(code, uid)
   const si = seatOf(room, uid)

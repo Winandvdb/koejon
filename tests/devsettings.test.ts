@@ -20,10 +20,11 @@ async function solo(dev: Partial<DevSettings>, click: (a: Action) => boolean, op
   const storage = memoryStore()
   const games: GameDoc[] = []
   const links = localLinks(UID, storage, newRoomDoc(SOLO_CODE, UID, 'Me'))!
-  const link: HostLink = { ...links.host, saveGame: async (_id, g) => void games.push(g) }
+  const link = links.host
   const session = new RoomSession(SOLO_CODE, UID, links.guest, link)
   const host = await HostGame.attach(SOLO_CODE, UID, link, {
     storage,
+    saveGame: async (_id, g) => void games.push(g),
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,

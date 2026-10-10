@@ -1,7 +1,6 @@
 import { parseKjn } from './kjn'
-import type { KeyValueStore } from './link-local'
 import { keepDropped } from './stats'
-import { readJson, safeStorage } from './storage'
+import { readJson, safeStorage, type KeyValueStore } from './storage'
 
 /** Finished matches on this device only: never uploaded. */
 export const HISTORY_KEY = 'koejon-history'
@@ -68,12 +67,4 @@ export function addHistory(
     // Blocked storage: nothing to keep.
   }
   return true
-}
-
-export function removeHistory(id: string, store: KeyValueStore = safeStorage): void {
-  try {
-    store.setItem(HISTORY_KEY, JSON.stringify(readHistory(store).filter((e) => e.id !== id)))
-  } catch {
-    // Blocked storage: nothing to remove.
-  }
 }

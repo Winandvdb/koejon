@@ -10,7 +10,8 @@ import { app, signIn } from '../src/lib/firebase'
 import { HostGame } from '../src/lib/host'
 import { deleteDoc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { parseKjn, type GameDoc } from '../src/lib/kjn'
-import { gameRef, handRef, roomRef } from '../src/lib/link-firestore'
+import { gameRef, saveGame } from '../src/lib/games'
+import { handRef, roomRef } from '../src/lib/link-firestore'
 import type { RoomDoc } from '../src/lib/net-types'
 import { createRoom, type SessionView } from '../src/lib/room'
 import { memoryStore, until } from './helpers'
@@ -65,14 +66,13 @@ describe('emulator e2e', () => {
     const session = await createRoom(uid, 'Host')
     const uploads: GameDoc[] = []
     const link = session.hostLink!
-    const save = link.saveGame!.bind(link)
-    link.saveGame = (id, g) => {
-      uploads.push(g)
-      return save(id, g)
-    }
     const saved = memoryStore()
     let commits = 0
     const host = await HostGame.attach(session.code, uid, link, {
+      saveGame: (id, g) => {
+        uploads.push(g)
+        return saveGame(id, g)
+      },
       botDelay: () => 5,
       heartbeatMs: 60_000,
       drawLingerMs: 20,

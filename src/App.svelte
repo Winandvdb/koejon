@@ -1,19 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { getDoc } from 'firebase/firestore'
   import { signIn } from './lib/firebase'
   import {
     createRoom,
     joinRoom,
     newRoomDoc,
-    seatOf,
+    resumeRoom,
     RoomSession,
     type SessionView,
   } from './lib/room'
-  import { roomRef, saveGame } from './lib/link-firestore'
+  import { saveGame } from './lib/games'
   import { localLinks, SOLO_CODE } from './lib/link-local'
-  import { appUrl } from './lib/link-p2p'
+  import { appUrl } from './lib/url'
   import { DEFAULT_ROOM_OPTS, type RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
@@ -92,13 +91,12 @@
         // Offline solo: resume from this browser's storage; Firestore only
         // receives the finished match.
         const links = localLinks(uid, safeStorage)
-        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
         else forgetRoom()
       } else if (code && authed) {
         // Return to a room in progress only when our seat is still ours.
-        const snap = await getDoc(roomRef(code))
-        const room = snap.exists() ? (snap.data() as RoomDoc) : null
-        if (room && seatOf(room, uid) >= 0) attach(await joinRoom(code, uid, name))
+        const resumed = await resumeRoom(code, uid, name)
+        if (resumed) attach(resumed)
         // An invite to a room we are not in yet: Home shows its join view.
         else if (!urlCode) forgetRoom()
       }
@@ -189,7 +187,12 @@
       const rand = soloRand
       soloRand = undefined
       // Dev settings exist only in dev builds; elsewhere the host uses its defaults.
-      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand, dev: DEV ? () => get(devSettings) : undefined })
+      // Solo and multiplayer both upload the finished match (solo plays offline, so only then).
+      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, {
+        rand,
+        dev: DEV ? () => get(devSettings) : undefined,
+        saveGame,
+      })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
           // their back (it would answer that room's guests forever).
@@ -247,7 +250,7 @@
       }
       // attach() runs teardown() which resets soloStarting — set it after.
       // Play stays offline; only the finished match is uploaded, when online.
-      attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
+      attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
       soloStarting = true
       const h = await ensureHost()
       h.addBot(1, level)
@@ -404,7 +407,7 @@
     {/if}
   </div>
   <button class="icon-btn" title={$t.rules} aria-label={$t.rules} onclick={() => (showRules = true)}>📖</button>
-  <div class="segmented lang" role="group" aria-label="Language">
+  <div class="segmented lang" role="group" aria-label={$t.language}>
     <button class:active={$lang === 'nl'} onclick={() => ($lang = 'nl')}>NL</button>
     <button class:active={$lang === 'en'} onclick={() => ($lang = 'en')}>EN</button>
   </div>

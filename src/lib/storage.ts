@@ -1,4 +1,4 @@
-import type { KeyValueStore } from './link-local'
+export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 // With cookies blocked, even reading the localStorage property throws.
 function local(): Storage | undefined {
