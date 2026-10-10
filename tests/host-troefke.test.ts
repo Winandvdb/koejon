@@ -5,7 +5,8 @@ import { HostGame } from '../src/lib/host'
 import { localLinks, SOLO_CODE } from '../src/lib/link-local'
 import type { RoomDoc } from '../src/lib/net-types'
 import { newRoomDoc } from '../src/lib/room'
-import { C, memoryStore, mulberry, playingState, until } from './helpers'
+import { seededRandom } from '../src/lib/seed'
+import { C, memoryStore, playingState, until } from './helpers'
 
 const UID = 'me'
 const TRIALS = 1000
@@ -66,7 +67,7 @@ async function bidderAsks(): Promise<boolean> {
 describe('host troefke decision', () => {
   test('a bidder bot decides troefke once per hand', async () => {
     // Seeded: the host's bots roll Math.random.
-    vi.spyOn(Math, 'random').mockImplementation(mulberry(41))
+    vi.spyOn(Math, 'random').mockImplementation(seededRandom(41))
     let asked = 0
     for (let i = 0; i < TRIALS; i++) if (await bidderAsks()) asked++
     // Two rolls would give TROEFKE_CHANCE squared (0.81), far outside this margin.

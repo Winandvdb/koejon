@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { botAction } from '../src/bots/bot'
-import { C, mulberry, playingState } from './helpers'
+import { seededRandom } from '../src/lib/seed'
+import { C, playingState } from './helpers'
 import { apply, createMatch } from '../src/engine'
 import type { Card, State } from '../src/engine'
 
@@ -446,7 +447,7 @@ describe('bot packet lift', () => {
   const picks = (s: State, seat: number) =>
     new Set(
       Array.from({ length: 200 }, (_, i) => {
-        const a = botAction(s, seat, mulberry(i + 1))
+        const a = botAction(s, seat, seededRandom(i + 1))
         if (a.type !== 'draw' && a.type !== 'cut') throw new Error(a.type)
         return a.n
       }),

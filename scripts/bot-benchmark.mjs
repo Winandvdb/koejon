@@ -36,7 +36,7 @@ const server = await createServer({
 })
 try {
   const { apply, createMatch, pendingSeats } = await server.ssrLoadModule('/src/engine/index.ts')
-  const { mulberry } = await server.ssrLoadModule('/tests/helpers.ts')
+  const { seededRandom } = await server.ssrLoadModule('/src/lib/seed.ts')
   const head = (await server.ssrLoadModule('/src/bots/bot.ts')).botAction
   const base = (await server.ssrLoadModule(join(baseDir, 'src/bots/bot.ts'))).botAction
 
@@ -50,7 +50,7 @@ try {
    */
   function runMatch(seed, bots, stats) {
     let s = createMatch(seed)
-    const rand = mulberry(seed * 7919 + 13)
+    const rand = seededRandom(seed * 7919 + 13)
     let steps = 0
     while (s.phase !== 'GAME_OVER') {
       if (steps++ > STEP_CAP) throw new Error(`match ${seed} did not terminate`)
