@@ -3,10 +3,10 @@ import { describe, expect, test, vi } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
-import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
+import { localLinks, SOLO_CODE } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import { seededRandom } from '../src/lib/seed'
-import { safeStorage } from '../src/lib/storage'
+import { safeStorage, type KeyValueStore } from '../src/lib/storage'
 import { blockStorage, failLocks, memoryStore, until } from './helpers'
 
 // Spies on every Firestore read and write the app uses, so a test can prove

@@ -4,7 +4,7 @@
   import { lang, levelNames, localeOf, seatName, t } from '../lib/i18n'
   import { readHistory, type HistoryEntry } from '../lib/history'
   import { parseKjn, type SeatKind } from '../lib/kjn'
-  import { appUrl } from '../lib/link-p2p'
+  import { appUrl } from '../lib/url'
   import { CODE_LENGTH } from '../lib/room'
   import { sumGroups, totalStats, type StatsGroup } from '../lib/stats'
   import { botLevel, playerName } from '../lib/prefs'

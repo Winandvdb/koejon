@@ -2,17 +2,15 @@ import { apply, createMatch, legalActions, pendingSeats, START_LINES, teamOf, to
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
-import { HEARTBEAT_MS } from './link-firestore'
-import type { KeyValueStore } from './link-local'
 import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-types'
 import { gameDoc, newKjn, recordAction } from './kjn'
 import type { GameDoc, KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
-import { readJson, safeStorage } from './storage'
+import { readJson, safeStorage, type KeyValueStore } from './storage'
 import { DEV_DEFAULTS, type DevSettings } from './devsettings'
 import { DEAL_MS } from './deckstack'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
-import type { HostLink } from './transport'
+import { HEARTBEAT_MS, type HostLink } from './transport'
 
 declare const __APP_VERSION__: string
 const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown'
@@ -57,6 +55,9 @@ export interface HostOptions {
   rand?: () => number
   /** How long one pending seat may stall before a hurry nag. Default 9 s. */
   hurryMs?: number
+  /** Store a finished match as `games/{id}`; `id` stays the same on a retry.
+   *  Absent: the host keeps no record (tests, bench). */
+  saveGame?: (id: string, game: GameDoc) => Promise<void>
   /** Test hook: called after every landed commit. */
   onCommit?: () => void
   /** Dev build test shortcuts, read at each use so a change applies at once
@@ -107,6 +108,7 @@ export class HostGame {
   private dealLingerMs: number
   private storage: KeyValueStore
   private onCommit: HostOptions['onCommit']
+  private saveGame: HostOptions['saveGame']
   private quoteRand: () => number
   private rand: () => number
   private hurryMs: number
@@ -117,7 +119,7 @@ export class HostGame {
   /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
   private waitSeat = -1
   private waitTimer: ReturnType<typeof setTimeout> | null = null
-  /** KJN record of the match in progress. Null when the link cannot upload,
+  /** KJN record of the match in progress. Null when the host cannot upload,
    *  and for a match that started before this host recorded. */
   private kjn: KjnMatch | null = null
   /** KJN text of the finished match, sent to every client in GAME_OVER. */
@@ -140,6 +142,7 @@ export class HostGame {
     this.dealLingerMs = opts.dealLingerMs ?? DEAL_MS + 300
     this.storage = opts.storage ?? safeStorage
     this.onCommit = opts.onCommit
+    this.saveGame = opts.saveGame
     this.quoteRand = opts.quoteRand ?? Math.random
     this.rand = opts.rand ?? Math.random
     this.hurryMs = opts.hurryMs ?? 9000
@@ -361,10 +364,10 @@ export class HostGame {
     // A new match resets which lines were said.
     this.quoteBook.reset()
     this.quoteLog = []
-    // A link that cannot upload (tests, bench) keeps no record. KJN/1 is frozen
+    // A host that cannot upload (tests, bench) keeps no record. KJN/1 is frozen
     // and has no field for another tree length or a bot on the host's seat.
     const normal = dev.treeLength === START_LINES && !dev.autoplay
-    this.kjn = this.link.saveGame && normal ? newKjn(APP_VERSION, this.seatKinds()) : null
+    this.kjn = this.saveGame && normal ? newKjn(APP_VERSION, this.seatKinds()) : null
     this.finalKjn = null
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
@@ -503,7 +506,7 @@ export class HostGame {
 
   /** Upload queued records one by one; a failed one stays for the next try. */
   private flushPending(): void {
-    const save = this.link.saveGame?.bind(this.link)
+    const save = this.saveGame
     if (this.uploading || this.disposed || !save) return
     const next = this.readPending()[0]
     if (!next) return

@@ -12,8 +12,7 @@ Transport (`src/lib/transport.ts`):
 - **Multiplayer**: each guest opens a WebRTC data channel to the host (`link-p2p.ts`); Firestore
   carries only the lobby view and signaling (`rooms/{code}/rtc/{uid}`, ~2 writes per connect).
   A guest whose channel does not open (strict NAT, no WebRTC) falls back to the Firestore path
-  (`link-firestore.ts`) automatically. Load the page with `?p2p=off` to force that fallback
-  for that tab (kept across refreshes; `?p2p=on` undoes it). The console logs `[p2p] on/off`.
+  (`link-firestore.ts`) automatically. A browser without WebRTC uses the Firestore path from the start.
   Optional TURN relay: set `VITE_TURN_URL`, `VITE_TURN_USER`, `VITE_TURN_CRED`.
 - The host keeps the full engine state in its own `localStorage` for reload recovery.
 

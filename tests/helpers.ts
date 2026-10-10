@@ -2,7 +2,7 @@ import { apply, createMatch, pendingSeats } from '../src/engine'
 import type { Card, State, Suit, TrickCard } from '../src/engine'
 import { botAction } from '../src/bots/bot'
 import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
-import type { KeyValueStore } from '../src/lib/link-local'
+import type { KeyValueStore } from '../src/lib/storage'
 import { seededRandom } from '../src/lib/seed'
 
 export const C = (s: Suit, r: Card['r']): Card => ({ s, r })

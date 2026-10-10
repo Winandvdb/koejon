@@ -1,7 +1,6 @@
 import { parseKjn } from './kjn'
-import type { KeyValueStore } from './link-local'
 import { keepDropped } from './stats'
-import { readJson, safeStorage } from './storage'
+import { readJson, safeStorage, type KeyValueStore } from './storage'
 
 /** Finished matches on this device only: never uploaded. */
 export const HISTORY_KEY = 'koejon-history'
