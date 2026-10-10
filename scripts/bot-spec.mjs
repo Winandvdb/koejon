@@ -70,9 +70,9 @@ export function extractRef(root, ref, tmp) {
 
 /**
  * Load a side's decider through the vite `server`. `dir` null means this
- * checkout. Uses `createBot` when the checkout has the bot framework (a null
- * spec becomes the `heuristic:<level>` bot), else its `botAction`; a spec is
- * ignored on old refs.
+ * checkout. A spec goes through `createBot` when the checkout has the bot
+ * framework; a null spec, or a spec on an old ref (`legacy`), plays the
+ * checkout's `botAction` at `level`.
  * @param {import('vite').ViteDevServer} server
  * @param {string | null} dir
  * @param {BotSpec | null} spec
@@ -80,8 +80,9 @@ export function extractRef(root, ref, tmp) {
  */
 export async function loadDecider(server, dir, spec, level) {
   const mod = await server.ssrLoadModule(dir ? join(dir, 'src/bots/bot.ts') : '/src/bots/bot.ts')
-  if (typeof mod.createBot === 'function') {
-    const bot = mod.createBot(spec ?? `heuristic:${level}`)
+  // No spec: the bot the host plays, so the default bench tests a change to botAction.
+  if (spec != null && typeof mod.createBot === 'function') {
+    const bot = mod.createBot(spec)
     return {
       name: bot.name,
       legacy: false,
@@ -90,10 +91,10 @@ export async function loadDecider(server, dir, spec, level) {
     }
   }
   if (typeof mod.botAction !== 'function')
-    throw new Error(`no bot in ${dir ?? 'this checkout'}: src/bots/bot.ts exports neither createBot nor botAction`)
+    throw new Error(`no bot in ${dir ?? 'this checkout'}: src/bots/bot.ts does not export botAction`)
   return {
     name: `botAction:${level}`,
-    legacy: true,
+    legacy: spec != null,
     /** @param {object} s @param {number} seat @param {() => number} rand */
     decide: (s, seat, rand) => mod.botAction(s, seat, rand, level),
   }

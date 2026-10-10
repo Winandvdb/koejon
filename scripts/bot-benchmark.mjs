@@ -44,7 +44,9 @@ const parsed = [
   opt.a != null ? parseSpecArg(opt.a) : { ref: null, spec: null },
   opt.b != null ? parseSpecArg(opt.b) : { ref: opt.base, spec: null },
 ]
-const labels = [opt.a ?? 'this checkout', opt.b ?? opt.base]
+// With one custom side, name the bot of the other: the custom header has no level.
+const fallback = (/** @type {string} */ where) => (custom ? `${where} (botAction:${opt.level})` : where)
+const labels = [opt.a ?? fallback('this checkout'), opt.b ?? fallback(opt.base)]
 
 /** @param {import('./bench-worker.mjs').BenchJob} job */
 function runWorker(job) {
@@ -134,7 +136,7 @@ try {
     console.log(`Bot benchmark: ${labels[0]} vs ${labels[1]}, ${n} matches`)
     console.log(`Win rate of ${labels[0]}: ${pct(p)} ± ${pct(ci)} (${result.wins}/${n})`)
     for (const [i, side] of result.sides.entries())
-      if (side.legacy && parsed[i].spec != null)
+      if (side.legacy)
         console.log(`note: ${labels[i]} has no bot framework, used ${side.name}`)
     console.log('')
     console.log('Decisions (real choices only):')
