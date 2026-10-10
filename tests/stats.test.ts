@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { matchScore } from '../src/engine'
 import { addHistory, HISTORY_KEY, HISTORY_MAX, readHistory } from '../src/lib/history'
-import { parseKjn, replaySteps, type KjnHand, type KjnMatch } from '../src/lib/kjn'
+import { parseKjn, replaySteps, type KjnHand, type KjnMatch, type SeatKind } from '../src/lib/kjn'
 import type { KeyValueStore } from '../src/lib/link-local'
-import { EMPTY_STATS, matchStats, STATS_KEY, totalStats } from '../src/lib/stats'
+import {
+  EMPTY_STATS,
+  matchGroup,
+  matchStats,
+  STATS_KEY,
+  sumGroups,
+  totalStats,
+  type GroupStats,
+} from '../src/lib/stats'
 import { finishedMatch, memoryStore } from './helpers'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -101,20 +109,47 @@ describe('statistics of one match', () => {
   })
 })
 
+describe('players or bots', () => {
+  const at = (...seats: SeatKind[]) => ({ ...match([]), seats })
+
+  test('three bots around you: against bots', () => {
+    expect(matchGroup(at('human', 'bot-easy', 'bot-normal', 'bot-hard'), 0)).toBe('bots')
+  })
+
+  test('one other human is enough: with players', () => {
+    expect(matchGroup(at('bot-hard', 'human', 'bot-hard', 'human'), 1)).toBe('players')
+    expect(matchGroup(at('human', 'bot-normal', 'human', 'bot-normal'), 0)).toBe('players')
+  })
+
+  test('a seat a human played for part of the match: with players', () => {
+    expect(matchGroup(at('human', 'bot-normal', 'mixed', 'bot-normal'), 0)).toBe('players')
+  })
+
+  test('your own seat taken over by a bot, three bots around you: against bots', () => {
+    expect(matchGroup(at('mixed', 'bot-normal', 'bot-normal', 'bot-normal'), 0)).toBe('bots')
+  })
+})
+
 describe('statistics on this device', () => {
   const sum = (texts: string[], seat: number) =>
     texts.map((k) => matchStats(parseKjn(k), seat)).reduce((a, b) => {
       const out = { ...a }
       for (const key of Object.keys(out) as (keyof typeof out)[]) out[key] += b[key]
       return out
-    })
+    }, EMPTY_STATS)
+  /** The same match, with bots in the three other seats (seat 0 is yours). */
+  const solo = (kjn: string) =>
+    kjn.replace('[Seats "human human bot-normal bot-normal"]', '[Seats "human bot-easy bot-normal bot-hard"]')
+  const none = { players: EMPTY_STATS, bots: EMPTY_STATS }
 
-  test('matches already in the history count at once', () => {
+  test('matches already in the history count at once, in their group', () => {
     const store = memoryStore()
-    const texts = [finishedMatch(1).kjn, finishedMatch(2).kjn]
-    store.setItem(HISTORY_KEY, JSON.stringify(texts.map((kjn, i) => ({ id: String(i), finishedAt: i, seat: 2, names: [], kjn }))))
+    const texts = [finishedMatch(1).kjn, solo(finishedMatch(2).kjn), finishedMatch(7).kjn]
+    store.setItem(HISTORY_KEY, JSON.stringify(texts.map((kjn, i) => ({ id: String(i), finishedAt: i, seat: 0, names: [], kjn }))))
     expect(store.getItem(STATS_KEY)).toBeNull()
-    expect(totalStats(readHistory(store), store)).toEqual(sum(texts, 2))
+    const g = totalStats(readHistory(store), store)
+    expect(g).toEqual({ players: sum([texts[0], texts[2]], 0), bots: sum([texts[1]], 0) })
+    expect(sumGroups(g)).toEqual(sum(texts, 0))
   })
 
   test('a match counts once, also when it is kept again', () => {
@@ -122,20 +157,29 @@ describe('statistics on this device', () => {
     const { kjn } = finishedMatch(3)
     addHistory({ seat: 0, names: [], kjn }, store)
     addHistory({ seat: 0, names: [], kjn }, store)
-    expect(totalStats(readHistory(store), store).played).toBe(1)
+    expect(sumGroups(totalStats(readHistory(store), store)).played).toBe(1)
   })
 
-  test('matches that drop out of the history still count', () => {
+  test('matches that drop out of the history still count, in their group', () => {
     const store = memoryStore()
-    const texts = Array.from({ length: HISTORY_MAX + 2 }, (_, i) => finishedMatch(200 + i).kjn)
-    texts.forEach((kjn) => addHistory({ seat: 1, names: [], kjn }, store))
+    const texts = Array.from({ length: HISTORY_MAX + 2 }, (_, i) =>
+      i % 3 === 0 ? solo(finishedMatch(200 + i).kjn) : finishedMatch(200 + i).kjn,
+    )
+    texts.forEach((kjn) => addHistory({ seat: 0, names: [], kjn }, store))
     expect(readHistory(store)).toHaveLength(HISTORY_MAX)
-    expect(totalStats(readHistory(store), store)).toEqual(sum(texts, 1))
+    // The two dropped matches are one of each group.
+    const dropped = JSON.parse(store.getItem(STATS_KEY)!) as GroupStats
+    expect(dropped.bots.played).toBe(1)
+    expect(dropped.players.played).toBe(1)
+    expect(totalStats(readHistory(store), store)).toEqual({
+      players: sum(texts.filter((_, i) => i % 3 !== 0), 0),
+      bots: sum(texts.filter((_, i) => i % 3 === 0), 0),
+    })
   })
 
   test('a record that does not parse counts nothing', () => {
     const store = memoryStore()
-    expect(totalStats([{ seat: 0, kjn: 'junk' }], store)).toEqual(EMPTY_STATS)
+    expect(totalStats([{ seat: 0, kjn: 'junk' }], store)).toEqual(none)
   })
 
   test('blocked storage reads as no statistics', () => {
@@ -143,7 +187,7 @@ describe('statistics on this device', () => {
       throw new DOMException('The operation is insecure.', 'SecurityError')
     }
     const broken: KeyValueStore = { getItem: thrower, setItem: thrower, removeItem: thrower }
-    expect(totalStats(readHistory(broken), broken)).toEqual(EMPTY_STATS)
+    expect(totalStats(readHistory(broken), broken)).toEqual(none)
   })
 
   test('keeping matches asks the browser once to keep the data', () => {

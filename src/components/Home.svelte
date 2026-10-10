@@ -2,10 +2,10 @@
   import { fly } from 'svelte/transition'
   import { lang, t } from '../lib/i18n'
   import { readHistory, type HistoryEntry } from '../lib/history'
-  import { parseKjn } from '../lib/kjn'
+  import { parseKjn, type SeatKind } from '../lib/kjn'
   import { appUrl } from '../lib/link-p2p'
   import { CODE_LENGTH } from '../lib/room'
-  import { totalStats } from '../lib/stats'
+  import { sumGroups, totalStats, type StatsGroup } from '../lib/stats'
   import { safeStorage } from '../lib/storage'
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
@@ -61,9 +61,14 @@
   }
 
   const kept = readHistory()
-  const stats = totalStats(kept)
+  const groups = totalStats(kept)
+  const all = sumGroups(groups)
+  let statsView = $state<'all' | StatsGroup>('all')
+  const VIEWS = ['all', 'players', 'bots'] as const
+  const viewName = $derived({ all: $t.statsAll, players: $t.statsPlayers, bots: $t.statsBots })
+  const stats = $derived(statsView === 'all' ? all : groups[statsView])
   const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole))
-  const avgScore = stats.score / Math.max(1, stats.played)
+  const avgScore = $derived(stats.score / Math.max(1, stats.played))
   const avgText = $derived(
     avgScore.toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { maximumFractionDigits: 1 }),
   )
@@ -78,16 +83,23 @@
     .map((e) => {
       try {
         const m = parseKjn(e.kjn)
-        return { e, winner: m.winner, lines: m.lines }
+        return { e, winner: m.winner, lines: m.lines, seats: m.seats }
       } catch {
-        return { e, winner: null, lines: null }
+        return { e, winner: null, lines: null, seats: null }
       }
     })
 
   const seatName = (e: HistoryEntry, i: number) => e.names[i] || `${$t.player} ${i + 1}`
+  /** The bot mark after a name: the level, or "partly" for a seat a bot took over. */
+  const botMark = (k: SeatKind | undefined) =>
+    k === 'mixed' ? $t.botPartly : k?.startsWith('bot-') ? lvlName[k.slice(4) as BotLevel] : null
   const when = (ms: number) =>
     new Date(ms).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })
 </script>
+
+{#snippet player(e: HistoryEntry, i: number, seats: SeatKind[] | null)}
+  {seatName(e, i)}{#if botMark(seats?.[i])}<span class="seat-bot">🤖 {botMark(seats?.[i])}</span>{/if}
+{/snippet}
 
 {#snippet num(n: number | string, label: string, tone = '', suffix = '')}
   <div class="stat-num">
@@ -175,16 +187,27 @@
     </div>
 
     <div class="panel home-panel">
-      {#if stats.played > 0}
+      {#if all.played > 0}
         <h2>{$t.statsTitle}</h2>
-        {@render statCards()}
+        <div class="lvl-seg" role="group" aria-label={$t.statsTitle}>
+          {#each VIEWS as v (v)}
+            <button class="lvl-opt" class:on={statsView === v} aria-pressed={statsView === v} onclick={() => (statsView = v)}
+              >{viewName[v]}</button
+            >
+          {/each}
+        </div>
+        {#if stats.played > 0}
+          {@render statCards()}
+        {:else}
+          <p class="muted">{$t.statsNoneInGroup}</p>
+        {/if}
       {/if}
-      <h2 class:home-sub={stats.played > 0}>{$t.playedMatches}</h2>
+      <h2 class:home-sub={all.played > 0}>{$t.playedMatches}</h2>
       {#if matches.length === 0}
         <p class="muted">{$t.noMatches}</p>
       {:else}
         <ul class="match-list">
-          {#each matches as { e, winner, lines }, i (e.id)}
+          {#each matches as { e, winner, lines, seats }, i (e.id)}
             <li class:extra={!showAll && i >= LIST_ROWS}>
               <div class="match-info">
                 <div class="match-meta small muted">
@@ -192,9 +215,9 @@
                   {#if lines}<span>{$t.boomke} {lines[0]}–{lines[1]}</span>{/if}
                 </div>
                 <div class="match-teams">
-                  <span class:win={winner === 0}>{seatName(e, 0)} &amp; {seatName(e, 2)}</span>
+                  <span class:win={winner === 0}>{@render player(e, 0, seats)} &amp; {@render player(e, 2, seats)}</span>
                   <span class="muted">–</span>
-                  <span class:win={winner === 1}>{seatName(e, 1)} &amp; {seatName(e, 3)}</span>
+                  <span class:win={winner === 1}>{@render player(e, 1, seats)} &amp; {@render player(e, 3, seats)}</span>
                 </div>
               </div>
               <button class="icon-btn match-replay" title={$t.replay} aria-label={$t.replay} onclick={() => onreplay(e)}>▶</button>

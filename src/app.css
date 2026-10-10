@@ -711,6 +711,18 @@ input[type='checkbox'] {
   content: ' 🏆';
 }
 
+/* Bot level after a bot player's name. */
+.seat-bot {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .match-replay {
   color: var(--accent);
 }

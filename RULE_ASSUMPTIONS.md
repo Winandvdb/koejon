@@ -87,6 +87,9 @@ environment deviations. Each entry lists the chosen behavior.
   cross fewer lines than its stake: a stake of 2 with 1 line left is no double. A 20-20
   draw counts as neither. A bid ("ik ga" or the dealer's trump choice) counts as won
   only when the bidder's team wins the hand; a draw is not a win.
+- **With players or against bots** (#57) — the statistics count a match "with players"
+  when at least one seat other than the own seat was played by a human, also for part of
+  the match (`mixed`). When the three other seats were all bots, it counts "against bots".
 - **Invite links** — `?room=CODE` prefills the join field; the lobby shows a QR code and
   a copyable link.
 

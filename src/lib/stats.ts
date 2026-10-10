@@ -60,19 +60,39 @@ export function matchStats(m: KjnMatch, seat: number): PlayerStats {
   return s
 }
 
-function entryStats(e: { seat: number; kjn: string }): PlayerStats {
-  try {
-    return matchStats(parseKjn(e.kjn), e.seat)
-  } catch {
-    return { ...EMPTY_STATS }
-  }
+/** `players`: another seat had a human at the table; `bots`: the other three were all bots. */
+export type StatsGroup = 'players' | 'bots'
+export type GroupStats = Record<StatsGroup, PlayerStats>
+
+/** A `mixed` seat was played by a human for part of the match. */
+export function matchGroup(m: KjnMatch, seat: number): StatsGroup {
+  return m.seats.some((k, i) => i !== seat && (k === 'human' || k === 'mixed')) ? 'players' : 'bots'
 }
 
-function readDropped(store: KeyValueStore): PlayerStats {
+export const sumGroups = (g: GroupStats): PlayerStats => add(g.players, g.bots)
+
+const emptyGroups = (): GroupStats => ({ players: { ...EMPTY_STATS }, bots: { ...EMPTY_STATS } })
+
+/** Adds each entry's numbers to its group in `into`. */
+function addEntries(into: GroupStats, entries: { seat: number; kjn: string }[]): GroupStats {
+  for (const e of entries) {
+    try {
+      const m = parseKjn(e.kjn)
+      const g = matchGroup(m, e.seat)
+      into[g] = add(into[g], matchStats(m, e.seat))
+    } catch {
+      // Not a record: counts nothing.
+    }
+  }
+  return into
+}
+
+function readDropped(store: KeyValueStore): GroupStats {
   try {
-    return { ...EMPTY_STATS, ...(JSON.parse(store.getItem(STATS_KEY) ?? '{}') as Partial<PlayerStats>) }
+    const saved = JSON.parse(store.getItem(STATS_KEY) ?? '{}') as Partial<Record<StatsGroup, Partial<PlayerStats>>>
+    return { players: { ...EMPTY_STATS, ...saved.players }, bots: { ...EMPTY_STATS, ...saved.bots } }
   } catch {
-    return { ...EMPTY_STATS }
+    return emptyGroups()
   }
 }
 
@@ -80,13 +100,13 @@ function readDropped(store: KeyValueStore): PlayerStats {
 export function keepDropped(entries: { seat: number; kjn: string }[], store: KeyValueStore = safeStorage): void {
   if (!entries.length) return
   try {
-    store.setItem(STATS_KEY, JSON.stringify(entries.map(entryStats).reduce(add, readDropped(store))))
+    store.setItem(STATS_KEY, JSON.stringify(addEntries(readDropped(store), entries)))
   } catch {
     // Storage full or blocked: these matches no longer count.
   }
 }
 
-/** The matches in the history plus the ones that dropped out of it. */
-export function totalStats(entries: { seat: number; kjn: string }[], store: KeyValueStore = safeStorage): PlayerStats {
-  return entries.map(entryStats).reduce(add, readDropped(store))
+/** The matches in the history plus the ones that dropped out of it, per group. */
+export function totalStats(entries: { seat: number; kjn: string }[], store: KeyValueStore = safeStorage): GroupStats {
+  return addEntries(readDropped(store), entries)
 }
