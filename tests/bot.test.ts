@@ -371,9 +371,12 @@ describe('bot leads', () => {
     // Trump is always allowed: a long side suit does not stop a trump.
     const bidding = leadState([C('H', '9'), C('H', '10'), C('S', 'A'), C('D', 'A'), C('C', '9'), C('D', '10')], 1)
     const defending = leadState([C('S', 'A'), C('D', 'A'), C('D', '9'), C('C', '10'), C('C', 'Q'), C('S', 'J')], 0)
+    // Only aces as plain cards: a low trump goes first.
+    const onlyAces = leadState([C('H', '9'), C('H', '10'), C('S', 'A'), C('D', 'A')], 1)
     for (const level of LEVELS) {
       expect(botAction(bidding, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', '9') })
       expect(botAction(defending, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
+      expect(botAction(onlyAces, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
     }
   })
 
@@ -392,9 +395,15 @@ describe('bot leads', () => {
   it('a defender with only the trump ace keeps it, also in a sweep', () => {
     const hand = [C('H', 'A'), C('D', '9'), C('D', '10'), C('C', '9'), C('C', '10'), C('S', '9')]
     const sweep = leadState(hand.slice(0, 5), 0, { tricksPlayed: 1, tricksWon: [0, 1] })
+    // Its lower trumps stay home in a sweep too.
+    const twoTrumps = leadState([C('H', 'A'), C('H', 'Q'), C('D', '9'), C('C', '9')], 0, {
+      tricksPlayed: 2,
+      tricksWon: [0, 2],
+    })
     for (const level of LEVELS) {
       expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
       expect(botAction(sweep, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '10') })
+      expect(botAction(twoTrumps, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
     }
   })
 

@@ -317,7 +317,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
     if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
     const ace = legal.find((c) => c.r === 'A' && c.s !== trump && !trumpable(c.s))
     if (ace) return because(why, 'sweep: safe ace', ace)
-    const keep = partner ? trumps : shortDefender && boss ? [boss] : []
+    const keep = partner || shortDefender ? trumps : []
     const rest = legal.filter((c) => !keep.includes(c))
     if (keep.length && rest.length) return because(why, 'sweep: highest card, keeps trump', highest(rest))
     return because(why, 'sweep: highest card', highest(legal))
@@ -341,8 +341,13 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   // ace only once no opponent may hold trump.
   const aces = plain.filter((c) => c.r === 'A')
   if (aces.length && !oppMayTrump) return because(why, 'cash an ace: opponents hold no trump', highest(aces))
-  // Otherwise a low card from a suit nobody is known void in.
-  const pool = plain.length ? plain : legal
+  // Otherwise a low card from a suit nobody is known void in. An ace goes
+  // only when nothing else may: the bidder or a long defender leads a low
+  // trump first.
+  const nonAce = plain.filter((c) => c.r !== 'A')
+  if (!nonAce.length && aces.length && trumps.length && !partner && !shortDefender)
+    return because(why, 'only aces left: low trump', lowest(trumps))
+  const pool = nonAce.length ? nonAce : plain.length ? plain : legal
   const safe = pool.filter((c) => !oppVoid(c.s) && !read.voids.has(`${partnerOf(seat)}:${c.s}`))
   const ok = safe.length ? safe : pool.filter((c) => !oppVoid(c.s))
   return because(why, 'low lead', lowest(ok.length ? ok : pool))
