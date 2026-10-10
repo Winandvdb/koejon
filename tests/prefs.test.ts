@@ -41,6 +41,7 @@ describe('arrangeHand', () => {
     ['C', 'C'],
   ])('two suits or one suit keep the base order: %s -> %s', (suits, want) => {
     expect(suitsOf(arrangeHand(ofSuits(suits), 'high', []))).toBe(want)
+    expect(suitsOf(arrangeHand(ofSuits(suits), 'low', []))).toBe(want)
   })
 
   test('manual without an order keeps the deal order', () => {

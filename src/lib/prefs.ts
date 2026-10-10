@@ -37,18 +37,22 @@ sortMode.subscribe((v) => {
 export const cardKey = (c: Card) => c.s + c.r
 
 // Display order only, black and red alternate. The engine's SUITS stays as
-// is: it fixes the deck order, so seeded deals and KJN replays.
+// is: it fixes the deck order, so seeded deals and KJN replays stay the same.
 const HAND_SUITS: Suit[] = ['S', 'H', 'C', 'D']
-const isRed = (s: Suit) => s === 'H' || s === 'D'
+// Three suits, by the missing suit: the one suit of the other colour goes in
+// the middle, so no two suits of one colour touch.
+const THREE_SUITS: Record<Suit, Suit[]> = {
+  S: ['H', 'C', 'D'],
+  H: ['S', 'D', 'C'],
+  C: ['H', 'S', 'D'],
+  D: ['S', 'H', 'C'],
+}
 
-/** The suits in the hand, in display order. With three suits the one suit of
- *  the other colour goes in the middle, so no two suits of one colour touch. */
+/** The suits in the hand, in display order. */
 function suitOrder(hand: Card[]): Suit[] {
   const suits = HAND_SUITS.filter((s) => hand.some((c) => c.s === s))
-  if (suits.length !== 3) return suits
-  const odd = suits.find((s) => suits.filter((t) => isRed(t) === isRed(s)).length === 1)!
-  const [a, b] = suits.filter((s) => s !== odd)
-  return [a, odd, b]
+  const missing = HAND_SUITS.filter((s) => !suits.includes(s))
+  return suits.length === 3 ? THREE_SUITS[missing[0]] : suits
 }
 
 /** The hand in display order. In manual mode `order` (card keys) leads; cards
