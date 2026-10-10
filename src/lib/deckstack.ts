@@ -42,8 +42,9 @@ export interface DealPair {
 /** The deal as the engine does it (`doDeal`): 3 rounds of two cards to each
  *  seat, from the top of the deck, the dealer's left neighbour first. */
 export function dealPairs(dealer: number): DealPair[] {
+  const order = dealOrder(dealer)
   return Array.from({ length: 12 }, (_, i) => ({
-    seat: dealOrder(dealer)[i % 4],
+    seat: order[i % 4],
     from: [2 * i, 2 * i + 1],
   }))
 }

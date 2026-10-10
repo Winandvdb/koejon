@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apply, createMatch, legalActions } from '../src/engine'
+import { apply, createMatch, dealOrder, legalActions } from '../src/engine'
 import type { State } from '../src/engine'
 import { C, dealtState } from './helpers'
 
@@ -42,6 +42,15 @@ describe('deal', () => {
     ])
     expect(s.turned).toEqual({ first: C('D', 'Q'), second: C('H', 'J'), secondUp: false })
     expect(s.rng).toBe(-1647318399)
+  })
+
+  it('deals to the left neighbour first and to the dealer last, for every dealer', () => {
+    expect([0, 1, 2, 3].map(dealOrder)).toEqual([
+      [1, 2, 3, 0],
+      [2, 3, 0, 1],
+      [3, 0, 1, 2],
+      [0, 1, 2, 3],
+    ])
   })
 
   it('deals deterministically for a fixed seed', () => {

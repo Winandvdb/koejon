@@ -33,12 +33,11 @@ export const isBidding = (phase: Phase) =>
   phase === 'BIDDING_R1' || phase === 'BIDDING_R2' || phase === 'DEALER_CHOICE'
 
 /** The seats in the order they get their cards: the dealer's left neighbour first, the dealer last. */
-export const dealOrder = (dealer: number): number[] => [
-  leftOf(dealer),
-  partnerOf(dealer),
-  cutterOf(dealer),
-  dealer,
-]
+export const dealOrder = (dealer: number): number[] => {
+  const first = leftOf(dealer)
+  const second = leftOf(first)
+  return [first, second, leftOf(second), dealer]
+}
 
 /** Packet sizes `seat` may lift right now (dealer draw or cut); empty when none. */
 export function liftRange(s: State, seat: number): number[] {
