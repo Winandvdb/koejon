@@ -28,7 +28,11 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | Path | Contents | Rules |
 |---|---|---|
 | `src/engine/` | Pure game engine: cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring. Entry: `createMatch`, `legalActions`, `apply`, `toPublic`. | No Firebase, DOM or Svelte imports. Deterministic: use the seeded RNG in `rng.ts`, never `Math.random`. All game rules live here. |
-| `src/bots/bot.ts` | Bot heuristics. Levels `easy`, `normal`, `hard` (`BOT_PROFILES`). Entry: `botAction`. | A bot only picks from `legalActions`. Never read other players' hands. |
+| `src/bots/bot.ts` | Bots as data: a `BotConfig` is `{ name, rules: [{ when?: { phase }, use: spec }] }`; the first rule whose phase matches and whose algorithm `supports` the decision decides, no match throws. A plain algorithm spec is a pure bot. `createBot` also handles the steps without a real choice (lifts, first dealer, single legal action). `botAction(s, seat, rand, level)` = the bot `heuristic:<level>`, used by the host. | A bot only picks from `legalActions`. |
+| `src/bots/algorithm.ts` | `Algorithm` (`id`, `supports(obs)`, `decide(obs, rand, trace?)`), the registry (`createAlgorithm(spec)`, spec = `'name:variant'` or `{ id, ...options }`), `BotTrace`. | An algorithm builds the algorithms its options name through the registry, never by import. |
+| `src/bots/observation.ts` | `observe(state, seat)`: public state, own hand, legal actions. `decisionPhase`: which decisions count as `bidding` (bids, troefke, the dealer's choice) or `play`. | Algorithms get only an observation, never the engine `State`: they cannot read other hands, the deck or the RNG. |
+| `src/bots/value.ts` | `handValue(before, after, team)`: value of a hand as lines crossed minus lines the other team crossed. `breakEven(stake)`: win chance a bid needs. | All search algorithms score hands with it. |
+| `src/bots/heuristic.ts` | The hand-written bot as algorithm `heuristic:easy\|normal\|hard` (`BOT_PROFILES`). Tuning constants in `HEURISTIC_DEFAULTS`; spec options override them. Writes the rule that decided into the trace. | |
 | `src/lib/host.ts` | `HostGame`: the authoritative loop on the host. Applies intents, runs bots, publishes state. | |
 | `src/lib/room.ts` | `RoomSession`: client side of a room (view, send intents). `createRoom`, `joinRoom`. | |
 | `src/lib/transport.ts` | `HostLink` / `GuestLink` interfaces. | |
