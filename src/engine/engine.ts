@@ -8,6 +8,12 @@ const freshMarks = (startLines: number): BoomkeMark[] =>
     Array.from({ length: startLines }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
   )
 
+/** A finished match's score for `team`: 13 for the winner, and for the loser
+ *  13 minus the lines it still had to cross (Koeien included), at least 0. */
+export function matchScore(m: { lines: [number, number]; winner: number }, team: number): number {
+  return team === m.winner ? START_LINES : Math.max(0, START_LINES - m.lines[team])
+}
+
 export class IllegalActionError extends Error {
   constructor(msg: string) {
     super(msg)
