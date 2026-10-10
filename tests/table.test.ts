@@ -2,9 +2,9 @@ import { describe, expect, test } from 'vitest'
 import { toPublic } from '../src/engine'
 import { levelNames, localeOf, seatName, t } from '../src/lib/i18n'
 import { replaySteps, parseKjn } from '../src/lib/kjn'
-import { lastBids, showBids, troefkeBubble } from '../src/lib/table'
+import { lastBids, showBids, showConfetti, troefkeBubble } from '../src/lib/table'
 import { get } from 'svelte/store'
-import { finishedMatch } from './helpers'
+import { finishedMatch, playingState } from './helpers'
 
 const deal = { t: 'deal', seat: 3 }
 const pass = (seat: number) => ({ t: 'pass', seat })
@@ -44,6 +44,23 @@ describe('table state of a replayed match', () => {
       }
       if (troefkeBubble(pub, pub.bidder ?? -1)) expect(pub.troefkeAsked).toBe(true)
     }
+  })
+})
+
+describe('showConfetti', () => {
+  test('only the winning team sees the burst', () => {
+    const pub = toPublic(playingState({ phase: 'GAME_OVER', winner: 0 }))
+    expect(showConfetti(pub, 0)).toBe(true)
+    expect(showConfetti(pub, 1)).toBe(false)
+    expect(showConfetti(pub, 2)).toBe(true)
+    expect(showConfetti(pub, 3)).toBe(false)
+  })
+
+  test('no burst before the match ends or on a draw', () => {
+    const playing = toPublic(playingState({ winner: null }))
+    expect(showConfetti(playing, 0)).toBe(false)
+    const draw = toPublic(playingState({ phase: 'GAME_OVER', winner: null }))
+    expect(showConfetti(draw, 0)).toBe(false)
   })
 })
 

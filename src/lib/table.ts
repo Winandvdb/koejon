@@ -49,6 +49,10 @@ export const lingerTrick = (pub: PublicState): TrickCard[] | null =>
 export const shownTrick = (pub: PublicState): TrickCard[] | null =>
   pub.phase === 'PLAYING' && pub.trick.length > 0 ? pub.trick : lingerTrick(pub)
 
+/** The confetti burst is only for the winner's side: losers see the score, not the party. */
+export const showConfetti = (pub: PublicState, seat: number): boolean =>
+  pub.phase === 'GAME_OVER' && pub.winner === teamOf(seat)
+
 /** Fly direction from each screen position (0 bottom, 1 left, 2 top, 3 right) toward the centre. */
 export const DIR = [
   { x: 0, y: 160 },

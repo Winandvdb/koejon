@@ -8,7 +8,7 @@
   import { SUIT_GLYPH, seatName, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
-  import { DIR, isPlaying, lastBids, lingerTrick as lingerOf, relSeat, showBids as showBidsOf, sideOf, troefkeBubble } from '../lib/table'
+  import { DIR, isPlaying, lastBids, lingerTrick as lingerOf, relSeat, showBids as showBidsOf, showConfetti, sideOf, troefkeBubble } from '../lib/table'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
@@ -581,7 +581,7 @@
     </div>
   </div>
 
-  {#if pub.phase === 'GAME_OVER'}
+  {#if showConfetti(pub, my)}
     <div class="confetti" aria-hidden="true">
       {#each confetti as c, i (i)}
         <i
