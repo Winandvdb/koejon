@@ -19,7 +19,7 @@
   import { HostGame } from './lib/host'
   import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
   import { lang, t } from './lib/i18n'
-  import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
+  import { SORT_LABEL, SORT_MODES, playerName, sortMode } from './lib/prefs'
   import { safeStorage } from './lib/storage'
   import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
@@ -81,7 +81,7 @@
 
   onMount(async () => {
     if (!(await ensureAuth())) uid = offlineUid()
-    const name = safeStorage.getItem('koejon-name') ?? ''
+    const name = get(playerName)
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
     // fallback for a fresh tab.

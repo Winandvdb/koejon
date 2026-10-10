@@ -42,6 +42,12 @@ describe('blocked storage', () => {
       const { sortMode } = await import('../src/lib/prefs')
       expect(get(sortMode)).toBeNull()
       expect(() => sortMode.set('high')).not.toThrow()
+      const { lang, botLevel, playerName } = await import('../src/lib/prefs')
+      expect(get(lang)).toBe('nl')
+      expect(get(botLevel)).toBe('normal')
+      expect(() => lang.set('en')).not.toThrow()
+      expect(() => botLevel.set('hard')).not.toThrow()
+      expect(() => playerName.set('Jef')).not.toThrow()
     } finally {
       restore()
     }

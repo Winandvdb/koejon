@@ -1,16 +1,13 @@
 import { writable } from 'svelte/store'
+import { safeStorage } from './storage'
 
 export type Theme = 'light' | 'dark'
 const KEY = 'koejon-theme'
 
 function load(): Theme {
-  try {
-    const saved = localStorage.getItem(KEY)
-    if (saved === 'light' || saved === 'dark') return saved
-  } catch {
-    // Private mode: fall through to the OS preference.
-  }
-  // Old browsers and Node have no matchMedia.
+  const saved = safeStorage.getItem(KEY)
+  if (saved === 'light' || saved === 'dark') return saved
+  // Blocked storage, old browsers and Node: the OS preference, if there is one.
   return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
@@ -18,9 +15,5 @@ export const theme = writable<Theme>(load())
 
 theme.subscribe((v) => {
   document.documentElement.dataset.theme = v
-  try {
-    localStorage.setItem(KEY, v)
-  } catch {
-    // Preferences just won't persist.
-  }
+  safeStorage.setItem(KEY, v)
 })
