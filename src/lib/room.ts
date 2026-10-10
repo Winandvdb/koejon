@@ -1,4 +1,4 @@
-import { getDoc, setDoc } from './fs'
+import { getDoc, setDoc } from 'firebase/firestore'
 import { derived, get, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
@@ -6,6 +6,9 @@ import type { HandDoc, Intent, RoomDoc } from './net-types'
 import { DEFAULT_ROOM_OPTS } from './net-types'
 import { FirestoreGuestLink, roomRef } from './link-firestore'
 import { P2P_ENABLED, P2PGuestLink, P2PHostLink } from './link-p2p'
+import { addHistory } from './history'
+import type { KeyValueStore } from './link-local'
+import { safeStorage } from './storage'
 import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -14,14 +17,23 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
  *  commits on receipt, so this covers only the network round trip. */
 export const ACT_ACK_MS = 8000
 
-export function makeCode(len = 5): string {
+export const CODE_LENGTH = 5
+
+export function makeCode(len = CODE_LENGTH): string {
   const buf = new Uint8Array(len)
   crypto.getRandomValues(buf)
   return [...buf].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('')
 }
 
-/** Same action, whatever the key order of the objects. */
-const actionKey = (a: Action) => JSON.stringify(a, Object.keys(a).concat('s', 'r').sort())
+/** Same action, whatever the key order of the objects, at any depth. */
+export const actionKey = (a: Action) => JSON.stringify(sortKeys(a))
+
+function sortKeys(v: unknown): unknown {
+  if (typeof v !== 'object' || v === null) return v
+  if (Array.isArray(v)) return v.map(sortKeys)
+  const o = v as Record<string, unknown>
+  return Object.fromEntries(Object.keys(o).sort().map((k) => [k, sortKeys(o[k])]))
+}
 
 export function seatOf(room: RoomDoc | null, uid: string): number {
   if (!room) return -1
@@ -55,11 +67,15 @@ export interface SessionView {
 }
 
 export class RoomSession {
-  readonly room = writable<RoomDoc | null>(null)
-  readonly handDoc = writable<HandDoc | null>(null)
+  /** One store, so a link can set room and hand without a view in between. */
+  private readonly latest = writable<{ room: RoomDoc | null; hand: HandDoc | null }>({ room: null, hand: null })
+  readonly room = derived(this.latest, (l) => l.room)
+  readonly handDoc = derived(this.latest, (l) => l.hand)
   readonly hostStale = writable(false)
   readonly connLost = writable(false)
   readonly view: Readable<SessionView>
+  private unsubHistory: () => void
+  private savedKjn: string | null = null
 
   constructor(
     readonly code: string,
@@ -67,16 +83,18 @@ export class RoomSession {
     private link: GuestLink,
     /** Set when this tab is the host: `link` is then fed in-tab by it. */
     readonly hostLink?: HostLink,
+    private history: KeyValueStore = safeStorage,
   ) {
     link.start({
-      room: (r) => this.room.set(r),
-      hand: (h) => this.handDoc.set(h),
+      room: (r) => this.latest.update((l) => ({ ...l, room: r })),
+      hand: (h) => this.latest.update((l) => ({ ...l, hand: h })),
+      state: (r, h) => this.latest.set({ room: r, hand: h }),
       lost: () => this.connLost.set(true),
       hostStale: (s) => this.hostStale.set(s),
     })
     this.view = derived(
-      [this.room, this.handDoc, this.hostStale, this.connLost],
-      ([room, hd, hostStale, connLost]) => {
+      [this.latest, this.hostStale, this.connLost],
+      ([{ room, hand: hd }, hostStale, connLost]) => {
         const mySeat = seatOf(room, uid)
         const hand = hd?.cards ?? null
         const state = room?.pub && mySeat >= 0 ? clientState(room.pub, mySeat, hand) : null
@@ -84,6 +102,41 @@ export class RoomSession {
         return { room, hand, mySeat, state, legal, hostStale, offline: connLost }
       },
     )
+    this.unsubHistory = this.room.subscribe((r) => {
+      this.keepRecord(r)
+      this.reclaim(r)
+    })
+  }
+
+  /** A seated human keeps the finished match on this device. */
+  private keepRecord(room: RoomDoc | null): void {
+    if (!room?.kjn || room.pub?.phase !== 'GAME_OVER') return
+    if (room.kjn === this.savedKjn) return
+    const seat = seatOf(room, this.uid)
+    if (seat < 0 || room.seats[seat]!.bot) return
+    addHistory({ seat, names: room.seats.map((s) => s?.name ?? ''), kjn: room.kjn }, this.history)
+    this.savedKjn = room.kjn
+  }
+
+  /** Set once this player leaves on purpose: the bot in their seat stays. */
+  private left = false
+  /** A join for the current bot takeover is out. */
+  private reclaiming = false
+
+  /** A bot holds our seat under our uid while we are still here (the host
+   *  took it over behind our back): ask for it back, as a rejoin would. Without
+   *  this the table shows no hand and only a manual rejoin helps. */
+  private reclaim(r: RoomDoc | null): void {
+    const seat = r?.seats.find((s) => s?.uid === this.uid)
+    if (!seat?.bot) {
+      this.reclaiming = false
+      return
+    }
+    // The host tab drives its own seat through the host: nobody takes it over.
+    if (this.left || this.reclaiming || this.hostLink) return
+    this.reclaiming = true
+    console.warn('[room] own seat is held by a bot, reclaiming it')
+    this.send({ kind: 'join', name: seat.name }).catch(() => (this.reclaiming = false))
   }
 
   send(intent: Intent): Promise<void> {
@@ -117,10 +170,12 @@ export class RoomSession {
   }
 
   leave(): Promise<void> {
+    this.left = true
     return this.send({ kind: 'leave' })
   }
 
   dispose(): void {
+    this.unsubHistory()
     this.link.dispose()
   }
 }

@@ -8,8 +8,9 @@ import {
   updateDoc,
   writeBatch,
   type Unsubscribe,
-} from './fs'
-import { db } from './firebase'
+} from 'firebase/firestore'
+import { auth, db, signIn } from './firebase'
+import type { GameDoc } from './kjn'
 import type { HandDoc, Intent, IntentDoc, RoomDoc } from './net-types'
 import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from './transport'
 
@@ -17,6 +18,18 @@ export const roomRef = (code: string) => doc(db, 'rooms', code)
 export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
 export const actionRef = (code: string, uid: string) => doc(db, 'rooms', code, 'actions', uid)
 export const actionsCol = (code: string) => collection(db, 'rooms', code, 'actions')
+export const gameRef = (id: string) => doc(db, 'games', id)
+
+/**
+ * Store a finished match. The caller keeps `id` across retries, so a write
+ * that lands twice hits the same doc and the second is denied (write-once).
+ * No timeout: the SDK keeps a queued write, so a timeout would only start a
+ * second upload next to it. Solo may still lack a uid when it started offline.
+ */
+export async function saveGame(id: string, game: GameDoc): Promise<void> {
+  if (!auth.currentUser) await signIn()
+  await setDoc(gameRef(id), game)
+}
 
 /** Three missed host beats (15 s each) before guests call the host gone. */
 export const HEARTBEAT_MS = 15_000
@@ -117,6 +130,10 @@ export class FirestoreHostLink implements HostLink {
     await batch.commit()
   }
 
+  saveGame(id: string, game: GameDoc): Promise<void> {
+    return saveGame(id, game)
+  }
+
   dispose(): void {
     for (const u of this.unsubs) u()
     this.unsubs = []
@@ -141,7 +158,9 @@ export class FirestoreGuestLink implements GuestLink {
     private uid: string,
   ) {}
 
-  start(ev: GuestEvents): void {
+  /** Never sends `state`: room and hand are two docs with two listeners. A
+   *  version on the hand doc would cost a hand write on every commit. */
+  start(ev: Omit<GuestEvents, 'state'>): void {
     const lost = (label: string) => (err: unknown) => {
       console.error(`[room] ${label} listener error`, err)
       ev.lost()
@@ -150,6 +169,9 @@ export class FirestoreGuestLink implements GuestLink {
       onSnapshot(
         roomRef(this.code),
         (snap) => {
+          // Only the server can say the room is gone. A cache without the doc
+          // (bad connection) would send the player to the start screen.
+          if (!snap.exists() && snap.metadata.fromCache) return
           const room = snap.exists() ? (snap.data() as RoomDoc) : null
           this.lastBeat = room?.heartbeat ?? null
           ev.room(room)

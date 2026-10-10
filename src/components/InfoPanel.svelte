@@ -1,6 +1,6 @@
 <script lang="ts">
   import { slide } from 'svelte/transition'
-  import { trickWinnerIndex, type PublicState, type TrickCard } from '../engine'
+  import { teamOf, trickWinnerIndex, type PublicState, type TrickCard } from '../engine'
   import { SUIT_GLYPH, lang, suitName, t } from '../lib/i18n'
   import type { RoomOpts, SeatInfo } from '../lib/net-types'
   import CardView from './CardView.svelte'
@@ -74,13 +74,13 @@
       {:else}
         {$t.trump}: —
       {/if}
-      {#if pub.multiplier > 1}<span class="mult">×{pub.multiplier}</span>{/if}
+      {#if pub.multiplier > 1 && pub.level !== 2}<span class="mult">×{pub.multiplier}</span>{/if}
     </span>
   </div>
 
   <div class="info-body">
       {#if pub.bidder !== null}
-        <div class="iline">{$t.playingTeam}: <strong>{name(pub.bidder)}</strong> ({teamName(pub.bidder % 2)})</div>
+        <div class="iline">{$t.playingTeam}: <strong>{name(pub.bidder)}</strong> ({teamName(teamOf(pub.bidder))})</div>
       {/if}
       {#if opts.score && (pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER')}
         <div class="iline">

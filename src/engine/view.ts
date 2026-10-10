@@ -95,6 +95,17 @@ export function turnedVisible(pub: PublicState): boolean {
   return pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0
 }
 
+/** The hand shown at `seat`, minus the cards that still lie turned at the
+ *  dealer's seat. They are the last two cards of the dealt hand (`dh[4]`,
+ *  `dh[5]` in doDeal); while they lie on the table no card has been played,
+ *  so the dealt order is intact. Hiding them keeps the dealer from seeing
+ *  the same cards twice — and from peeking at a still face-down second card,
+ *  which is masked in the public state but present in the own hand. */
+export function shownHand(pub: PublicState, seat: number, hand: Card[]): Card[] {
+  if (seat === pub.dealer && turnedVisible(pub)) return hand.slice(0, -2)
+  return hand
+}
+
 const PLACEHOLDER: Card = { s: 'S', r: '9' }
 
 /**

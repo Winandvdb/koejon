@@ -1,13 +1,21 @@
-import { apply, createMatch, pendingSeats, toPublic, visibleHand } from '../engine'
+import { apply, createMatch, legalActions, pendingSeats, START_LINES, toPublic, visibleHand } from '../engine'
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
 import { HEARTBEAT_MS } from './link-firestore'
 import type { KeyValueStore } from './link-local'
 import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-types'
+import { gameDoc, newKjn, recordAction } from './kjn'
+import type { GameDoc, KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
+import { safeStorage } from './storage'
+import { DEV_DEFAULTS, type DevSettings } from './devsettings'
+import { DEAL_MS } from './deckstack'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
+
+declare const __APP_VERSION__: string
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown'
 
 const BOT_NAMES = [
   'Klaas',
@@ -35,21 +43,42 @@ export interface HostOptions {
    *  event before the next automatic action, so the announcement is readable.
    *  Default 2 s. */
   bidLingerMs?: number
+  /** Min. pause after the deal before the next automatic action, so every
+   *  table can deal the cards out per two first. Default: the deal animation. */
+  dealLingerMs?: number
   /** Where the full engine state is kept for reload recovery. Only this
    *  browser (same anonymous uid) can be host, so it never leaves the device.
-   *  Default: localStorage when present; none in plain Node. */
+   *  Default: localStorage when present and not blocked; none in plain Node. */
   storage?: KeyValueStore
   /** Random source for quote rolls. Default Math.random. */
   quoteRand?: () => number
+  /** Random source for the match seed, bot names and bot plays. Default
+   *  Math.random; a seeded one makes a solo game repeat (`?seed=`, src/lib/seed.ts). */
+  rand?: () => number
   /** How long one pending seat may stall before a hurry nag. Default 9 s. */
   hurryMs?: number
   /** Test hook: called after every landed commit. */
   onCommit?: () => void
+  /** Dev build test shortcuts, read at each use so a change applies at once
+   *  (tree length: from the next match). Default: none (DEV_DEFAULTS). */
+  dev?: () => DevSettings
 }
 
 const engineKey = (code: string) => `koejon-engine-${code}`
 const seqKey = (code: string) => `koejon-seq-${code}`
 const quotesKey = (code: string) => `koejon-quotes-${code}`
+const seatsKey = (code: string) => `koejon-seats-${code}`
+const kjnKey = (code: string) => `koejon-kjn-${code}`
+const finalKey = (code: string) => `koejon-kjn-final-${code}`
+/** Finished records not uploaded yet, from any room: a new match never drops one. */
+const PENDING_KEY = 'koejon-games-pending'
+const PENDING_MAX = 20
+
+interface PendingGame {
+  /** Fixed doc id, reused on every retry. */
+  id: string
+  doc: GameDoc
+}
 
 /**
  * The room creator's client runs this. It owns the engine state,
@@ -70,16 +99,27 @@ export class HostGame {
   private heartbeatMs: number
   private drawLingerMs: number
   private bidLingerMs: number
+  private dealLingerMs: number
   private storage: HostOptions['storage']
   private onCommit: HostOptions['onCommit']
   private quoteRand: () => number
+  private rand: () => number
   private hurryMs: number
+  private dev: () => DevSettings
   private quoteBook = new QuoteBook()
   /** Quotes fired this match, newest last — published on every update. */
   private quoteLog: QuoteEvent[] = []
   /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
   private waitSeat = -1
   private waitTimer: ReturnType<typeof setTimeout> | null = null
+  /** KJN record of the match in progress. Null when the link cannot upload,
+   *  and for a match that started before this host recorded. */
+  private kjn: KjnMatch | null = null
+  /** KJN text of the finished match, sent to every client in GAME_OVER. */
+  private finalKjn: string | null = null
+  private uploading = false
+  private disposed = false
+  private onOnline = () => this.flushPending()
 
   private constructor(
     private code: string,
@@ -91,10 +131,14 @@ export class HostGame {
     this.botDelay = opts.botDelay ?? (() => 500 + Math.random() * 500)
     this.drawLingerMs = opts.drawLingerMs ?? 3000
     this.bidLingerMs = opts.bidLingerMs ?? 2000
-    this.storage = opts.storage ?? (typeof localStorage === 'undefined' ? undefined : localStorage)
+    // A little over the animation: a guest sees the deal a moment later.
+    this.dealLingerMs = opts.dealLingerMs ?? DEAL_MS + 300
+    this.storage = opts.storage ?? safeStorage
     this.onCommit = opts.onCommit
     this.quoteRand = opts.quoteRand ?? Math.random
+    this.rand = opts.rand ?? Math.random
     this.hurryMs = opts.hurryMs ?? 9000
+    this.dev = opts.dev ?? (() => DEV_DEFAULTS)
   }
 
   /** Load persisted engine state and room seats, then start listening. */
@@ -122,6 +166,9 @@ export class HostGame {
     // state (own hand included) without waiting for the next move.
     if (h.state.phase !== 'LOBBY') h.enqueue(() => h.commit())
     h.scheduleBots()
+    // Records left by an offline match or an earlier session.
+    globalThis.addEventListener?.('online', h.onOnline)
+    h.flushPending()
     return h
   }
 
@@ -141,8 +188,13 @@ export class HostGame {
     const saved = inLobby ? null : this.readEngine()
     if (saved) {
       this.state = saved
+      // The P2P host writes the room doc only on a lobby-view change, and a
+      // failed write waits for the next one: its seats can be older than ours.
+      this.seats = this.readSeats() ?? this.seats
       this.quoteBook = this.readQuotes() ?? this.quoteBook
-    } else if (inLobby) this.state = createMatch((Math.random() * 2 ** 31) | 0)
+      this.kjn = this.readKjn()
+      this.finalKjn = saved.phase === 'GAME_OVER' ? this.readFinal() : null
+    } else if (inLobby) this.state = createMatch((this.rand() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
   }
 
@@ -158,12 +210,17 @@ export class HostGame {
           // Held until dispose.
           return new Promise<void>((release) => (this.releaseLock = release))
         })
-        .catch(() => resolve(false))
+        // Only a timeout means another tab holds it. With site data blocked the
+        // browser denies every lock (SecurityError); tabs then share no storage
+        // either, so play on without one.
+        .catch((e) => resolve((e as DOMException)?.name !== 'TimeoutError'))
     })
     if (!got) throw new Error('host-elsewhere')
   }
 
   dispose(): void {
+    this.disposed = true
+    globalThis.removeEventListener?.('online', this.onOnline)
     this.link.dispose()
     this.releaseLock?.()
     this.releaseLock = null
@@ -197,8 +254,8 @@ export class HostGame {
       if (this.state.phase !== 'LOBBY' || this.seats[seat] !== null) return
       const taken = new Set(this.seats.map((s) => s?.name))
       const free = BOT_NAMES.filter((n) => !taken.has(n))
-      const name = free[Math.floor(Math.random() * free.length)] ?? `Bot ${seat + 1}`
-      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${Math.random().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
+      const name = free[Math.floor(this.rand() * free.length)] ?? `Bot ${seat + 1}`
+      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${this.rand().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
       await this.commit()
     })
   }
@@ -229,7 +286,7 @@ export class HostGame {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY') return
       for (let i = 3; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
+        const j = Math.floor(this.rand() * (i + 1))
         ;[this.seats[i], this.seats[j]] = [this.seats[j], this.seats[i]]
       }
       await this.commit()
@@ -241,6 +298,17 @@ export class HostGame {
     this.enqueue(async () => {
       this.opts = { ...this.opts, [key]: value }
       await this.commit()
+    })
+  }
+
+  /** A dev setting changed: act on it now, not at the next move. A waiting
+   *  bot timer restarts with the new speed; the commit drains acks and
+   *  schedules the seats that the new settings hand to the bot logic. */
+  devChanged(): void {
+    this.enqueue(async () => {
+      if (this.botTimer) clearTimeout(this.botTimer)
+      this.botTimer = null
+      if (this.state.phase !== 'LOBBY' && this.state.phase !== 'GAME_OVER') await this.commit()
     })
   }
 
@@ -266,7 +334,7 @@ export class HostGame {
   newMatch(): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'GAME_OVER') return
-      await this.beginMatch((Math.random() * 2 ** 31) | 0)
+      await this.beginMatch((this.rand() * 2 ** 31) | 0)
     })
   }
 
@@ -277,10 +345,16 @@ export class HostGame {
       this.seats.findIndex((s, i) => i % 2 === team && s !== null && !s.bot)
     const drawerA = humanSeat(0)
     const drawerB = humanSeat(1)
-    this.state = createMatch(seed, [drawerA >= 0 ? drawerA : 0, drawerB >= 0 ? drawerB : 1])
+    const dev = this.dev()
+    this.state = createMatch(seed, [drawerA >= 0 ? drawerA : 0, drawerB >= 0 ? drawerB : 1], dev.treeLength)
     // A new match resets which lines were said.
     this.quoteBook.reset()
     this.quoteLog = []
+    // A link that cannot upload (tests, bench) keeps no record. KJN/1 is frozen
+    // and has no field for another tree length or a bot on the host's seat.
+    const normal = dev.treeLength === START_LINES && !dev.autoplay
+    this.kjn = this.link.saveGame && normal ? newKjn(APP_VERSION, this.seatKinds()) : null
+    this.finalKjn = null
     const hostSeat = Math.max(0, this.seats.findIndex((s) => s?.uid === this.uid))
     this.state = apply(this.state, { type: 'start', seat: hostSeat })
     await this.commit()
@@ -296,6 +370,7 @@ export class HostGame {
       } else {
         // Unlike a voluntary leave, the seat gets a bot uid: a kicked player
         // cannot reclaim it by rejoining. The next publish drops their hand.
+        console.warn('[host] seat', seat, 'uid', s.uid, 'turns bot: kick')
         this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}`, name: s.name, bot: true }
       }
       await this.commit()
@@ -311,6 +386,9 @@ export class HostGame {
       this.storage?.removeItem(engineKey(this.code))
       this.storage?.removeItem(seqKey(this.code))
       this.storage?.removeItem(quotesKey(this.code))
+      this.storage?.removeItem(seatsKey(this.code))
+      this.storage?.removeItem(kjnKey(this.code))
+      this.storage?.removeItem(finalKey(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -349,6 +427,7 @@ export class HostGame {
           // Mid-game leave: a bot holds the seat, but the uid stays so the
           // player can reclaim it by rejoining the room. The next publish
           // drops their hand.
+          if (!this.seats[i]!.bot) console.warn('[host] seat', i, 'uid', uid, 'turns bot: leave intent')
           this.seats[i] = { uid, name: this.seats[i]!.name, bot: true }
         }
         await this.commit()
@@ -368,14 +447,70 @@ export class HostGame {
   }
 
   private tryApply(a: Action): boolean {
+    let next: State
     try {
-      this.state = apply(this.state, a)
-      return true
+      next = apply(this.state, a)
     } catch (e) {
       // Illegal or stale intent: dropped.
       console.warn('[host] dropped action', a.type, 'seat', a.seat, (e as Error).message)
       return false
     }
+    if (this.kjn) {
+      try {
+        recordAction(this.kjn, this.state, a, next)
+        if (next.phase === 'GAME_OVER') this.finishRecord()
+      } catch (e) {
+        // The record is analysis data: it must never stop a match.
+        console.warn('[host] game record dropped', e)
+        this.kjn = null
+      }
+    }
+    this.state = next
+    return true
+  }
+
+  private seatKinds(): SeatKind[] {
+    return this.seats.map((s): SeatKind => (s?.bot ? `bot-${s.botLevel ?? 'normal'}` : 'human'))
+  }
+
+  /** A seat that changed hands (leave, kick, reclaim) since the start is `mixed`. */
+  private markMixed(): void {
+    const now = this.seatKinds()
+    this.kjn!.seats = this.kjn!.seats.map((k, i) => (k === now[i] ? k : 'mixed'))
+  }
+
+  /** GAME_OVER: the record moves to the upload queue. */
+  private finishRecord(): void {
+    this.markMixed()
+    const doc = gameDoc(this.kjn!)
+    this.kjn = null
+    if (!doc) return
+    this.finalKjn = doc.kjn
+    const id = crypto.randomUUID().replace(/-/g, '')
+    this.writePending([...this.readPending(), { id, doc }].slice(-PENDING_MAX))
+  }
+
+  /** Upload queued records one by one; a failed one stays for the next try. */
+  private flushPending(): void {
+    const save = this.link.saveGame?.bind(this.link)
+    if (this.uploading || this.disposed || !save) return
+    const next = this.readPending()[0]
+    if (!next) return
+    this.uploading = true
+    save(next.id, next.doc)
+      .then(() => true)
+      .catch((e) => {
+        console.warn('[host] game upload failed', e)
+        // Denied never turns into allowed: the doc already landed (write-once)
+        // or the rules refuse it. Anything else (offline) is retried later.
+        return (e as { code?: string })?.code === 'permission-denied'
+      })
+      .then((done) => {
+        this.uploading = false
+        if (!done) return
+        this.writePending(this.readPending().filter((p) => p.id !== next.id))
+        this.flushPending()
+      })
   }
 
   // ---- persistence ----
@@ -384,6 +519,15 @@ export class HostGame {
     try {
       const json = this.storage?.getItem(engineKey(this.code))
       return json ? (JSON.parse(json) as State) : null
+    } catch {
+      return null
+    }
+  }
+
+  private readSeats(): (SeatInfo | null)[] | null {
+    try {
+      const json = this.storage?.getItem(seatsKey(this.code))
+      return json ? (JSON.parse(json) as (SeatInfo | null)[]) : null
     } catch {
       return null
     }
@@ -415,15 +559,57 @@ export class HostGame {
     }
   }
 
+  private readKjn(): KjnMatch | null {
+    try {
+      const json = this.storage?.getItem(kjnKey(this.code))
+      return json ? (JSON.parse(json) as KjnMatch) : null
+    } catch {
+      return null
+    }
+  }
+
+  private readFinal(): string | null {
+    try {
+      return this.storage?.getItem(finalKey(this.code)) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  private readPending(): PendingGame[] {
+    try {
+      const list = JSON.parse(this.storage?.getItem(PENDING_KEY) ?? '[]') as unknown
+      return Array.isArray(list) ? (list as PendingGame[]) : []
+    } catch {
+      return []
+    }
+  }
+
+  private writePending(list: PendingGame[]): void {
+    try {
+      if (list.length) this.storage?.setItem(PENDING_KEY, JSON.stringify(list))
+      else this.storage?.removeItem(PENDING_KEY)
+    } catch {
+      // Storage full or blocked: this record is lost, which is acceptable.
+    }
+  }
+
   private async commit(): Promise<void> {
     this.drainBotAcks()
     const seq = ++this.seq
+    if (this.kjn) this.markMixed()
     try {
       this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
       this.storage?.setItem(seqKey(this.code), String(seq))
+      this.storage?.setItem(seatsKey(this.code), JSON.stringify(this.seats))
+      if (this.kjn) this.storage?.setItem(kjnKey(this.code), JSON.stringify(this.kjn))
+      else this.storage?.removeItem(kjnKey(this.code))
+      if (this.finalKjn) this.storage?.setItem(finalKey(this.code), this.finalKjn)
+      else this.storage?.removeItem(finalKey(this.code))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
+    this.flushPending()
     const hands = new Map<string, HandDoc>()
     this.seats.forEach((seat, i) => {
       if (seat && !seat.bot) hands.set(seat.uid, { cards: visibleHand(this.state, i) })
@@ -435,9 +621,11 @@ export class HostGame {
       this.quoteLog = [...this.quoteLog, q].slice(-12)
       this.writeQuotes()
     }
+    // Only once all hands are played out: the record holds every dealt card.
+    const kjn = this.state.phase === 'GAME_OVER' ? this.finalKjn : null
     // The version only moves forward when the publish lands.
     await this.link.publish(
-      { seats: this.seats, pub, version: this.version + 1, seq, opts: this.opts, quotes: this.quoteLog },
+      { seats: this.seats, pub, version: this.version + 1, seq, opts: this.opts, quotes: this.quoteLog, kjn },
       hands,
     )
     this.version++
@@ -450,28 +638,52 @@ export class HostGame {
 
   /** Seat the host should act for: any bot, plus the deal itself for anyone.
    *  Lifting a packet and picking the dealer stay real choices, and a scored
-   *  hand stays up until a human clicks "next hand". */
+   *  hand stays up until a human clicks "next hand" — unless a dev setting
+   *  hands these to the bot logic. */
   private autoSeat(): number | undefined {
-    if (this.state.phase === 'SCORED') return undefined
+    const dev = this.dev()
     const pend = pendingSeats(this.state)
-    const bot = pend.find((i) => this.seats[i]?.bot)
+    const bot = pend.find((i) => this.isBot(i))
+    if (this.state.phase === 'SCORED') return dev.autoplay ? bot : undefined
     if (bot !== undefined) return bot
     if (this.state.phase === 'DEALING') return pend[0]
+    if (!dev.interactiveDraws && (this.state.phase === 'DEALER_DRAW' || this.state.phase === 'CUTTING')) return pend[0]
     return undefined
   }
 
+  /** A bot seat, or the host's own seat while dev autoplay is on. */
+  private isBot(seat: number): boolean {
+    const s = this.seats[seat]
+    return !!s?.bot || (!!s && s.uid === this.uid && this.dev().autoplay)
+  }
+
   private botMove(seat: number): Action {
-    return botAction(this.state, seat, Math.random, this.seats[seat]?.botLevel ?? 'normal')
+    // Dev autoplay or draws off: the record would call a bot choice human.
+    // The deal is no choice, so it keeps the record.
+    if (!this.seats[seat]?.bot && this.state.phase !== 'DEALING') this.kjn = null
+    return botAction(this.state, seat, this.rand, this.seats[seat]?.botLevel ?? 'normal')
   }
 
   /** The "seen it" pause exists for humans — bots confirm instantly, inside
-   *  the commit that caused the pause instead of one commit per bot. */
+   *  the commit that caused the pause instead of one commit per bot. A
+   *  troefke confirms too: dropping it would make the bot roll again later. */
   private drainBotAcks(): void {
     while (this.state.phase === 'PLAYING') {
+      // Dev "skip Gezien": a plain ack for each waiting human. Troefke stays
+      // theirs to ask: it is legal until the partner's first lead.
+      if (this.dev().skipSeen) {
+        const human = pendingSeats(this.state).find(
+          (i) => !this.isBot(i) && legalActions(this.state, i).some((x) => x.type === 'ack'),
+        )
+        if (human !== undefined && this.tryApply({ type: 'ack', seat: human })) continue
+      }
       const seat = this.autoSeat()
-      if (seat === undefined || !this.seats[seat]?.bot) return
+      if (seat === undefined || !this.isBot(seat)) return
+      // Ask the bot only when it can ack: a move thrown away would still draw
+      // from this.rand, and a seeded game would then depend on extra commits.
+      if (!legalActions(this.state, seat).some((x) => x.type === 'ack' || x.type === 'troefke')) return
       const a = this.botMove(seat)
-      if (a.type !== 'ack' || !this.tryApply(a)) return
+      if ((a.type !== 'ack' && a.type !== 'troefke') || !this.tryApply(a)) return
     }
   }
 
@@ -493,11 +705,16 @@ export class HostGame {
       lastEv === 'draw' ||
       lastEv === 'draw-tie' ||
       lastEv === 'draw-win'
-    const wait = Math.max(
+    // The cards just went out: every table deals them per two first.
+    const dealLinger = lastEv === 'deal'
+    const speed = this.dev().speed
+    const base = Math.max(
       this.botDelay(),
       drawLinger ? this.drawLingerMs : 0,
       bidLinger ? this.bidLingerMs : 0,
+      dealLinger ? this.dealLingerMs : 0,
     )
+    const wait = speed === 'instant' ? 0 : base / speed
     this.botTimer = setTimeout(() => {
       this.botTimer = null
       this.enqueue(async () => {

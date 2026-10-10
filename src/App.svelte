@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getDoc, resetUsage, usage } from './lib/fs'
+  import { get } from 'svelte/store'
+  import { getDoc } from 'firebase/firestore'
   import { signIn } from './lib/firebase'
   import {
     createRoom,
@@ -10,26 +11,39 @@
     RoomSession,
     type SessionView,
   } from './lib/room'
-  import { roomRef } from './lib/link-firestore'
+  import { roomRef, saveGame } from './lib/link-firestore'
   import { localLinks, SOLO_CODE } from './lib/link-local'
-  import { appUrl, P2P_ENABLED } from './lib/link-p2p'
+  import { appUrl } from './lib/link-p2p'
   import type { RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
+  import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
   import { lang, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
+  import { safeStorage } from './lib/storage'
+  import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
   import type { Action } from './engine'
+  import type { HistoryEntry } from './lib/history'
+  import { loadKjn, readKjnFile, serializeKjn, type KjnMatch } from './lib/kjn'
   import Home from './components/Home.svelte'
   import Lobby from './components/Lobby.svelte'
   import Table from './components/Table.svelte'
+  import Replay from './components/Replay.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
+  import DevPanel from './components/DevPanel.svelte'
 
   /** Dev builds (the vite dev server, or VITE_APP_VARIANT=dev: the dev
-   *  channel and previews of PRs into develop) show a DEV chip and this
-   *  tab's Firestore reads/writes in the top bar. */
+   *  channel and previews of PRs into develop) show a DEV chip in the top bar. */
   const viteEnv = (import.meta as { env?: { DEV?: boolean; VITE_APP_VARIANT?: string } }).env
   const DEV = !!viteEnv?.DEV || viteEnv?.VITE_APP_VARIANT === 'dev'
+
+  /** `?seed=` of a dev or review build (src/lib/seed.ts). Read now: attach()
+   *  clears the URL. It seeds the first new solo game of this page load only —
+   *  never a resumed game, a later game, or a multiplayer room. */
+  let seed = SEED_ALLOWED ? demoSeed(location.search, true) : null
+  /** The random source for the next host attach; ensureHost() takes it. */
+  let soloRand: (() => number) | undefined
 
   let uid = $state('')
   let session = $state<RoomSession | null>(null)
@@ -48,11 +62,7 @@
     try {
       uid = await signIn()
       authed = true
-      try {
-        localStorage.setItem('koejon-uid', uid)
-      } catch {
-        // Only the offline fallback below loses it.
-      }
+      safeStorage.setItem('koejon-uid', uid)
       return true
     } catch {
       return false
@@ -62,30 +72,27 @@
   // Offline start: solo still works. Reuse the last signed-in uid so a solo
   // game saved online resumes offline.
   function offlineUid(): string {
-    try {
-      const saved = localStorage.getItem('koejon-uid')
-      if (saved) return saved
-      const id = `local-${crypto.randomUUID()}`
-      localStorage.setItem('koejon-uid', id)
-      return id
-    } catch {
-      return `local-${crypto.randomUUID()}`
-    }
+    const saved = safeStorage.getItem('koejon-uid')
+    if (saved) return saved
+    const id = `local-${crypto.randomUUID()}`
+    safeStorage.setItem('koejon-uid', id)
+    return id
   }
 
   onMount(async () => {
     if (!(await ensureAuth())) uid = offlineUid()
-    const name = localStorage.getItem('koejon-name') ?? ''
+    const name = safeStorage.getItem('koejon-name') ?? ''
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
     // fallback for a fresh tab.
     const urlCode = new URLSearchParams(location.search).get('room')?.trim().toUpperCase()
-    const code = urlCode || localStorage.getItem('koejon-room')
+    const code = urlCode || safeStorage.getItem('koejon-room')
     try {
       if (code === SOLO_CODE) {
-        // Offline solo: resume from this browser's storage, no Firestore.
-        const links = localLinks(uid, localStorage)
-        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+        // Offline solo: resume from this browser's storage; Firestore only
+        // receives the finished match.
+        const links = localLinks(uid, safeStorage)
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
         else forgetRoom()
       } else if (code && authed) {
         // Return to a room in progress only when our seat is still ours.
@@ -103,7 +110,7 @@
   // Drop a stale room session: clear the stored code AND the invite URL so
   // the home screen doesn't fall back to a dead join page.
   function forgetRoom() {
-    localStorage.removeItem('koejon-room')
+    safeStorage.removeItem('koejon-room')
     history.replaceState(null, '', appUrl())
   }
 
@@ -118,7 +125,7 @@
       if (v.room) hadRoom = true
     })
     err = ''
-    localStorage.setItem('koejon-room', s.code)
+    safeStorage.setItem('koejon-room', s.code)
     // A solo room has nothing to invite to.
     if (s.code !== SOLO_CODE) history.replaceState(null, '', appUrl(s.code))
     // The host tab's own view is fed by the host, so attach it right away
@@ -128,10 +135,14 @@
       ensureHost().catch((e) => {
         if (session !== s) return
         teardown()
-        const m = (e as Error).message
-        showErr(e, m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : '')
+        showErr(e, hostErrText(e))
       })
     }
+  }
+
+  function hostErrText(e: unknown): string {
+    const m = (e as Error)?.message
+    return m === 'host-elsewhere' ? $t.hostElsewhere : m === 'room-not-found' ? $t.roomNotFound : ''
   }
 
   // The room doc vanished (host destroyed it): leave cleanly instead of
@@ -154,7 +165,7 @@
     unsubView = null
     // All tabs share localStorage: clear the stored room only if it is ours,
     // never a room another tab is in.
-    if (session && localStorage.getItem('koejon-room') === session.code) localStorage.removeItem('koejon-room')
+    if (session && safeStorage.getItem('koejon-room') === session.code) safeStorage.removeItem('koejon-room')
     session?.dispose()
     host?.dispose()
     session = null
@@ -167,12 +178,18 @@
     history.replaceState(null, '', appUrl())
   }
 
+  // A changed dev setting acts at once on a running host.
+  if (DEV) onMount(() => devSettings.subscribe(() => host?.devChanged()))
+
   let hostPromise: Promise<HostGame> | null = null
 
   function ensureHost(): Promise<HostGame> {
     if (!hostPromise) {
       const s = session!
-      hostPromise = HostGame.attach(s.code, uid, s.hostLink!)
+      const rand = soloRand
+      soloRand = undefined
+      // Dev settings exist only in dev builds; elsewhere the host uses its defaults.
+      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand, dev: DEV ? () => get(devSettings) : undefined })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
           // their back (it would answer that room's guests forever).
@@ -223,9 +240,14 @@
   async function onSolo(name: string, level: BotLevel) {
     err = ''
     try {
-      const links = localLinks(uid, localStorage, newRoomDoc(SOLO_CODE, uid, name))!
+      const links = localLinks(uid, safeStorage, newRoomDoc(SOLO_CODE, uid, name))!
+      if (seed !== null) {
+        soloRand = hostRand(seed, SOLO_CODE)
+        seed = null
+      }
       // attach() runs teardown() which resets soloStarting — set it after.
-      attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+      // Play stays offline; only the finished match is uploaded, when online.
+      attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
       soloStarting = true
       const h = await ensureHost()
       h.addBot(1, level)
@@ -234,7 +256,8 @@
       h.startGame()
     } catch (e) {
       soloStarting = false
-      showErr(e, '', true)
+      // attach() already showed this failure; do not overwrite it with the raw message.
+      showErr(e, hostErrText(e), true)
     }
   }
 
@@ -293,6 +316,42 @@
   function onNewMatch() {
     host?.newMatch()
   }
+
+  // Replay is local only: no session, no host, no network.
+  // Raw: the engine structuredClones the match, which a deep $state proxy breaks.
+  let replay = $state.raw<{
+    match: KjnMatch
+    kjn: string
+    at?: Date
+    seat: number
+    names: string[]
+    label: string
+  } | null>(null)
+
+  function onReplay(e: HistoryEntry) {
+    err = ''
+    try {
+      const label = new Date(e.finishedAt).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      })
+      replay = { match: loadKjn(e.kjn), kjn: e.kjn, at: new Date(e.finishedAt), seat: e.seat, names: e.names, label }
+    } catch {
+      err = $t.invalidKjn
+    }
+  }
+
+  async function onOpenFile(file: File) {
+    err = ''
+    try {
+      const match = await readKjnFile(file)
+      // The parsed match, not the raw file text: clean line endings, no BOM.
+      replay = { match, kjn: serializeKjn(match), seat: 0, names: [], label: file.name }
+    } catch {
+      // The current replay stays open; Replay shows the error.
+      err = $t.invalidKjn
+    }
+  }
 </script>
 
 <header class="topbar">
@@ -303,20 +362,16 @@
   {#if DEV}<span class="room-chip dev">DEV</span>{/if}
   {#if session && session.code !== SOLO_CODE}<span class="room-chip" title={$t.roomCode}>{session.code}</span>{/if}
   <span class="spacer"></span>
-  {#if DEV}
-    <button
-      class="room-chip usage"
-      title="Firestore reads / writes from this tab since load (click to reset). Excludes the rules' isHost reads on the server: about 1 per host write."
-      onclick={resetUsage}>R {$usage.reads} · W {$usage.writes}{P2P_ENABLED ? '' : ' · P2P off'}</button
-    >
-  {/if}
   <div class="settings-anchor">
-    {#if view?.room}
-      {@const r = view.room}
-      {@const hostCtl = r.hostUid !== uid}
+    <!-- Dev builds: also on the home screen, as tree length and autoplay are set before a solo match. -->
+    {#if view?.room || DEV}
       <button class="icon-btn" title={$t.settings} aria-label={$t.settings} onclick={() => (showSettings = !showSettings)}>⚙</button>
-      {#if showSettings}
-        <div class="settings-pop panel">
+    {/if}
+    {#if showSettings && (view?.room || DEV)}
+      <div class="settings-pop panel">
+        {#if view?.room}
+          {@const r = view.room}
+          {@const hostCtl = r.hostUid !== uid}
           <label>
             <input
               type="checkbox"
@@ -341,8 +396,9 @@
               <button class:active={$sortMode === m} onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button>
             {/each}
           </div>
-        </div>
-      {/if}
+        {/if}
+        {#if DEV}<DevPanel />{/if}
+      </div>
     {/if}
   </div>
   <button class="icon-btn" title={$t.rules} aria-label={$t.rules} onclick={() => (showRules = true)}>📖</button>
@@ -366,8 +422,23 @@
     <div class="connecting">
       {#if err}{err}{:else}<span class="spinner"></span>{$t.connection}{/if}
     </div>
+  {:else if replay && !session}
+    <!-- A newly opened file starts again at the first step. -->
+    {#key replay.match}
+      <Replay
+        match={replay.match}
+        kjn={replay.kjn}
+        at={replay.at}
+        seat={replay.seat}
+        names={replay.names}
+        label={replay.label}
+        error={err}
+        onopenfile={onOpenFile}
+        onclose={() => ((replay = null), (err = ''))}
+      />
+    {/key}
   {:else if !session}
-    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} />
+    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} onreplay={onReplay} />
   {:else if !view || !view.room}
     <!-- Attaching, or the room doc just vanished — teardown runs in the
          effect; never mount Home here or the invite view flashes. -->

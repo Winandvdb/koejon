@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n'
-  import type { BoomkeMark } from '../engine'
+  import { START_LINES, type BoomkeMark } from '../engine'
 
   let {
     marks,
@@ -14,8 +14,27 @@
 
   /** Collapsed during play; opens automatically when a hand is scored. */
   let open = $state(false)
+  /** Player closed the auto-opened boomke; resets when play continues. */
+  let dismissed = $state(false)
   const scoring = $derived(phase === 'SCORED' || phase === 'GAME_OVER')
-  const expanded = $derived(open || scoring)
+  const expanded = $derived(open || (scoring && !dismissed))
+
+  $effect(() => {
+    if (!scoring) {
+      open = false
+      dismissed = false
+    }
+  })
+
+  const toggle = () => {
+    if (expanded) {
+      open = false
+      dismissed = scoring
+    } else {
+      open = true
+      dismissed = false
+    }
+  }
 
   const STEP = 15
   const TOP = 30
@@ -34,7 +53,8 @@
   /** Lines climb the ladder; koeis hang as tails at the bottom of the boom. */
   const lines = $derived(sides.map((ms) => ms.filter((m) => m.t === 'line')))
   const koeis = $derived(sides.map((ms) => ms.filter((m) => m.t === 'koei')))
-  const n = $derived(Math.max(lines[0].length, lines[1].length, 13))
+  // Each team has one line mark per start line, so the marks give the match's tree length.
+  const n = $derived(Math.max(lines[0].length, lines[1].length) || START_LINES)
   const kmax = $derived(Math.max(koeis[0].length, koeis[1].length))
   const H = $derived(TOP + n * STEP + 14 + (kmax > 0 ? KOEI_ZONE + (kmax - 1) * KOEI_ROW : 0))
   const y = (i: number) => TOP + (n - 1 - i) * STEP + 8
@@ -80,7 +100,7 @@
   const remaining = (side: 0 | 1) => sides[side].filter((m) => !m.crossed).length
 </script>
 
-<div class="boomke-wrap" class:scored={scoring}>
+<div class="boomke-wrap" class:scored={scoring && expanded}>
   {#if expanded}
     <div class="boomke">
       <div class="boomke-labels">
@@ -126,10 +146,19 @@
       />
     {/each}
       </svg>
+      {#if scoring}
+        <!-- the auto-opened boomke floats away from its corner chip, so it gets
+             its own button; the arrow points to the corner it shrinks back to -->
+        <button class="icon-btn tiny boomke-min" onclick={toggle} aria-label={$t.minimize}>
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2 2 L10 10 M10 4 V10 H4" />
+          </svg>
+        </button>
+      {/if}
     </div>
   {/if}
-  {#if !scoring}
-    <button class="boomke-chip" onclick={() => (open = !open)} aria-expanded={expanded}>
+  {#if !(scoring && expanded)}
+    <button class="boomke-chip" onclick={toggle} aria-expanded={expanded}>
       {$t.boomke} · {$t.wij} {remaining(0)} – {$t.zij} {remaining(1)}
     </button>
   {/if}

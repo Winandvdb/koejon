@@ -81,5 +81,6 @@ firestore-debug.log
 
 .idea/
 
-# Agent task worktrees (start-task skill)
+# Agent issue worktrees (start-issue skill)
 .worktrees/
+.vscode/settings.json

@@ -30,14 +30,17 @@ environment deviations. Each entry lists the chosen behavior.
   when a seated player leaves mid-match, a bot silently takes over the seat so the
   match can finish; in the lobby the seat is simply cleared.
 - **Host disconnect detection** — clients flag "host left" when the room heartbeat is
-  older than 15 s (heartbeat written by the host every 5 s). No host migration (spec'd
-  limitation).
+  older than 45 s (heartbeat written by the host every 15 s, `HEARTBEAT_MS`). No host
+  migration (spec'd limitation).
 - **Match start** — the host can only start when all 4 seats are occupied (the game is
   defined for exactly 4 players). Any extra `start` intents are rejected.
 - **Seating** — the room creator is always seat 0 and host; joining players take the
   lowest free seat. Teams are fixed by seat parity ({0,2} vs {1,3}) per spec.
 - **20–20** — a draw: no lines erased, no Koei, and the next deal's level-1 stake
-  doubles (playing team needs >20; defenders win at ≤19).
+  goes to ×2 (playing team needs >20; defenders win at ≤19).
+- **Stake multiplier cap** — the level-1 stake is at most ×2 (owner decision,
+  2026-10-06). All-passed deals and 20-20 draws set it to ×2; consecutive events in
+  any mix keep it at ×2 instead of doubling again. Level-2 stakes are never multiplied.
 - **Deck between hands** — no reshuffle. Each won trick goes on its team's pile; the
   engine shuffles its 4 cards (seeded RNG), as a collected trick is rarely kept in
   play order. For the next deal, team 0's pile is put on top of team 1's pile, then
@@ -76,6 +79,17 @@ environment deviations. Each entry lists the chosen behavior.
   `localStorage`. They are view-only and do not affect the game.
 - **No log panel** — the event log stays in the state (used for bid bubbles) but
   is not rendered, per owner request.
+- **Match score** (personal statistics, #57) — a finished match gives the winning
+  team 13 and the losing team 13 minus the lines it still had to cross, Koeien
+  included, at least 0 (`matchScore`). Both players of a team get the team's score.
+- **Double and triple crosses** (#57) — a hand counts as a double or triple cross for
+  a team when the team really crossed 2 or 3 lines in it. The last hand of a match can
+  cross fewer lines than its stake: a stake of 2 with 1 line left is no double. A 20-20
+  draw counts as neither. A bid ("ik ga" or the dealer's trump choice) counts as won
+  only when the bidder's team wins the hand; a draw is not a win.
+- **With players or against bots** (#57) — the statistics count a match "with players"
+  when at least one seat other than the own seat was played by a human, also for part of
+  the match (`mixed`). When the three other seats were all bots, it counts "against bots".
 - **Invite links** — `?room=CODE` prefills the join field; the lobby shows a QR code and
   a copyable link.
 
@@ -89,12 +103,14 @@ environment deviations. Each entry lists the chosen behavior.
 - **Emulator auto-connect** — the app connects to the emulators when
   `VITE_USE_FIREBASE_EMULATOR=true` **or** when no `VITE_FIREBASE_*` config is present,
   so `npm run dev` works with zero configuration.
-- **Host-authoritative writes** — all state transitions are single batched writes by
-  the host (room public state + hand docs + `hands/host` + engine snapshot). Clients
-  only write their own `actions/{uid}` intent doc.
-- **Engine recovery** — the full engine state is persisted host-only under
-  `rooms/{code}/engine/state` so a host reload can resume a match; other clients cannot
-  read it (it contains all hands and the RNG state).
+- **Host-authoritative writes** — only the host publishes state: the room public
+  state plus one hand doc per human seat, in one batched write (over Firestore) or
+  one message per guest (over WebRTC). Clients only send intents (their own
+  `actions/{uid}` doc over Firestore).
+- **Engine recovery** — the full engine state stays on the host device, in
+  `localStorage` under `koejon-engine-{code}`, so a host reload can resume a match.
+  It never goes to Firestore, so other clients cannot read it (it contains all hands
+  and the RNG state).
 - **Bot dealer chooses blind** — a human dealer's hand doc is masked during bidding,
   so a bot dealer may not rate its hand for the dealer choice either. The bot picks a
   shown suit at random (≈70% play) instead of evaluating its cards.

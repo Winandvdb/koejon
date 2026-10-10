@@ -3,10 +3,16 @@ import { rngShuffle } from './rng'
 import type { Action, BoomkeMark, Card, State, Suit } from './types'
 import { START_LINES } from './types'
 
-const freshMarks = (): BoomkeMark[] =>
+const freshMarks = (startLines: number): BoomkeMark[] =>
   [0, 1].flatMap((team) =>
-    Array.from({ length: START_LINES }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
+    Array.from({ length: startLines }, () => ({ team, t: 'line' as const, crossed: false, batch: 0 })),
   )
+
+/** A finished match's score for `team`: 13 for the winner, and for the loser
+ *  13 minus the lines it still had to cross (Koeien included), at least 0. */
+export function matchScore(m: { lines: [number, number]; winner: number }, team: number): number {
+  return team === m.winner ? START_LINES : Math.max(0, START_LINES - m.lines[team])
+}
 
 export class IllegalActionError extends Error {
   constructor(msg: string) {
@@ -15,7 +21,8 @@ export class IllegalActionError extends Error {
   }
 }
 
-const teamOf = (seat: number) => seat % 2
+/** Teams are seats {0,2} and {1,3}. */
+export const teamOf = (seat: number) => seat % 2
 const leftOf = (seat: number) => (seat + 1) % 4
 /** The dealer's right neighbour cuts. */
 export const cutterOf = (dealer: number) => (dealer + 3) % 4
@@ -40,9 +47,10 @@ export function liftRange(s: State, seat: number): number[] {
 /**
  * Create a fresh match in phase LOBBY.
  * `drawers` optionally fixes which seat draws for each team
- * (default: lowest seat of each team).
+ * (default: lowest seat of each team). `startLines` is the boomke length
+ * per team; the line marks keep it for the whole match.
  */
-export function createMatch(seed: number, drawers?: [number, number]): State {
+export function createMatch(seed: number, drawers?: [number, number], startLines = START_LINES): State {
   return {
     phase: 'LOBBY',
     rng: seed | 0,
@@ -75,8 +83,8 @@ export function createMatch(seed: number, drawers?: [number, number]): State {
     tricksWon: [0, 0],
     piles: [[], []],
     points: [0, 0],
-    lines: [START_LINES, START_LINES],
-    marks: freshMarks(),
+    lines: [startLines, startLines],
+    marks: freshMarks(startLines),
     koeien: [0, 0],
     lastResult: null,
     winner: null,
@@ -332,7 +340,7 @@ function scoreHand(s: State): void {
   const playing = teamOf(s.bidder!)
   const defending = 1 - playing
   // Exactly 20-20 is a draw: nobody erases lines, no Koei is added, and the
-  // stake on the next deal's first turned card doubles.
+  // stake on the next deal's first turned card doubles — capped at ×2.
   const draw = s.points[playing] === 20
   const winner = draw ? defending : s.points[playing] > 20 ? playing : defending
   const kapot = !draw && s.tricksWon[winner] === 6
@@ -376,7 +384,7 @@ function scoreHand(s: State): void {
     multiplier: s.multiplier,
   }
   pushLog(s, draw ? { t: 'tied' } : { t: 'score', team: winner, n: erased })
-  s.multiplier = draw ? s.multiplier * 2 : 1
+  s.multiplier = draw ? Math.min(s.multiplier * 2, 2) : 1
   if (!draw && s.lines[winner] === 0) {
     s.winner = winner
     s.phase = 'GAME_OVER'
@@ -516,7 +524,7 @@ export function apply(state: State, action: Action): State {
 }
 
 /** True when `seat` may not look at their cards (dealer during bidding). */
-export function handMasked(s: State, seat: number): boolean {
+function handMasked(s: State, seat: number): boolean {
   return (
     seat === s.dealer &&
     (s.phase === 'BIDDING_R1' || s.phase === 'BIDDING_R2' || s.phase === 'DEALER_CHOICE')

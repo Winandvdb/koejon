@@ -1,8 +1,10 @@
 <script lang="ts">
   import { fly, scale } from 'svelte/transition'
   import type { Action, Card } from '../engine'
-  import { turnedVisible } from '../engine'
+  import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
+  import { DEAL_FLY, DEAL_MS, DEAL_STEP, deckStack, pairOfCard } from '../lib/deckstack'
+  import type { StackPart } from '../lib/deckstack'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
@@ -31,9 +33,9 @@
   const pub = $derived(room.pub!)
   const seats = $derived(room.seats)
   const my = $derived(view.mySeat)
-  const myTeam = $derived(my % 2)
+  const myTeam = $derived(teamOf(my))
   const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
-  const playingTeam = $derived(pub.bidder === null ? null : pub.bidder % 2)
+  const playingTeam = $derived(pub.bidder === null ? null : teamOf(pub.bidder))
 
   const name = (i: number) => seats[i]?.name ?? `#${i}`
   /** Relative position: 0 bottom (me), 1 left, 2 top, 3 right. */
@@ -46,6 +48,21 @@
     { x: 180, y: 0 },
   ]
   const TILT = [-4, 3, -2, 5]
+  /** Each won trick lies clearly askew on the pile, so the tricks can be counted. The skew
+   *  differs per hand, team and trick, but is derived, not random: a redraw must not move
+   *  a card, and every client must see the same pile. Neighbours turn opposite ways. */
+  const pileSkew = (hand: number, team: number, k: number) => {
+    let h = Math.imul(hand + 1, 0x9e3779b1) ^ Math.imul(team + 1, 0x85ebca6b) ^ Math.imul(k + 1, 0xc2b2ae35)
+    const next = () => {
+      h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d)
+      h = Math.imul(h ^ (h >>> 12), 0x297a2d39)
+      return ((h ^= h >>> 15) >>> 0) / 2 ** 32
+    }
+    const turn = (k % 2 ? 1 : -1) * (6 + next() * 14)
+    const x = k * 0.12 + (next() - 0.5) * 0.14
+    const y = -k * 0.16 + (next() - 0.5) * 0.1
+    return `translate: calc(var(--cw) * ${x.toFixed(3)}) calc(var(--cw) * ${y.toFixed(3)}); rotate: ${turn.toFixed(1)}deg`
+  }
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
@@ -88,6 +105,95 @@
   )
   /** Lingered cards fly out towards the seat that won the trick. */
   const lingerExit = $derived(DIR[rel(pub.leader)])
+  /** Won tricks on a team's pile. A trick still lingering on the felt joins the
+   *  pile when it flies off; after the last trick it joins at once for the score. */
+  const pileCount = (team: number) =>
+    pub.tricksWon[team] -
+    (pub.phase === 'PLAYING' && lingerTrick !== null && teamOf(pub.leader) === team ? 1 : 0)
+
+  /** At the cut, the packets that form the next deck slide to the middle one by
+   *  one, then square up. The cut panel waits for it; the deck stays until the deal. */
+  const stack = $derived(deckStack(pub))
+  const STACK_FLY = 380
+  const STACK_STEP = 260
+  const STACK_SQUARE = 200
+  /** The finished deck lies alone for a moment before the cut panel covers the felt. */
+  const STACK_HOLD = 600
+  /** Where each trick pile lay, in card widths from the middle: beside my partner
+   *  (ours) or under my left opponent (theirs). Hands come in like their cards (DIR). */
+  const PILE_FROM = [
+    { x: 0.6, y: -2 },
+    { x: -2.1, y: 0.8 },
+  ]
+  // Old browsers have no matchMedia.
+  const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  const stackLand = $derived(stack ? (stack.length - 1) * STACK_STEP + STACK_FLY : 0)
+  /** The deck has squared up: the cut panel and the deal wait for it. */
+  const stackDone = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE : 0)
+  const cutDelay = $derived(stackDone && stackDone + STACK_HOLD)
+  const stackFrom = (part: StackPart) => {
+    if (part.from === 'hand') return `--fx: ${DIR[rel(part.seat)].x}px; --fy: ${DIR[rel(part.seat)].y}px`
+    const p = PILE_FROM[part.team === myTeam ? 0 : 1]
+    return `--fx: calc(var(--card) * ${p.x}); --fy: calc(var(--card) * ${p.y})`
+  }
+  /** Cards already on the deck below packet `i`: each card lies a hair higher. */
+  const stackBelow = (i: number) => stack!.slice(0, i).reduce((n, p) => n + p.count, 0)
+
+  /** The deal. In DEALING the deck slides to the dealer once this felt's stack
+   *  has formed. When the engine has dealt (`deal` last in the log), the real
+   *  hand cards fly from there straight into the hands, per two, in the order
+   *  the engine dealt them (`pairOfCard`). The host waits for it before the
+   *  first bid; a blind dealer gets backs, as always during the bidding. */
+  const DEAL_PAUSE = 150
+  /** Where each hand lies, in card widths from the middle, seen from my seat. */
+  const HAND_AT = [
+    { x: 0, y: 2.6 },
+    { x: -2.4, y: 0 },
+    { x: 0, y: -2.2 },
+    { x: 2.4, y: 0 },
+  ]
+  /** The deck lies in front of the dealer, three quarters of the way from the middle. */
+  const deckAt = $derived({ x: HAND_AT[rel(pub.dealer)].x * 0.75, y: HAND_AT[rel(pub.dealer)].y * 0.75 })
+  const dealing = $derived(pub.phase === 'DEALING')
+  const freshDeal = $derived(pub.phase === 'BIDDING_R1' && pub.log.at(-1)?.t === 'deal')
+  /** Client clock: when the stack on this felt has formed (0: no stack). */
+  let stackReadyAt = 0
+  let deckOut = $state(false)
+  let dealOver = $state(false)
+  $effect(() => {
+    if (!stack) stackReadyAt = 0
+    else if (!stackReadyAt) stackReadyAt = performance.now() + stackDone
+  })
+  $effect(() => {
+    if (!dealing) {
+      deckOut = false
+      return
+    }
+    const timer = setTimeout(
+      () => (deckOut = true),
+      reducedMotion ? 0 : Math.max(DEAL_PAUSE, stackReadyAt - performance.now()),
+    )
+    return () => clearTimeout(timer)
+  })
+  $effect(() => {
+    if (!freshDeal) {
+      dealOver = false
+      return
+    }
+    const timer = setTimeout(() => (dealOver = true), reducedMotion ? 0 : DEAL_MS)
+    return () => clearTimeout(timer)
+  })
+  /** The cards are still going out: the action buttons wait. */
+  const dealRunning = $derived(freshDeal && !dealOver)
+  /** Card `k` of `seat`'s dealt hand flies from the deck into its place when the
+   *  pair that brings it leaves the deck. */
+  const dealIn = (seat: number, k: number) => {
+    const to = HAND_AT[rel(seat)]
+    return (
+      `--d: ${pairOfCard(pub.dealer, seat, k) * DEAL_STEP}ms; --fly: ${DEAL_FLY}ms; ` +
+      `--fx: calc(var(--card) * ${deckAt.x - to.x}); --fy: calc(var(--card) * ${deckAt.y - to.y})`
+    )
+  }
 
   /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
@@ -123,7 +229,11 @@
   let manual = $state({ hand: -1, order: [] as string[] })
   const displayHand = $derived(
     view.hand &&
-      arrangeHand(view.hand, $sortMode, manual.hand === pub.handNumber ? manual.order : []),
+      arrangeHand(
+        shownHand(pub, my, view.hand),
+        $sortMode,
+        manual.hand === pub.handNumber ? manual.order : [],
+      ),
   )
   const manualSort = $derived($sortMode === 'manual')
   /** Ask once, after the dealer is chosen and the cards are in the hand. */
@@ -217,7 +327,7 @@
 
 {#snippet nameplate(seat: number)}
   {@const s: SeatInfo | null = seats[seat]}
-  {@const side = playingTeam !== null && playing ? (seat % 2 === playingTeam ? 'decl' : 'def') : null}
+  {@const side = playingTeam !== null && playing ? (teamOf(seat) === playingTeam ? 'decl' : 'def') : null}
   <div class="nameplate" class:active={acting(seat)} class:decl={side === 'decl'} class:def={side === 'def'}>
     <span class="avatar">{s?.bot ? '🤖' : name(seat).slice(0, 1).toUpperCase()}</span>
     <span class="np-name">
@@ -225,7 +335,7 @@
     </span>
     {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
     {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
-    {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[seat % 2]}</span>{/if}
+    {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[teamOf(seat)]}</span>{/if}
     <div class="bubbles" class:has-say={!!sayings[seat]}>
       {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
       {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
@@ -245,11 +355,46 @@
 
 {#snippet turnedAt(seat: number)}
   {#if showTurned && seat === pub.dealer && pub.turned}
+    <!-- The dealer's last pair: dealt card 6 lies face up, card 5 face down. -->
     <div class="turned-at" title={$t.turnedCard}>
-      <span class="mini-card"><CardView card={pub.turned.first} /></span>
-      <span class="mini-card" in:scale={{ duration: 250 }}>
+      <span class="mini-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, 5) : undefined}>
+        <CardView card={pub.turned.first} />
+      </span>
+      <span
+        class="mini-card"
+        class:dealt={freshDeal}
+        style={freshDeal ? dealIn(seat, 4) : undefined}
+        in:scale={{ duration: freshDeal ? 0 : 250 }}
+      >
         <CardView card={pub.turned.secondUp ? pub.turned.second : null} />
       </span>
+    </div>
+  {/if}
+{/snippet}
+
+{#snippet trickPile(team: number)}
+  {#if playing && pileCount(team) > 0}
+    {@const label = `${teamName(team)} — ${$t.tricks}: ${pileCount(team)}`}
+    <!-- The ring repeats the team colour of the nameplates. The wrapper has its
+         own transition: a local one on the first card would not play. -->
+    <div
+      class="trick-pile"
+      class:decl={team === playingTeam}
+      class:def={team !== playingTeam}
+      role="img"
+      title={label}
+      aria-label={label}
+      in:scale={{ start: 0.6, duration: 220 }}
+    >
+      {#each Array(pileCount(team)) as _, k (k)}
+        <div
+          class="pile-card"
+          style={pileSkew(pub.handNumber, team, k)}
+          in:scale={{ start: 0.6, duration: 220 }}
+        >
+          <div class="card-back"></div>
+        </div>
+      {/each}
     </div>
   {/if}
 {/snippet}
@@ -259,8 +404,12 @@
     {@render nameplate(seat)}
     <div class="opp-hand" class:vertical={pos !== 2} class:horizontal={pos === 2}>
       {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
-        <div class="opp-card"><div class="card-back"></div></div>
+        <div class="opp-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, k) : undefined}>
+          <div class="card-back"></div>
+        </div>
       {/each}
+      <!-- One pile per team, right by the hand: ours at my partner, theirs at the left opponent. -->
+      {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
     </div>
     {@render turnedAt(seat)}
   </div>
@@ -300,6 +449,47 @@
               </div>
             {/each}
           {/if}
+          {#if stack && !deckOut}
+            <div class="deck-stack" style="--fly: {STACK_FLY}ms; --square: {STACK_SQUARE}ms">
+              {#each stack as part, i (i)}
+                <div
+                  class="stack-part"
+                  class:decl={part.from === 'pile' && part.team === playingTeam}
+                  class:def={part.from === 'pile' && part.team !== playingTeam}
+                  style="{stackFrom(part)}; --d: {i * STACK_STEP}ms"
+                >
+                  {#each Array(part.count) as _, k (k)}
+                    <div
+                      class="pile-card"
+                      style="{part.from === 'pile' ? `${pileSkew(pub.handNumber, part.team, k)}; ` : ''}--k: {stackBelow(i) + k}; --d: {stackLand}ms"
+                    >
+                      <div class="card-back"></div>
+                    </div>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if (dealing && deckOut) || dealRunning}
+            <!-- The deck at the dealer, one layer per pair, the first pair on top:
+                 each layer goes when its pair leaves. A first deal has no stacked
+                 deck to take over, so its deck comes in. -->
+            <div
+              class="deck-stack deal"
+              style="--dx: calc(var(--card) * {deckAt.x}); --dy: calc(var(--card) * {deckAt.y})"
+              in:scale={{ start: 0.6, duration: stack ? 0 : 220 }}
+            >
+              {#each Array(12) as _, j (j)}
+                <div
+                  class="deal-layer"
+                  class:going={freshDeal}
+                  style="--k: {11 - j}; --d: {j * DEAL_STEP}ms; z-index: {12 - j}"
+                >
+                  <div class="pile-card"><div class="card-back"></div></div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -333,7 +523,7 @@
             {/if}
           </div>
         {:else if pub.phase === 'CUTTING'}
-          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+          <div class="panel overlay-panel" in:scale={{ duration: 200, delay: cutDelay }}>
             <strong>{name(pub.dealer)} {$t.isDealer}</strong>
             {#if liftSizes.length > 0}
               <h3>{$t.cutTitle}</h3>
@@ -392,7 +582,9 @@
         <!-- Action buttons float on the felt, raised like table buttons.
              On the first deal the sort question comes first: it holds
              back the bid buttons until the player has chosen. -->
-        {#if askSort}
+        {#if dealRunning}
+          <!-- The cards are still going out: nothing to choose yet. -->
+        {:else if askSort}
           <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.sortAsk}</span>
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
             {#each SORT_MODES as m (m)}
@@ -418,12 +610,12 @@
               <button class="fab troef" onclick={() => send({ type: 'troefke', seat: my })}>{$t.troefkeAsk}</button>
             {/if}
             {#if has('ack')}
-              <button class="fab primary" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
+              <button class="fab primary pulse" onclick={() => send({ type: 'ack', seat: my })}>{$t.seen}</button>
             {/if}
           </div>
         {:else if has('bid')}
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
-            <button class="fab primary" onclick={() => send({ type: 'bid', seat: my, play: true })}>
+            <button class="fab primary pulse" onclick={() => send({ type: 'bid', seat: my, play: true })}>
               {$t.play}
             </button>
             <button class="fab" onclick={() => send({ type: 'bid', seat: my, play: false })}>
@@ -487,7 +679,9 @@
       >
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
-            <div class="hand-card"><div class="card-back"></div></div>
+            <div class="hand-card" class:dealt={freshDeal} style={freshDeal ? dealIn(my, k) : undefined}>
+              <div class="card-back"></div>
+            </div>
           {/each}
         {:else}
           {#each displayHand ?? [] as c, i (`${pub.handNumber}-${c.s}${c.r}`)}
@@ -501,7 +695,9 @@
               data-card={cardKey(c)}
               disabled={!manualSort && !canPlay(c)}
               aria-disabled={!canPlay(c)}
-              in:fly={{ y: -160, duration: 320, delay: 120 + i * 45 }}
+              class:dealt={freshDeal}
+              style={freshDeal ? dealIn(my, view.hand.findIndex((h) => cardKey(h) === cardKey(c))) : undefined}
+              in:fly={{ y: -160, duration: freshDeal ? 0 : 320, delay: 120 + i * 45 }}
               onclick={() => {
                 if (canPlay(c) && !justDragged) send({ type: 'play', seat: my, card: c })
               }}

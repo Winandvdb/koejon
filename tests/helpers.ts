@@ -1,17 +1,81 @@
-import { apply, createMatch } from '../src/engine'
+import { apply, createMatch, pendingSeats, rngNext } from '../src/engine'
 import type { Card, State, Suit, TrickCard } from '../src/engine'
+import { botAction } from '../src/bots/bot'
+import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
+import type { KeyValueStore } from '../src/lib/link-local'
 
 export const C = (s: Suit, r: Card['r']): Card => ({ s, r })
 
-/** Deterministic float source for bots/tests. */
+/** Deterministic float source for bots/tests: the engine's own mulberry32. */
 export function mulberry(seed: number): () => number {
-  let a = seed | 0
+  const holder = { rng: seed }
+  return () => rngNext(holder)
+}
+
+/** A finished bot match: final state and its KJN text. */
+export function finishedMatch(seed: number): { final: State; kjn: string } {
+  let s = createMatch(seed)
+  const rand = mulberry(seed * 31 + 7)
+  const rec = newKjn('test', ['human', 'human', 'bot-normal', 'bot-normal'])
+  while (s.phase !== 'GAME_OVER') {
+    const a = botAction(s, pendingSeats(s)[0], rand)
+    const next = apply(s, a)
+    recordAction(rec, s, a, next)
+    s = next
+  }
+  return { final: s, kjn: serializeKjn(rec) }
+}
+
+/** In-memory stand-in for localStorage. */
+export function memoryStore(): KeyValueStore {
+  const m = new Map<string, string>()
+  return {
+    getItem: (k) => m.get(k) ?? null,
+    setItem: (k, v) => void m.set(k, v),
+    removeItem: (k) => void m.delete(k),
+  }
+}
+
+/** Act as a browser with cookies blocked: even reading localStorage throws,
+ *  and Web Locks deny every request. Returns the undo. */
+export function blockStorage(): () => void {
+  const before = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    get() {
+      throw new DOMException('The operation is insecure.', 'SecurityError')
+    },
+  })
+  const unlock = failLocks('SecurityError')
   return () => {
-    a |= 0
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    if (before) Object.defineProperty(globalThis, 'localStorage', before)
+    else delete (globalThis as { localStorage?: Storage }).localStorage
+    unlock()
+  }
+}
+
+/** Every Web Lock request fails with this error: 'SecurityError' as with site
+ *  data blocked, 'TimeoutError' as when another tab holds the lock. Replaces
+ *  the whole navigator, since older Node has no locks (or no navigator).
+ *  Returns the undo. */
+export function failLocks(name: string): () => void {
+  const before = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: { locks: { request: () => Promise.reject(new DOMException('Lock failed.', name)) } },
+  })
+  return () => {
+    if (before) Object.defineProperty(globalThis, 'navigator', before)
+    else delete (globalThis as { navigator?: Navigator }).navigator
+  }
+}
+
+/** Wait until `fn` holds. */
+export async function until(fn: () => boolean, timeout = 30_000): Promise<void> {
+  const t0 = Date.now()
+  while (!fn()) {
+    if (Date.now() - t0 > timeout) throw new Error('timeout')
+    await new Promise((r) => setTimeout(r, 5))
   }
 }
 
@@ -109,7 +173,7 @@ export function dealtState(seed: number, dealer = 0): State {
   let guard = 100
   while (s.dealerDraw && s.dealerDraw.pending !== 2 && guard-- > 0) {
     const dd = s.dealerDraw
-    const seat = dd.drawer[dd.pending]
+    const seat = dd.drawer[dd.pending as 0 | 1]
     s = apply(s, { type: 'draw', seat, n: 6 })
   }
   if (!s.dealerDraw || s.dealerDraw.pending !== 2) throw new Error('draw did not finish')

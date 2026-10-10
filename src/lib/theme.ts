@@ -10,7 +10,8 @@ function load(): Theme {
   } catch {
     // Private mode: fall through to the OS preference.
   }
-  return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  // Old browsers and Node have no matchMedia.
+  return globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
 export const theme = writable<Theme>(load())

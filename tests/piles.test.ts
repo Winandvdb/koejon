@@ -91,6 +91,24 @@ describe('trick piles', () => {
     expect(dealtDeck(s)).toEqual(cut(thrownIn, 9))
   })
 
+  it('shows the pile size per team: it grows with each won trick and clears at the next deal', () => {
+    let s = lastTrickState({
+      trick: [
+        { seat: 1, card: C('S', 'A') },
+        { seat: 2, card: C('S', '10') },
+        { seat: 3, card: C('S', 'K') },
+      ],
+      turn: 0,
+      card: C('S', '9'),
+    })
+    s = { ...s, trump: 'H' }
+    const before = toPublic(s).tricksWon
+    s = apply(s, { type: 'play', seat: 0, card: C('S', '9') })
+    expect(toPublic(s).tricksWon).toEqual([before[0], before[1] + 1])
+    s = cutAndDeal(apply(s, { type: 'next', seat: 0 }), 7)
+    expect(toPublic(s).tricksWon).toEqual([0, 0])
+  })
+
   it('keeps the piles private', () => {
     const pub = toPublic(playingState({ piles: [[C('S', 'A')], []] }))
     expect(JSON.stringify(pub)).not.toContain('piles')

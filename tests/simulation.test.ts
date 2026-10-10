@@ -7,13 +7,13 @@ import {
   trickWinnerIndex,
 } from '../src/engine'
 import type { State } from '../src/engine'
-import { botAction } from '../src/bots/bot'
+import { botAction, BOT_LEVELS, type BotLevel } from '../src/bots/bot'
 import { mulberry } from './helpers'
 
 const MATCHES = 60
 const STEP_CAP = 20000
 
-function runMatch(seed: number): { state: State; steps: number; hands: number } {
+function runMatch(seed: number, level: BotLevel): { state: State; steps: number; hands: number } {
   let s = createMatch(seed)
   const rand = mulberry(seed * 7919 + 13)
   let steps = 0
@@ -24,7 +24,7 @@ function runMatch(seed: number): { state: State; steps: number; hands: number } 
     const seats = pendingSeats(s)
     if (seats.length === 0) throw new Error(`match ${seed} stalled in ${s.phase}`)
     // Act with the first pending seat (others wait for the next step).
-    const a = botAction(s, seats[0], rand)
+    const a = botAction(s, seats[0], rand, level)
     // No-underbuy invariant: a lower trump is never played while the seat can
     // follow the led suit and a trump already lies in the trick.
     if (a.type === 'play' && s.trick.length > 0) {
@@ -65,11 +65,11 @@ function runMatch(seed: number): { state: State; steps: number; hands: number } 
 }
 
 describe('bot-vs-bot simulation', () => {
-  it(`terminates ${MATCHES} complete matches with all invariants`, () => {
+  it.each(BOT_LEVELS)(`terminates ${MATCHES} complete matches of %s bots with all invariants`, (level) => {
     let totalHands = 0
     const wins = [0, 0]
     for (let seed = 1; seed <= MATCHES; seed++) {
-      const { state, hands } = runMatch(seed)
+      const { state, hands } = runMatch(seed, level)
       totalHands += hands
       expect(state.winner).not.toBeNull()
       wins[state.winner!]++

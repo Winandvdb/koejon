@@ -48,9 +48,9 @@
   - If all 3 pass again → the dealer chooses: play with either of the two shown suits as
     trump, or pass.
 - If the deal is fully passed → the player left of the dealer becomes the new dealer and the
-  stake on the first turned card doubles. Consecutive passed deals keep doubling
-  (×2, ×4, ...). The stake on the second turned card never changes. Once a hand is played
-  and scored, the stake returns to normal.
+  stake on the first turned card becomes ×2. Consecutive passed deals and draws keep the
+  stake at ×2: it never doubles further. The stake on the second turned card never changes.
+  Once a hand is played and scored, the stake returns to normal.
 
 ## Playing
 
@@ -76,7 +76,7 @@
 - The playing team is the team of the player who said "play" (or of the dealer if the dealer
   chose). The playing team wins the deal with more than 20 points. With 19 or fewer the
   defenders win. An exact 20-20 is a draw: nobody erases lines and no Koei is added, but
-  the stake on the next deal's first turned card doubles (as after an all-passed deal).
+  the stake on the next deal's first turned card becomes ×2 (as after an all-passed deal).
 - The winning team erases lines:
   - Deal played on the first turned card: 1 line × the stake.
   - Deal played on the second turned card: 2 lines (never multiplied).

@@ -1,7 +1,12 @@
 <script lang="ts">
   import { fly } from 'svelte/transition'
-  import { t } from '../lib/i18n'
+  import { lang, t } from '../lib/i18n'
+  import { readHistory, type HistoryEntry } from '../lib/history'
+  import { parseKjn, type SeatKind } from '../lib/kjn'
   import { appUrl } from '../lib/link-p2p'
+  import { CODE_LENGTH } from '../lib/room'
+  import { sumGroups, totalStats, type StatsGroup } from '../lib/stats'
+  import { safeStorage } from '../lib/storage'
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
   import type { BotLevel } from '../bots/bot'
@@ -12,17 +17,19 @@
     oncreate,
     onjoin,
     onsolo,
+    onreplay,
   }: {
     error?: string
     oncreate: (name: string) => void
     onjoin: (code: string, name: string) => void
     onsolo: (name: string, level: BotLevel) => void
+    onreplay: (entry: HistoryEntry) => void
   } = $props()
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
   const inviteCode = new URLSearchParams(location.search).get('room') ?? ''
-  let name = $state(localStorage.getItem('koejon-name') ?? '')
-  const savedLevel = localStorage.getItem('koejon-bot-level') as BotLevel | null
+  let name = $state(safeStorage.getItem('koejon-name') ?? '')
+  const savedLevel = safeStorage.getItem('koejon-bot-level') as BotLevel | null
   let botLevel = $state<BotLevel>(
     savedLevel && BOT_LEVELS.includes(savedLevel) ? savedLevel : 'normal',
   )
@@ -45,14 +52,61 @@
   ]
 
   function save() {
-    localStorage.setItem('koejon-name', name.trim())
+    safeStorage.setItem('koejon-name', name.trim())
   }
 
   function join(e: SubmitEvent) {
     e.preventDefault()
     if (online && name.trim() && code.trim()) onjoin(code.trim(), name.trim())
   }
+
+  const kept = readHistory()
+  const groups = totalStats(kept)
+  const all = sumGroups(groups)
+  let statsView = $state<'all' | StatsGroup>('all')
+  const VIEWS = ['all', 'players', 'bots'] as const
+  const viewName = $derived({ all: $t.statsAll, players: $t.statsPlayers, bots: $t.statsBots })
+  const stats = $derived(statsView === 'all' ? all : groups[statsView])
+  const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole))
+  const avgScore = $derived(stats.score / Math.max(1, stats.played))
+  const avgText = $derived(
+    avgScore.toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { maximumFractionDigits: 1 }),
+  )
+
+  /** The newest few; the statistics above keep the panel tall enough. */
+  const LIST_ROWS = 5
+  let showAll = $state(false)
+
+  /** Newest first, with winner and final lines read from the record. */
+  const matches = [...kept]
+    .reverse()
+    .map((e) => {
+      try {
+        const m = parseKjn(e.kjn)
+        return { e, winner: m.winner, lines: m.lines, seats: m.seats }
+      } catch {
+        return { e, winner: null, lines: null, seats: null }
+      }
+    })
+
+  const seatName = (e: HistoryEntry, i: number) => e.names[i] || `${$t.player} ${i + 1}`
+  /** The bot mark after a name: the level, or "partly" for a seat a bot took over. */
+  const botMark = (k: SeatKind | undefined) =>
+    k === 'mixed' ? $t.botPartly : k?.startsWith('bot-') ? lvlName[k.slice(4) as BotLevel] : null
+  const when = (ms: number) =>
+    new Date(ms).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })
 </script>
+
+{#snippet player(e: HistoryEntry, i: number, seats: SeatKind[] | null)}
+  {seatName(e, i)}{#if botMark(seats?.[i])}<span class="seat-bot">🤖 {botMark(seats?.[i])}</span>{/if}
+{/snippet}
+
+{#snippet num(n: number | string, label: string, tone = '', suffix = '')}
+  <div class="stat-num">
+    <b class={tone}>{n}{#if suffix}<small> {suffix}</small>{/if}</b>
+    <span>{label}</span>
+  </div>
+{/snippet}
 
 <svelte:window ononline={() => (online = true)} onoffline={() => (online = false)} />
 
@@ -89,6 +143,7 @@
       <button class="link-btn" onclick={backToHome}>← {$t.title}</button>
     </div>
   {:else}
+    <div class="home-cols">
     <div class="panel home-panel">
       <label class="field">
         <span>{$t.nickname}</span>
@@ -109,7 +164,7 @@
               class:on={botLevel === l}
               onclick={() => {
                 botLevel = l
-                localStorage.setItem('koejon-bot-level', l)
+                safeStorage.setItem('koejon-bot-level', l)
               }}>{lvlName[l]}</button
             >
           {/each}
@@ -119,10 +174,103 @@
       <form class="join-form" onsubmit={join}>
         <label class="field">
           <span>{$t.joinRoom}</span>
-          <input class="code-input" bind:value={code} placeholder={$t.codePh} maxlength="6" />
+          <!-- Not maxlength: it would cut a pasted " ABCDE" to " ABCD" before the trim. -->
+          <input
+            class="code-input"
+            bind:value={code}
+            placeholder={$t.codePh}
+            oninput={() => (code = code.trim().slice(0, CODE_LENGTH))}
+          />
         </label>
         <button class="btn" type="submit" disabled={!online || !name.trim() || !code.trim()}>{$t.joinRoom}</button>
       </form>
     </div>
+
+    <div class="panel home-panel">
+      {#if all.played > 0}
+        <h2>{$t.statsTitle}</h2>
+        <div class="lvl-seg" role="group" aria-label={$t.statsTitle}>
+          {#each VIEWS as v (v)}
+            <button class="lvl-opt" class:on={statsView === v} aria-pressed={statsView === v} onclick={() => (statsView = v)}
+              >{viewName[v]}</button
+            >
+          {/each}
+        </div>
+        {#if stats.played > 0}
+          {@render statCards()}
+        {:else}
+          <p class="muted">{$t.statsNoneInGroup}</p>
+        {/if}
+      {/if}
+      <h2 class:home-sub={all.played > 0}>{$t.playedMatches}</h2>
+      {#if matches.length === 0}
+        <p class="muted">{$t.noMatches}</p>
+      {:else}
+        <ul class="match-list">
+          {#each matches as { e, winner, lines, seats }, i (e.id)}
+            <li class:extra={!showAll && i >= LIST_ROWS}>
+              <div class="match-info">
+                <div class="match-meta small muted">
+                  <span>{when(e.finishedAt)}</span>
+                  {#if lines}<span>{$t.boomke} {lines[0]}–{lines[1]}</span>{/if}
+                </div>
+                <div class="match-teams">
+                  <span class:win={winner === 0}>{@render player(e, 0, seats)} &amp; {@render player(e, 2, seats)}</span>
+                  <span class="muted">–</span>
+                  <span class:win={winner === 1}>{@render player(e, 1, seats)} &amp; {@render player(e, 3, seats)}</span>
+                </div>
+              </div>
+              <button class="icon-btn match-replay" title={$t.replay} aria-label={$t.replay} onclick={() => onreplay(e)}>▶</button>
+            </li>
+          {/each}
+        </ul>
+        {#if matches.length > LIST_ROWS}
+          <button class="link-btn more-matches" onclick={() => (showAll = !showAll)}>
+            {showAll ? $t.showFewerMatches : `${$t.showAllMatches} (${matches.length})`}
+          </button>
+        {/if}
+      {/if}
+    </div>
+    </div>
   {/if}
 </div>
+
+{#snippet statCards()}
+  <div class="stat-cards">
+    <div class="stat-card">
+      <div class="stat-head"><h3>{$t.statGames}</h3><span>{pct(stats.won, stats.played)}{$t.statWonPct}</span></div>
+      <div class="stat-nums">
+        {@render num(stats.played, $t.statPlayed)}
+        {@render num(stats.won, $t.statWon, 'good')}
+        {@render num(stats.played - stats.won, $t.statLost, 'bad')}
+      </div>
+      <div class="stat-bar lost" aria-hidden="true"><i class="good" style="width: {pct(stats.won, stats.played)}%"></i></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-head"><h3>{$t.statScore}</h3></div>
+      <div class="stat-nums">
+        {@render num(stats.score, $t.statTotal)}
+        {@render num(avgText, $t.statAvg, '', '/ 13')}
+      </div>
+      <div class="stat-bar" aria-hidden="true"><i class="gold" style="width: {pct(avgScore, 13)}%"></i></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-head">
+        <h3>{$t.statBids}</h3>
+        {#if stats.bidsMade > 0}<span>{pct(stats.bidsWon, stats.bidsMade)}{$t.statWonPct}</span>{/if}
+      </div>
+      <div class="stat-nums">
+        {@render num(stats.bidsMade, $t.statBidsMade)}
+        {@render num(stats.bidsWon, $t.statBidsWon, 'good')}
+      </div>
+      <div class="stat-bar" aria-hidden="true"><i class="good" style="width: {pct(stats.bidsWon, stats.bidsMade)}%"></i></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-head"><h3>{$t.statCrosses}</h3></div>
+      <div class="stat-nums">
+        {@render num(stats.doubles, $t.statDoubles)}
+        {@render num(stats.triples, $t.statTriples)}
+      </div>
+    </div>
+  </div>
+{/snippet}

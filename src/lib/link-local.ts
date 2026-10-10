@@ -46,8 +46,7 @@ export function localLinks(
       if (!saved) throw new Error('room-not-found')
       saved = { room: { ...saved.room, ...update, heartbeat: Date.now() }, hand: hands.get(uid) ?? null }
       save()
-      events?.room(saved.room)
-      events?.hand(saved.hand)
+      events?.state(saved.room, saved.hand)
     },
     heartbeat: () => {},
     destroy: async () => {
@@ -63,8 +62,8 @@ export function localLinks(
   const guest: GuestLink = {
     start: (ev) => {
       events = ev
-      ev.room(saved?.room ?? null)
-      ev.hand(saved?.hand ?? null)
+      if (saved) ev.state(saved.room, saved.hand)
+      else ev.room(null)
     },
     send: async (intent) => {
       if (!intentCb) throw new Error('host-not-attached')

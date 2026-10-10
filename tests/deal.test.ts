@@ -54,7 +54,7 @@ describe('dealer rotation', () => {
   })
 
   it('moves to the left neighbour on an all-passed deal and sets multiplier to 2', () => {
-    let s = {
+    let s: State = {
       ...dealtState(5, 0),
       phase: 'DEALER_CHOICE' as const,
       turned: { first: C('H', '9'), second: C('S', 'K'), secondUp: true },
@@ -97,6 +97,22 @@ describe('cut', () => {
     expect(s2.piles).toEqual([[...stacked.slice(20), ...stacked.slice(0, 20)], []])
     expect(legalActions(s2, 1)).toEqual([{ type: 'deal', seat: 1 }])
   })
+
+  it('deals per two, clockwise from the left of the dealer, from the top of the cut deck', () => {
+    for (const dealer of [0, 1, 2, 3]) {
+      const s = apply({ ...cutting(), dealer }, { type: 'cut', seat: (dealer + 3) % 4, n: 9 })
+      const deck = s.piles[0]
+      const dealt = apply(s, { type: 'deal', seat: dealer })
+      // Left neighbour, partner, right neighbour, dealer: 2 cards each, three times.
+      const left = (dealer + 1) % 4
+      for (let round = 0; round < 3; round++) {
+        for (let k = 0; k < 4; k++) {
+          const top = 8 * round + 2 * k
+          expect(dealt.hands[(left + k) % 4].slice(2 * round, 2 * round + 2)).toEqual(deck.slice(top, top + 2))
+        }
+      }
+    }
+  })
 })
 
 describe('createMatch', () => {
@@ -105,5 +121,11 @@ describe('createMatch', () => {
     expect(s.phase).toBe('LOBBY')
     expect(s.lines).toEqual([13, 13])
     expect(s.multiplier).toBe(1)
+  })
+
+  it('takes a shorter tree length', () => {
+    const s = createMatch(1, undefined, 2)
+    expect(s.lines).toEqual([2, 2])
+    for (const team of [0, 1]) expect(s.marks.filter((m) => m.team === team && m.t === 'line')).toHaveLength(2)
   })
 })

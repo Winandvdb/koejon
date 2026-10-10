@@ -1,11 +1,28 @@
-import { get } from 'svelte/store'
-import { describe, expect, test } from 'vitest'
-import { usage } from '../src/lib/fs'
+import * as firestore from 'firebase/firestore'
+import { describe, expect, test, vi } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
+import { seededRandom } from '../src/lib/seed'
+import { safeStorage } from '../src/lib/storage'
+import { blockStorage, failLocks, memoryStore, until } from './helpers'
+
+// Spies on every Firestore read and write the app uses, so a test can prove
+// that solo never calls one.
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('firebase/firestore')>()
+  return {
+    ...fs,
+    getDoc: vi.fn(fs.getDoc),
+    setDoc: vi.fn(fs.setDoc),
+    updateDoc: vi.fn(fs.updateDoc),
+    deleteDoc: vi.fn(fs.deleteDoc),
+    writeBatch: vi.fn(fs.writeBatch),
+    onSnapshot: vi.fn(fs.onSnapshot),
+  }
+})
 
 const UID = 'me'
 
@@ -16,20 +33,12 @@ function deepProxy<T>(v: T): T {
   return new Proxy(copy, {}) as T
 }
 
-function memoryStore(): KeyValueStore {
-  const m = new Map<string, string>()
-  return {
-    getItem: (k) => m.get(k) ?? null,
-    setItem: (k, v) => void m.set(k, v),
-    removeItem: (k) => void m.delete(k),
-  }
-}
-
 async function open(
   storage: KeyValueStore,
   fresh: boolean,
   hostOpts: HostOptions = {},
   drive = true,
+  ownRand: () => number = Math.random,
 ) {
   const links = localLinks(UID, storage, fresh ? newRoomDoc(SOLO_CODE, UID, 'Me') : undefined)!
   const session = new RoomSession(SOLO_CODE, UID, links.guest, links.host)
@@ -38,6 +47,7 @@ async function open(
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,
+    dealLingerMs: 0,
     ...hostOpts,
   })
   host.onError = (e) => {
@@ -49,22 +59,15 @@ async function open(
     latest = v
     const pub = v.room?.pub
     if (!pub || !v.state || pub.phase === 'LOBBY' || pub.phase === 'GAME_OVER') return
-    if (drive && pub.actionSeats.includes(v.mySeat)) host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat) }))
+    if (drive && pub.actionSeats.includes(v.mySeat))
+      host.submit(deepProxy({ kind: 'act', action: botAction(v.state, v.mySeat, ownRand) }))
   })
   const close = () => {
     unsub()
     host.dispose()
     session.dispose()
   }
-  return { host, view: () => latest, close }
-}
-
-async function until(fn: () => boolean, timeout = 30_000): Promise<void> {
-  const t0 = Date.now()
-  while (!fn()) {
-    if (Date.now() - t0 > timeout) throw new Error('timeout')
-    await new Promise((r) => setTimeout(r, 5))
-  }
+  return { host, session, view: () => latest, close }
 }
 
 describe('offline solo', () => {
@@ -91,7 +94,92 @@ describe('offline solo', () => {
     expect(localLinks(UID, storage)).toBeNull()
     expect(storage.getItem(`koejon-engine-${SOLO_CODE}`)).toBeNull()
     // A whole solo match, reload included, never touched Firestore.
-    expect(get(usage)).toEqual({ reads: 0, writes: 0 })
+    const { getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot } = firestore
+    for (const f of [getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot]) expect(f).not.toHaveBeenCalled()
+  }, 60_000)
+
+  test('plays on when the browser blocks localStorage', async () => {
+    const restore = blockStorage()
+    try {
+      // As the app wires it: safeStorage for the room, the host's default for the engine.
+      const g = await open(safeStorage, true, { storage: undefined })
+      g.host.addBot(1)
+      g.host.addBot(2)
+      g.host.addBot(3)
+      g.host.startGame()
+      await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 2)
+      // Nothing was kept, so a reload has no game to resume.
+      expect(localLinks(UID, safeStorage)).toBeNull()
+      await g.host.destroyRoom()
+      g.close()
+    } finally {
+      restore()
+    }
+  }, 30_000)
+
+  test('a second host tab for the same room is refused', async () => {
+    // The lock request times out: another tab holds it.
+    const restore = failLocks('TimeoutError')
+    try {
+      await expect(open(memoryStore(), true)).rejects.toThrow('host-elsewhere')
+    } finally {
+      restore()
+    }
+  })
+
+  /** Bot names and every card played in the first two hands. `toggle` flips a
+   *  display option (an extra commit) whenever a bot is about to play. */
+  async function playTwoHands(rand?: () => number, ownRand?: () => number, toggle = false): Promise<string[]> {
+    const g = await open(memoryStore(), true, { rand }, true, ownRand)
+    const log: string[] = []
+    const seen = new Set<string>()
+    const toggled = new Set<string>()
+    const unsub = g.session.view.subscribe((v) => {
+      const pub = v.room?.pub
+      if (!pub || pub.handNumber > 2) return
+      const botToPlay = pub.phase === 'PLAYING' && pub.actionSeats.some((s) => v.room!.seats[s]?.bot)
+      const at = `${pub.handNumber}/${pub.tricksPlayed}/${pub.trick.length}`
+      if (toggle && botToPlay && !toggled.has(at)) {
+        toggled.add(at)
+        g.host.setOption('score', toggled.size % 2 === 1)
+      }
+      for (const tc of pub.trick) {
+        const key = `${pub.handNumber}/${pub.tricksPlayed}/${tc.seat}${tc.card.s}${tc.card.r}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        log.push(key)
+      }
+    })
+    g.host.addBot(1)
+    g.host.addBot(2)
+    g.host.addBot(3)
+    g.host.startGame()
+    await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 3)
+    unsub()
+    log.unshift(g.view()!.room!.seats.map((s) => s?.name).join(','))
+    await g.host.destroyRoom()
+    g.close()
+    return log
+  }
+
+  test('a seeded host plays the same game every time', async () => {
+    const a = await playTwoHands(seededRandom(1), seededRandom(99))
+    const b = await playTwoHands(seededRandom(1), seededRandom(99))
+    expect(a.length).toBeGreaterThan(10)
+    expect(b).toEqual(a)
+    // The host's seed decides it, not our own seat's moves.
+    expect(await playTwoHands(seededRandom(2), seededRandom(99))).not.toEqual(a)
+  }, 60_000)
+
+  test('extra commits (a display toggle) do not change a seeded game', async () => {
+    const plain = await playTwoHands(seededRandom(1), seededRandom(99))
+    expect(await playTwoHands(seededRandom(1), seededRandom(99), true)).toEqual(plain)
+  }, 60_000)
+
+  test('without a seed, games differ', async () => {
+    const a = await playTwoHands()
+    const b = await playTwoHands()
+    expect(b).not.toEqual(a)
   }, 60_000)
 
   test('fired quotes ride on the room doc, so every client sees the same', async () => {
@@ -118,7 +206,7 @@ describe('offline solo', () => {
     g.host.addBot(3)
     g.host.startGame()
     await until(
-      () => (g.view()?.room?.quotes ?? []).some((q) => QUOTES.hurry.includes(q.text)),
+      () => (g.view()?.room?.quotes ?? []).some((q) => (QUOTES.hurry as readonly string[]).includes(q.text)),
     )
     await g.host.destroyRoom()
     g.close()
