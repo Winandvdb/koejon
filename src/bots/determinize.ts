@@ -172,6 +172,12 @@ function hiddenWorld(obs: Observation, rand: () => number): State {
       s.piles[winner].push(...take(trick.map((tc) => tc.card), 4, rand))
     }
   }
+  // A hand nobody played — all passed, or not dealt yet — leaves its cards
+  // thrown in on pile 0 (or still fresh out of the box). Nobody saw them,
+  // so any 24 do: without them `doDeal` would deal `undefined` cards.
+  if (played.length === 0 && obs.handCounts.every((n) => n === 0)) {
+    s.piles[0] = take(fullDeck(), 24, rand)
+  }
   if (obs.turned) {
     const { first, second, secondUp } = obs.turned
     // second === null means still face down: any card of the dealer's,

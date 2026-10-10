@@ -257,6 +257,24 @@ describe('sampleWorld', () => {
     }
   })
 
+  it('deals on after an all-passed hand', () => {
+    const s = playingState({ phase: 'CUTTING', trump: null, turned: null })
+    const rand = seededRandom(6)
+    let w = sampleWorld(observe(s, 1), rand)
+    w = apply(w, { type: 'cut', seat: (s.dealer + 3) % 4, n: 10 })
+    w = apply(w, { type: 'deal', seat: w.dealer })
+    expect(w.hands.flat()).toHaveLength(24)
+    expect(w.turned!.first).toBeDefined()
+    let guard = 500
+    while ((w.phase === 'PLAYING' || isBidding(w.phase)) && guard-- > 0) {
+      const seats = pendingSeats(w)
+      const seat = seats[Math.floor(rand() * seats.length)]
+      const legal = legalActions(w, seat)
+      w = apply(w, legal[Math.floor(rand() * legal.length)])
+    }
+    expect(isBidding(w.phase) || w.phase === 'PLAYING').toBe(false)
+  })
+
   it('samples 1000 mid-hand worlds fast enough for search', () => {
     const pos = POSITIONS.find((p) => p.played.length >= 8 && p.s.trick.length === 0)!
     const obs = observe(pos.s, pos.s.turn)
