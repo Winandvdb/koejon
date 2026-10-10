@@ -357,6 +357,62 @@ describe('bot card play', () => {
   })
 })
 
+describe('bot leads', () => {
+  const LEVELS = ['easy', 'normal', 'hard'] as const
+
+  /** PLAYING, seat 1 leads. `bidder` 1 = seat 1 bids, 3 = partner bids, 0 = defending. */
+  function leadState(hand: Card[], bidder: number, over: Partial<State> = {}): State {
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = hand
+    return playingState({ bidder, turn: 1, leader: 1, hands, ...over })
+  }
+
+  it('does not lead a side ace while an opponent may still hold trump, also at trick 1', () => {
+    // Trump is always allowed: a long side suit does not stop a trump.
+    const bidding = leadState([C('H', '9'), C('H', '10'), C('S', 'A'), C('D', 'A'), C('C', '9'), C('D', '10')], 1)
+    const defending = leadState([C('S', 'A'), C('D', 'A'), C('D', '9'), C('C', '10'), C('C', 'Q'), C('S', 'J')], 0)
+    for (const level of LEVELS) {
+      expect(botAction(bidding, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', '9') })
+      expect(botAction(defending, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
+    }
+  })
+
+  it('the partner of the bidder does not lead trump, also in a sweep', () => {
+    const hand = [C('H', 'A'), C('H', 'K'), C('H', '9'), C('D', '9'), C('C', '9'), C('C', '10')]
+    for (const level of LEVELS) {
+      expect(botAction(leadState(hand, 3), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
+      const sweep = leadState(hand.filter((c) => c.r !== '9' || c.s !== 'H'), 3, { tricksPlayed: 1, tricksWon: [0, 1] })
+      expect(botAction(sweep, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', '10') })
+    }
+    // A troefke request still asks the best trump.
+    const asked = leadState(hand, 3, { troefkeAsked: true })
+    expect(botAction(asked, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+  })
+
+  it('a defender with only the trump ace keeps it, also in a sweep', () => {
+    const hand = [C('H', 'A'), C('D', '9'), C('D', '10'), C('C', '9'), C('C', '10'), C('S', '9')]
+    const sweep = leadState(hand.slice(0, 5), 0, { tricksPlayed: 1, tricksWon: [0, 1] })
+    for (const level of LEVELS) {
+      expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
+      expect(botAction(sweep, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '10') })
+    }
+  })
+
+  it('a defender with side aces and few trumps leads a low trump and keeps the ace', () => {
+    const hand = [C('H', 'A'), C('H', '9'), C('S', 'A'), C('D', 'A'), C('C', '9'), C('C', '10')]
+    for (const level of LEVELS) {
+      expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+    }
+  })
+
+  it('the bidder with many trumps pulls with the trump ace', () => {
+    const hand = [C('H', 'A'), C('H', 'K'), C('H', 'Q'), C('H', '9'), C('S', 'A'), C('D', '9')]
+    for (const level of LEVELS) {
+      expect(botAction(leadState(hand, 1), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+    }
+  })
+})
+
 describe('bot dealer choice', () => {
   const chooseState = (first: Card, second: Card, over: Partial<State> = {}) =>
     playingState({

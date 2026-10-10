@@ -303,31 +303,45 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   ) {
     return because(why, 'troefke: lead the best trump', highest(trumps))
   }
+  const isBidder = seat === s.bidder
+  const partner = seat === partnerOf(s.bidder!)
+  const boss = bossTrump(trumps, read)
+  const plain = legal.filter((c) => c.s !== trump)
+  // A defender without the trump majority keeps the boss: it stays a threat
+  // to the bidders as long as possible.
+  const shortDefender = !isBidder && !partner && trumps.length <= read.trumpsOut
+  // The bidder pulls; the partner leaves that to the bidder.
+  const leadsBoss = isBidder || (!partner && !shortDefender)
   // Protect a live sweep: lead the surest winner first.
   if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
-    const boss = bossTrump(trumps, read)
-    if (boss) return because(why, 'sweep: boss trump', boss)
+    if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
     const ace = legal.find((c) => c.r === 'A' && c.s !== trump && !trumpable(c.s))
     if (ace) return because(why, 'sweep: safe ace', ace)
+    const keep = partner ? trumps : shortDefender && boss ? [boss] : []
+    const rest = legal.filter((c) => !keep.includes(c))
+    if (keep.length && rest.length) return because(why, 'sweep: highest card, keeps trump', highest(rest))
     return because(why, 'sweep: highest card', highest(legal))
   }
-  const playing = teamOf(s.bidder!) === myTeam
-  const boss = bossTrump(trumps, read)
   // Both opponents showed out of trump: whatever trumps are left belong to the
   // partner, and pulling only strips our own side.
   const oppMayTrump = oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump))
   // Pull trumps when we hold the boss and others still hold trumps. Defenders
   // pull only when they hold the majority of what is left.
-  if (boss && read.trumpsOut > 0 && oppMayTrump && (playing || trumps.length > read.trumpsOut))
+  if (boss && leadsBoss && read.trumpsOut > 0 && oppMayTrump)
     return because(why, 'pull trumps with the boss', boss)
   // Length pull: with enough trumps a low one still draws enemy trumps.
-  if (playing && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2)
+  if (isBidder && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2)
     return because(why, 'length pull: low trump', lowest(trumps))
-  // Cash an ace only where no opponent can trump it; else keep it for later.
-  const aces = legal.filter((c) => c.r === 'A' && c.s !== trump && !trumpable(c.s))
-  if (aces.length) return because(why, 'cash a safe ace', highest(aces))
+  // A short defender with side aces pulls with a low trump, so the bidders'
+  // trumps fall before the aces go.
+  const lowTrumps = trumps.filter((c) => c !== boss)
+  if (shortDefender && oppMayTrump && lowTrumps.length && plain.some((c) => c.r === 'A'))
+    return because(why, 'defender pull: low trump, keeps the boss', lowest(lowTrumps))
+  // Trump is always allowed, also on a suit an opponent can follow: cash an
+  // ace only once no opponent may hold trump.
+  const aces = plain.filter((c) => c.r === 'A')
+  if (aces.length && !oppMayTrump) return because(why, 'cash an ace: opponents hold no trump', highest(aces))
   // Otherwise a low card from a suit nobody is known void in.
-  const plain = legal.filter((c) => c.s !== trump)
   const pool = plain.length ? plain : legal
   const safe = pool.filter((c) => !oppVoid(c.s) && !read.voids.has(`${partnerOf(seat)}:${c.s}`))
   const ok = safe.length ? safe : pool.filter((c) => !oppVoid(c.s))
