@@ -1,98 +1,169 @@
-// Bot benchmark: the bot in this checkout against the bot of a git ref.
+// Bot benchmark: this checkout's bot against a git ref's, or any two bots
+// against each other.
 //
 //   npm run bench -- [--base origin/develop] [--matches 500] [--level normal]
+//   npm run bench -- --a heuristic:hard --b origin/develop@heuristic:easy [--jobs 4]
 //
-// Each seed is played twice, with the two bots swapping teams, so seat and
-// deal luck cancel out. Prints the win rate of this checkout's bot with a 95%
-// interval, and bidding stats from self-play of each bot.
-import { execSync } from 'node:child_process'
+// A side (--a / --b) is "[<git ref>@]<spec>": an algorithm id, inline JSON or
+// a bot configuration file — see scripts/bot-spec.mjs. A missing side keeps
+// today's default: side A is this checkout's botAction, side B is --base's,
+// both at --level. Each seed is played twice with the sides swapped, so seat
+// and deal luck cancel out. Prints side A's win rate with a 95% interval and
+// bidding stats from self-play; with --a/--b also the decision timing and
+// algorithm use of each side.
 import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { availableParallelism, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { createServer } from 'vite'
+import { Worker } from 'node:worker_threads'
+import { extractRef, parseSpecArg } from './bot-spec.mjs'
+import { runSlice } from './bench-worker.mjs'
 
 const { values: opt } = parseArgs({
   options: {
     base: { type: 'string', default: 'origin/develop' },
     matches: { type: 'string', default: '500' },
     level: { type: 'string', default: 'normal' },
+    a: { type: 'string' },
+    b: { type: 'string' },
+    jobs: { type: 'string', default: '1' },
   },
 })
 const MATCHES = Number(opt.matches)
-const STEP_CAP = 20000
+const JOBS_OPT = Number(opt.jobs)
+if (!Number.isInteger(MATCHES) || MATCHES < 1)
+  throw new Error(`--matches must be a positive integer, got '${opt.matches}'`)
+if (!Number.isInteger(JOBS_OPT) || JOBS_OPT < 1)
+  throw new Error(`--jobs must be a positive integer, got '${opt.jobs}'`)
+// Each worker boots a vite server: never more workers than cores.
+const JOBS = Math.min(MATCHES, JOBS_OPT, availableParallelism())
 const root = resolve(import.meta.dirname, '..')
+const custom = opt.a != null || opt.b != null
 
-// The base bot runs from its own copy of src/, so its imports stay intact.
-const baseDir = mkdtempSync(join(tmpdir(), 'bot-bench-'))
-execSync(`git archive ${opt.base} src | tar -x -C ${baseDir}`, { cwd: root })
+const parsed = [
+  opt.a != null ? parseSpecArg(opt.a) : { ref: null, spec: null },
+  opt.b != null ? parseSpecArg(opt.b) : { ref: opt.base, spec: null },
+]
+const labels = [opt.a ?? 'this checkout', opt.b ?? opt.base]
 
-const server = await createServer({
-  root,
-  configFile: false,
-  logLevel: 'error',
-  appType: 'custom',
-  server: { middlewareMode: true, hmr: false, ws: false },
-})
-try {
-  const { apply, createMatch, pendingSeats } = await server.ssrLoadModule('/src/engine/index.ts')
-  const { seededRandom } = await server.ssrLoadModule('/src/lib/seed.ts')
-  const head = (await server.ssrLoadModule('/src/bots/bot.ts')).botAction
-  const base = (await server.ssrLoadModule(join(baseDir, 'src/bots/bot.ts'))).botAction
+/** @param {import('./bench-worker.mjs').BenchJob} job */
+function runWorker(job) {
+  return new Promise((resolvePromise, reject) => {
+    const w = new Worker(new URL('./bench-worker.mjs', import.meta.url), { workerData: job })
+    w.once('message', (msg) =>
+      msg != null && typeof msg === 'object' && 'error' in msg
+        ? reject(new Error(String(msg.error)))
+        : resolvePromise(msg),
+    )
+    w.once('error', reject)
+    w.once('exit', (code) => {
+      if (code !== 0) reject(new Error(`worker exited with code ${code}`))
+    })
+  })
+}
 
-  const newStats = () => ({ hands: 0, secondUp: 0, r1: [0, 0], r2: [0, 0], trumps: [0, 0, 0, 0, 0, 0, 0] })
-
-  /**
-   * One match; `bots[team]` plays for that team. Returns the winning team.
-   * @param {number} seed
-   * @param {Function[]} bots
-   * @param {ReturnType<typeof newStats>} [stats]
-   */
-  function runMatch(seed, bots, stats) {
-    let s = createMatch(seed)
-    const rand = seededRandom(seed * 7919 + 13)
-    let steps = 0
-    while (s.phase !== 'GAME_OVER') {
-      if (steps++ > STEP_CAP) throw new Error(`match ${seed} did not terminate`)
-      const seat = pendingSeats(s)[0]
-      const a = bots[seat % 2](s, seat, rand, opt.level)
-      if (stats && a.type === 'bid') {
-        const r1 = s.phase === 'BIDDING_R1'
-        const suit = r1 ? s.turned.first.s : s.turned.second.s
-        stats[r1 ? 'r1' : 'r2'][0]++
-        if (a.play) {
-          stats[r1 ? 'r1' : 'r2'][1]++
-          stats.trumps[s.hands[seat].filter((/** @type {{ s: string }} */ c) => c.s === suit).length]++
-        }
+/**
+ * @param {import('./bench-worker.mjs').BenchResult[]} parts
+ * @returns {import('./bench-worker.mjs').BenchResult}
+ */
+function mergeParts(parts) {
+  const out = parts[0]
+  for (const part of parts.slice(1)) {
+    out.wins += part.wins
+    out.n += part.n
+    for (const i of [0, 1]) {
+      for (const phase of /** @type {const} */ (['bidding', 'play'])) {
+        const a = out.sides[i].stats[phase]
+        const b = part.sides[i].stats[phase]
+        a.n += b.n
+        a.ms += b.ms
+        a.max = Math.max(a.max, b.max)
       }
-      const next = apply(s, a)
-      if (stats && s.phase === 'DEALING') stats.hands++
-      if (stats && !s.turned?.secondUp && next.turned?.secondUp) stats.secondUp++
-      s = next
+      for (const [id, k] of Object.entries(part.sides[i].stats.algos))
+        out.sides[i].stats.algos[id] = (out.sides[i].stats.algos[id] ?? 0) + k
+      const a = out.self[i]
+      const b = part.self[i]
+      a.hands += b.hands
+      a.secondUp += b.secondUp
+      for (const j of [0, 1]) {
+        a.r1[j] += b.r1[j]
+        a.r2[j] += b.r2[j]
+      }
+      for (let j = 0; j < a.trumps.length; j++) a.trumps[j] += b.trumps[j]
     }
-    return s.winner
   }
+  return out
+}
 
-  let wins = 0
-  for (let seed = 1; seed <= MATCHES; seed++) {
-    if (runMatch(seed, [head, base]) === 0) wins++
-    if (runMatch(seed, [base, head]) === 1) wins++
+const tmp = mkdtempSync(join(tmpdir(), 'bot-bench-'))
+try {
+  // Refs share one temp dir; each side without a ref uses this checkout.
+  const refDirs = /** @type {Record<string, string>} */ ({})
+  for (const p of parsed)
+    if (p.ref != null && refDirs[p.ref] == null) refDirs[p.ref] = extractRef(root, p.ref, tmp)
+  const sides = parsed.map((p) => ({ dir: p.ref == null ? null : refDirs[p.ref], spec: p.spec }))
+  const seeds = Array.from({ length: MATCHES }, (_, i) => i + 1)
+  let parts
+  if (JOBS <= 1) {
+    parts = [await runSlice({ root, sides, level: opt.level, seeds })]
+  } else {
+    // allSettled: a failing worker must not have its ref dirs removed while
+    // siblings still read them (the finally below runs once all settled).
+    const settled = await Promise.allSettled(
+      Array.from({ length: JOBS }, (_, w) =>
+        runWorker({ root, sides, level: opt.level, seeds: seeds.filter((_, i) => i % JOBS === w) }),
+      ),
+    )
+    const failed = settled.find((s) => s.status === 'rejected')
+    if (failed) throw failed.reason
+    parts = settled.map((s) => /** @type {PromiseFulfilledResult<import('./bench-worker.mjs').BenchResult>} */ (s).value)
   }
-  const n = 2 * MATCHES
-  const p = wins / n
+  const result = mergeParts(parts)
+
+  const n = result.n
+  const p = result.wins / n
   const ci = 1.96 * Math.sqrt((p * (1 - p)) / n)
   const pct = (/** @type {number} */ x) => `${(100 * x).toFixed(1)}%`
+  const ms = (/** @type {import('./bench-worker.mjs').PhaseStats} */ t) =>
+    t.n === 0 ? '-' : `${(t.ms / t.n).toFixed(1)} ms, max ${t.max.toFixed(1)} ms`
 
-  console.log(`Bot benchmark: this checkout vs ${opt.base}, level ${opt.level}, ${n} matches`)
-  console.log(`Win rate of this checkout: ${pct(p)} ± ${pct(ci)} (${wins}/${n})`)
+  if (!custom) {
+    console.log(`Bot benchmark: this checkout vs ${opt.base}, level ${opt.level}, ${n} matches`)
+    console.log(`Win rate of this checkout: ${pct(p)} ± ${pct(ci)} (${result.wins}/${n})`)
+  } else {
+    console.log(`Bot benchmark: ${labels[0]} vs ${labels[1]}, ${n} matches`)
+    console.log(`Win rate of ${labels[0]}: ${pct(p)} ± ${pct(ci)} (${result.wins}/${n})`)
+    for (const [i, side] of result.sides.entries())
+      if (side.legacy && parsed[i].spec != null)
+        console.log(`note: ${labels[i]} has no bot framework, used ${side.name}`)
+    console.log('')
+    console.log('Decisions (real choices only):')
+    for (const [i, side] of result.sides.entries()) {
+      const t = side.stats
+      const total = t.bidding.n + t.play.n
+      const algos =
+        total === 0
+          ? '-'
+          : Object.entries(t.algos)
+              .sort((x, y) => y[1] - x[1])
+              .map(([id, k]) => `${id} ${pct(k / total)}`)
+              .join(', ')
+      console.log(
+        `  ${labels[i]}: ${total} — bidding ${t.bidding.n} (avg ${ms(t.bidding)}),` +
+          ` play ${t.play.n} (avg ${ms(t.play)})`,
+      )
+      console.log(`    algorithms: ${algos}`)
+    }
+  }
   console.log('')
   console.log('Bidding in self-play (both teams the same bot):')
-  for (const [name, bot] of [[opt.base, base], ['this checkout', head]]) {
-    const st = newStats()
-    for (let seed = 1; seed <= MATCHES; seed++) runMatch(seed, [bot, bot], st)
+  for (const i of [1, 0]) {
+    const st = result.self[i]
     const bids = st.r1[1] + st.r2[1]
-    console.log(`  ${name}:`)
-    console.log(`    1st card bid rate: ${pct(st.r1[1] / st.r1[0])}  2nd card bid rate: ${pct(st.r2[1] / st.r2[0])}`)
+    console.log(`  ${labels[i]}:`)
+    console.log(
+      `    1st card bid rate: ${pct(st.r1[1] / st.r1[0])}  2nd card bid rate: ${pct(st.r2[1] / st.r2[0])}`,
+    )
     console.log(`    hands with 2nd card turned: ${pct(st.secondUp / st.hands)} of ${st.hands}`)
     console.log(
       `    bids by own trump count: ${st.trumps.map((k, i) => `${i}:${k}`).join(' ')}` +
@@ -100,6 +171,5 @@ try {
     )
   }
 } finally {
-  await server.close()
-  rmSync(baseDir, { recursive: true, force: true })
+  rmSync(tmp, { recursive: true, force: true })
 }
