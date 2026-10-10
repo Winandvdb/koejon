@@ -1876,6 +1876,26 @@ button.tag {
   }
 }
 
+/* The deal: pairs leave the top of the deck one by one and stay at the hands
+   until the real cards show. The deck gets lower with each pair. */
+.deal-pair {
+  position: absolute;
+  inset: 0;
+  translate: 0 calc(var(--k) * -0.75px);
+  animation: deal-fly var(--fly) cubic-bezier(0.3, 0.6, 0.3, 1) var(--d) forwards;
+}
+
+.deal-pair .pile-card + .pile-card {
+  translate: calc(var(--cw) * 0.18) 0;
+  rotate: 7deg;
+}
+
+@keyframes deal-fly {
+  to {
+    transform: translate(var(--tx), var(--ty));
+  }
+}
+
 /* ---------- Trick area ---------- */
 
 .trick-area {
@@ -2348,7 +2368,8 @@ button.tag {
 
   .stack-part,
   .stack-part .pile-card,
-  .stack-part .card-back {
+  .stack-part .card-back,
+  .deal-pair {
     animation-duration: 0s;
     animation-delay: 0s;
   }

@@ -3,8 +3,8 @@
   import type { Action, Card } from '../engine'
   import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
-  import { deckStack } from '../lib/deckstack'
-  import type { StackPart } from '../lib/deckstack'
+  import { dealPairs, deckStack } from '../lib/deckstack'
+  import type { DealPair, StackPart } from '../lib/deckstack'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
@@ -136,6 +136,48 @@
   }
   /** Cards already on the deck below packet `i`: each card lies a hair higher. */
   const stackBelow = (i: number) => stack!.slice(0, i).reduce((n, p) => n + p.count, 0)
+
+  /** In the deal the deck goes out per two from the top, as the engine deals
+   *  (`dealPairs`). It starts when this felt's stack has formed; the real hands
+   *  show at the bid. */
+  const DEAL_FLY = 300
+  const DEAL_STEP = 130
+  const DEAL_PAUSE = 150
+  /** Where each hand lies, in card widths from the middle, seen from my seat. */
+  const HAND_AT = [
+    { x: 0, y: 2.6 },
+    { x: -2.4, y: 0 },
+    { x: 0, y: -2.2 },
+    { x: 2.4, y: 0 },
+  ]
+  const dealing = $derived(pub.phase === 'DEALING')
+  const pairs = $derived(dealPairs(pub.dealer))
+  /** Client clock: when the stack on this felt has formed (0: no stack). */
+  let stackReadyAt = 0
+  let dealGo = $state(false)
+  $effect(() => {
+    if (!stack) stackReadyAt = 0
+    else if (!stackReadyAt) stackReadyAt = performance.now() + (reducedMotion ? 0 : stackLand + STACK_SQUARE)
+  })
+  $effect(() => {
+    if (!dealing) {
+      dealGo = false
+      return
+    }
+    const timer = setTimeout(
+      () => (dealGo = true),
+      reducedMotion ? 0 : Math.max(DEAL_PAUSE, stackReadyAt - performance.now()),
+    )
+    return () => clearTimeout(timer)
+  })
+  /** Each round's pair lies a bit further along the hand, as a dealer puts them. */
+  const pairTo = (p: DealPair) => {
+    const r = rel(p.seat)
+    const along = (Math.floor(p.from[0] / 8) - 1) * 0.45
+    const x = HAND_AT[r].x + (r % 2 ? 0 : along)
+    const y = HAND_AT[r].y + (r % 2 ? along : 0)
+    return `--tx: calc(var(--card) * ${x}); --ty: calc(var(--card) * ${y})`
+  }
 
   /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
@@ -381,7 +423,7 @@
               </div>
             {/each}
           {/if}
-          {#if stack}
+          {#if stack && !dealGo}
             <div class="deck-stack" style="--fly: {STACK_FLY}ms; --square: {STACK_SQUARE}ms">
               {#each stack as part, i (i)}
                 <div
@@ -398,6 +440,18 @@
                       <div class="card-back"></div>
                     </div>
                   {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if dealGo}
+            <!-- One pair per deck position: the top pair goes first. -->
+            <div class="deck-stack" style="--fly: {DEAL_FLY}ms">
+              {#each pairs as p (p.from[0])}
+                {@const j = p.from[0] / 2}
+                <div class="deal-pair" style="{pairTo(p)}; --k: {11 - j}; --d: {j * DEAL_STEP}ms; z-index: {12 - j}">
+                  <div class="pile-card"><div class="card-back"></div></div>
+                  <div class="pile-card"><div class="card-back"></div></div>
                 </div>
               {/each}
             </div>

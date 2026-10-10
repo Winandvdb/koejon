@@ -25,3 +25,18 @@ export function deckStack(pub: PublicState): StackPart[] | null {
     .filter((team) => pub.tricksWon[team] > 0)
     .map((team) => ({ from: 'pile', team, count: pub.tricksWon[team] }))
 }
+
+/** One pair of the deal: two deck positions, counted from the top, to one seat. */
+export interface DealPair {
+  seat: number
+  from: [number, number]
+}
+
+/** The deal as the engine does it (`doDeal`): 3 rounds of two cards to each
+ *  seat, from the top of the deck, the dealer's left neighbour first. */
+export function dealPairs(dealer: number): DealPair[] {
+  return Array.from({ length: 12 }, (_, i) => ({
+    seat: (dealer + 1 + (i % 4)) % 4,
+    from: [2 * i, 2 * i + 1],
+  }))
+}
