@@ -128,7 +128,9 @@
   // Old browsers have no matchMedia.
   const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   const stackLand = $derived(stack ? (stack.length - 1) * STACK_STEP + STACK_FLY : 0)
-  const cutDelay = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE + STACK_HOLD : 0)
+  /** The deck has squared up: the cut panel and the deal wait for it. */
+  const stackDone = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE : 0)
+  const cutDelay = $derived(stackDone && stackDone + STACK_HOLD)
   const stackFrom = (part: StackPart) => {
     if (part.from === 'hand') return `--fx: ${DIR[rel(part.seat)].x}px; --fy: ${DIR[rel(part.seat)].y}px`
     const p = PILE_FROM[part.team === myTeam ? 0 : 1]
@@ -151,13 +153,12 @@
     { x: 2.4, y: 0 },
   ]
   const dealing = $derived(pub.phase === 'DEALING')
-  const pairs = $derived(dealPairs(pub.dealer))
   /** Client clock: when the stack on this felt has formed (0: no stack). */
   let stackReadyAt = 0
   let dealGo = $state(false)
   $effect(() => {
     if (!stack) stackReadyAt = 0
-    else if (!stackReadyAt) stackReadyAt = performance.now() + (reducedMotion ? 0 : stackLand + STACK_SQUARE)
+    else if (!stackReadyAt) stackReadyAt = performance.now() + stackDone
   })
   $effect(() => {
     if (!dealing) {
@@ -445,11 +446,19 @@
             </div>
           {/if}
           {#if dealGo}
-            <!-- One pair per deck position: the top pair goes first. -->
-            <div class="deck-stack" style="--fly: {DEAL_FLY}ms">
-              {#each pairs as p (p.from[0])}
+            <!-- One pair per deck position: the top pair goes first. A first deal
+                 has no stacked deck to take over, so its deck comes in. -->
+            <div
+              class="deck-stack deal"
+              style="--fly: {DEAL_FLY}ms"
+              in:scale={{ start: 0.6, duration: stack ? 0 : 220 }}
+            >
+              {#each dealPairs(pub.dealer) as p (p.from[0])}
                 {@const j = p.from[0] / 2}
-                <div class="deal-pair" style="{pairTo(p)}; --k: {11 - j}; --d: {j * DEAL_STEP}ms; z-index: {12 - j}">
+                <div
+                  class="deal-pair"
+                  style="{pairTo(p)}; --k: {11 - j}; --d: {j * DEAL_STEP}ms; --z: {12 - j}; --landed: {j + 1}"
+                >
                   <div class="pile-card"><div class="card-back"></div></div>
                   <div class="pile-card"><div class="card-back"></div></div>
                 </div>

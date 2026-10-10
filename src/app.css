@@ -1877,22 +1877,38 @@ button.tag {
 }
 
 /* The deal: pairs leave the top of the deck one by one and stay at the hands
-   until the real cards show. The deck gets lower with each pair. */
+   until the real cards show. The deck gets lower with each pair. Above the
+   dealer panel (.felt-overlay), so my own pairs stay in sight. */
+.deck-stack.deal {
+  z-index: 11;
+}
+
 .deal-pair {
   position: absolute;
   inset: 0;
+  z-index: var(--z);
   translate: 0 calc(var(--k) * -0.75px);
   animation: deal-fly var(--fly) cubic-bezier(0.3, 0.6, 0.3, 1) var(--d) forwards;
 }
 
+/* A pair lies square in the deck and fans out once it lands. */
 .deal-pair .pile-card + .pile-card {
-  translate: calc(var(--cw) * 0.18) 0;
-  rotate: 7deg;
+  animation: deal-fan 150ms ease-out calc(var(--d) + var(--fly)) forwards;
 }
 
+/* At the hand a later round lies on top of an earlier one, all at one height. */
 @keyframes deal-fly {
   to {
     transform: translate(var(--tx), var(--ty));
+    translate: 0 0;
+    z-index: var(--landed);
+  }
+}
+
+@keyframes deal-fan {
+  to {
+    translate: calc(var(--cw) * 0.18) 0;
+    rotate: 7deg;
   }
 }
 
@@ -2369,7 +2385,8 @@ button.tag {
   .stack-part,
   .stack-part .pile-card,
   .stack-part .card-back,
-  .deal-pair {
+  .deal-pair,
+  .deal-pair .pile-card + .pile-card {
     animation-duration: 0s;
     animation-delay: 0s;
   }
