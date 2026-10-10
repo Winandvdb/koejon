@@ -186,7 +186,7 @@
       const rand = soloRand
       soloRand = undefined
       // Dev settings exist only in dev builds; elsewhere the host uses its defaults.
-      // Solo plays offline: only the finished match is uploaded, when online.
+      // Solo and multiplayer both upload the finished match (solo plays offline, so only then).
       hostPromise = HostGame.attach(s.code, uid, s.hostLink!, {
         rand,
         dev: DEV ? () => get(devSettings) : undefined,
