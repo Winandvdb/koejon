@@ -415,10 +415,13 @@ describe('bot leads', () => {
   })
 
   it('draws out the ace: a low card under its king while the ace is out', () => {
-    const hand = [C('S', 'K'), C('S', 'J'), C('D', '9'), C('C', '9'), C('D', '10'), C('C', '10')]
+    // S10 gives no points away; a jack or queen under the king would.
+    const hand = [C('S', 'K'), C('S', '10'), C('D', '9'), C('C', '9'), C('D', 'J'), C('C', 'J')]
     for (const level of LEVELS) {
-      expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'J') })
+      expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', '10') })
     }
+    const queen = [C('S', 'K'), C('S', 'Q'), C('D', '9'), C('C', '9'), C('D', 'J'), C('C', 'J')]
+    expect(botAction(leadState(queen, 0), 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
     // Trick 1 drew SA: SK is the top spade now, so a hard bot leads low elsewhere.
     // The other levels do not remember side aces.
     const aceGone = leadState(hand.slice(0, 5), 0, {
@@ -426,20 +429,24 @@ describe('bot leads', () => {
       tricksWon: [1, 0],
       log: [
         { t: 'card', seat: 0, card: C('S', 'A') },
-        { t: 'card', seat: 1, card: C('S', '10') },
+        { t: 'card', seat: 1, card: C('S', 'J') },
         { t: 'card', seat: 2, card: C('S', 'Q') },
         { t: 'card', seat: 3, card: C('S', '9') },
         { t: 'trick', seat: 0 },
       ],
     })
     expect(botAction(aceGone, 1, smart, 'hard')).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
-    expect(botAction(aceGone, 1, smart, 'normal')).toEqual({ type: 'play', seat: 1, card: C('S', 'J') })
+    expect(botAction(aceGone, 1, smart, 'normal')).toEqual({ type: 'play', seat: 1, card: C('S', '10') })
   })
 
   it('leads a low trump to draw the trump ace under its king', () => {
     const hand = [C('H', 'K'), C('H', '9'), C('S', '10'), C('D', '10'), C('C', '10'), C('C', 'J')]
     for (const level of LEVELS) {
       expect(botAction(leadState(hand, 1), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+      // The partner and a short defender keep their trumps.
+      for (const bidder of [3, 0]) {
+        expect(botAction(leadState(hand, bidder), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', '10') })
+      }
     }
   })
 
