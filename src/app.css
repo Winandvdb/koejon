@@ -423,12 +423,10 @@ input[type='checkbox'] {
   cursor: pointer;
 }
 
-/* Dev builds only: a narrow phone keeps the popover inside the screen. */
 .dev-settings {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: calc(100vw - 32px);
 }
 
 .settings-pop label + .dev-settings,
@@ -2213,8 +2211,27 @@ button.tag {
   }
 
   .topbar {
+    position: relative;
     padding: 6px 8px;
     gap: 2px;
+  }
+
+  /* The ⚙ button sits mid-bar on a phone, so a popover anchored to it ran off
+     the left edge. Anchor it to the top bar instead, inside the 16px gutter. */
+  .settings-anchor {
+    position: static;
+  }
+
+  .settings-pop {
+    right: 16px;
+    max-width: calc(100% - 32px);
+    max-height: calc(100vh - 72px);
+    max-height: calc(100dvh - 72px);
+    overflow-y: auto;
+  }
+
+  .settings-pop .segmented {
+    flex-wrap: wrap;
   }
 
   .icon-btn {
