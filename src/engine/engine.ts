@@ -251,8 +251,7 @@ function cutDeck(s: State, n: number): void {
 function nextDeck(s: State): Card[] {
   const deck = [...s.piles[0], ...s.piles[1]]
   s.piles = [[], []]
-  // A state saved before the cut existed may reach the deal uncut and empty.
-  return deck.length === 24 ? deck : rngShuffle(s, fullDeck())
+  return deck
 }
 
 function doDeal(s: State): void {
@@ -405,8 +404,6 @@ export function apply(state: State, action: Action): State {
     throw new IllegalActionError(`illegal action ${action.type} for seat ${action.seat} in ${state.phase}`)
   }
   const s = structuredClone(state)
-  // A host may resume an engine state saved before piles existed.
-  s.piles ??= [[], []]
   switch (action.type) {
     case 'start':
       s.phase = 'DEALER_DRAW'
@@ -415,8 +412,7 @@ export function apply(state: State, action: Action): State {
       break
     case 'draw': {
       const dd = s.dealerDraw!
-      // A host may resume a draw saved before the deck was kept.
-      const deck = (dd.deck ??= rngShuffle(s, fullDeck()))
+      const deck = dd.deck!
       // The bottom card of the packet is revealed.
       let card: Card
       if (dd.pending === 0) {
@@ -495,9 +491,8 @@ export function apply(state: State, action: Action): State {
     }
     case 'play': {
       const hand = s.hands[action.seat]
-      const idx = hand.findIndex((c) => sameCard(c, action.card))
-      if (idx < 0) throw new IllegalActionError('card not in hand')
-      hand.splice(idx, 1)
+      // actionIsLegal only allows cards of the hand, so idx is never -1.
+      hand.splice(hand.findIndex((c) => sameCard(c, action.card)), 1)
       s.trick.push({ seat: action.seat, card: action.card })
       pushLog(s, { t: 'card', seat: action.seat, card: action.card })
       if (s.trick.length === 4) {

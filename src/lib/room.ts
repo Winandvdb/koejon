@@ -48,6 +48,7 @@ export function newRoomDoc(code: string, uid: string, name: string): RoomDoc {
     seats: [{ uid, name, bot: false }, null, null, null],
     pub: toPublic(createMatch(0)),
     version: 1,
+    seq: 0,
     heartbeat: Date.now(),
     opts: { ...DEFAULT_ROOM_OPTS },
   }
@@ -147,10 +148,8 @@ export class RoomSession {
    *  longer open, so it landed. A message lost on a weak connection gives no
    *  error of its own, so no such state in time rejects. */
   async act(action: Action): Promise<void> {
-    const before = get(this.room)?.seq
+    const before = get(this.room)?.seq ?? 0 // no room yet: any state is newer
     await this.send({ kind: 'act', action })
-    // A host without seq (older build) cannot confirm.
-    if (before === undefined) return
     const key = actionKey(action)
     await new Promise<void>((resolve, reject) => {
       let unsub = () => {}

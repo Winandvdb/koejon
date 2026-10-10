@@ -23,7 +23,7 @@
   import { safeStorage } from './lib/storage'
   import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
-  import type { Action } from './engine'
+  import type { Action, State } from './engine'
   import type { HistoryEntry } from './lib/history'
   import { loadKjn, readKjnFile, serializeKjn, type KjnMatch } from './lib/kjn'
   import Home from './components/Home.svelte'
@@ -321,6 +321,7 @@
   // Raw: the engine structuredClones the match, which a deep $state proxy breaks.
   let replay = $state.raw<{
     match: KjnMatch
+    steps: State[]
     kjn: string
     at?: Date
     seat: number
@@ -335,7 +336,7 @@
         dateStyle: 'medium',
         timeStyle: 'short',
       })
-      replay = { match: loadKjn(e.kjn), kjn: e.kjn, at: new Date(e.finishedAt), seat: e.seat, names: e.names, label }
+      replay = { ...loadKjn(e.kjn), kjn: e.kjn, at: new Date(e.finishedAt), seat: e.seat, names: e.names, label }
     } catch {
       err = $t.invalidKjn
     }
@@ -344,9 +345,9 @@
   async function onOpenFile(file: File) {
     err = ''
     try {
-      const match = await readKjnFile(file)
+      const { match, steps } = await readKjnFile(file)
       // The parsed match, not the raw file text: clean line endings, no BOM.
-      replay = { match, kjn: serializeKjn(match), seat: 0, names: [], label: file.name }
+      replay = { match, steps, kjn: serializeKjn(match), seat: 0, names: [], label: file.name }
     } catch {
       // The current replay stays open; Replay shows the error.
       err = $t.invalidKjn
@@ -427,6 +428,7 @@
     {#key replay.match}
       <Replay
         match={replay.match}
+        steps={replay.steps}
         kjn={replay.kjn}
         at={replay.at}
         seat={replay.seat}

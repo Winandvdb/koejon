@@ -38,7 +38,7 @@ export interface RoomDoc {
   version: number
   /** Game state counter, the same on every path (unlike the Firestore doc's
    *  `version`). Guests never show a lower one than they already showed. */
-  seq?: number
+  seq: number
   /** Host heartbeat, epoch ms. Clients flag "host left" when stale. */
   heartbeat: number
   opts?: RoomOpts
