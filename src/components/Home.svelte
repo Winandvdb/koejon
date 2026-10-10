@@ -1,12 +1,13 @@
 <script lang="ts">
   import { fly } from 'svelte/transition'
+  import { get } from 'svelte/store'
   import { lang, levelNames, localeOf, seatName, t } from '../lib/i18n'
   import { readHistory, type HistoryEntry } from '../lib/history'
   import { parseKjn, type SeatKind } from '../lib/kjn'
   import { appUrl } from '../lib/url'
   import { CODE_LENGTH } from '../lib/room'
   import { sumGroups, totalStats, type StatsGroup } from '../lib/stats'
-  import { safeStorage } from '../lib/storage'
+  import { botLevel, playerName } from '../lib/prefs'
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
   import type { BotLevel } from '../bots/bot'
@@ -28,11 +29,7 @@
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
   const inviteCode = new URLSearchParams(location.search).get('room') ?? ''
-  let name = $state(safeStorage.getItem('koejon-name') ?? '')
-  const savedLevel = safeStorage.getItem('koejon-bot-level') as BotLevel | null
-  let botLevel = $state<BotLevel>(
-    savedLevel && BOT_LEVELS.includes(savedLevel) ? savedLevel : 'normal',
-  )
+  let name = $state(get(playerName))
   const lvlName = $derived(levelNames($t))
   let code = $state(inviteCode.toUpperCase())
   let invited = $state(!!inviteCode)
@@ -52,7 +49,7 @@
   ]
 
   function save() {
-    safeStorage.setItem('koejon-name', name.trim())
+    $playerName = name.trim()
   }
 
   function join(e: SubmitEvent) {
@@ -153,18 +150,15 @@
         <button class="btn big primary" disabled={!online || !name.trim()} onclick={() => oncreate(name.trim())}>
           <span>🌐 {$t.createRoom}</span>
         </button>
-        <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim(), botLevel)}>
+        <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim(), $botLevel)}>
           <span>🤖 {$t.playSolo}</span>
         </button>
         <div class="lvl-seg" role="group" aria-label={$t.botLevel}>
           {#each BOT_LEVELS as l (l)}
             <button
               class="lvl-opt"
-              class:on={botLevel === l}
-              onclick={() => {
-                botLevel = l
-                safeStorage.setItem('koejon-bot-level', l)
-              }}>{lvlName[l]}</button
+              class:on={$botLevel === l}
+              onclick={() => ($botLevel = l)}>{lvlName[l]}</button
             >
           {/each}
         </div>

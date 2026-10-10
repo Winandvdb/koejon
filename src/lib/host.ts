@@ -444,12 +444,15 @@ export class HostGame {
     } else if (intent.kind === 'act') {
       const a = intent.action
       const seat = this.seats[a.seat]
-      const startOk =
-        a.type !== 'start' ||
-        (uid === this.uid && this.state.phase === 'LOBBY' && this.seats.every(Boolean))
+      // `start` only goes through beginMatch (record, drawers, quotes): an
+      // intent for it is dropped, like any other illegal action.
+      if (a.type === 'start') {
+        console.warn('[host] dropped action start from uid', uid)
+        return
+      }
       // No commit when the action was dropped: a spammed or stale intent
       // must not turn into a full batch write.
-      if (seat && seat.uid === uid && startOk && this.tryApply(a)) {
+      if (seat && seat.uid === uid && this.tryApply(a)) {
         await this.commit()
       }
     }
