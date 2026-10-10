@@ -129,8 +129,8 @@ host's kick button (lobby seat list or in-game nameplate).
 
 ## Game records (KJN/1)
 
-Every finished match, multiplayer and solo, is stored once as a KJN/1 record, for
-later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
+Every finished match that a human played to the end, multiplayer and solo, is
+stored once as a KJN/1 record, for later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
 `parseKjn`, `replayKjn`).
 
 ### Format
@@ -181,7 +181,8 @@ KJN/1 sample that must keep parsing to the same text.
 
 ### The `games` collection
 
-At `GAME_OVER` the host queues one document `games/{random id}`:
+At `GAME_OVER` the host queues one document `games/{random id}` (except for the
+matches under "Not stored" below):
 `format`, `app`, `seats`, `winner`, `hands` (count) and `kjn` (the full text, about
 6 KB; at most 100 000 characters). The in-progress record lives next to the engine
 state in the host's `localStorage` (`koejon-kjn-<code>`), so a host reload loses
