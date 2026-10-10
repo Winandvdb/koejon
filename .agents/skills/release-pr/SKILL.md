@@ -1,6 +1,6 @@
 ---
 name: release-pr
-description: Open (or refresh) the release PR into main, from a release branch cut from develop, with a description of every change in the release. Collects the PRs merged into develop since the last release, groups them for players, lists the manual checks and the Firestore rules changes. Never merges. Use when the user says "make a release PR", "release to main", "prepare a release" or runs /release-pr.
+description: Open (or refresh) the release PR into main, from a release branch cut from develop, with a description of every change in the release. Collects the PRs merged into develop since the last release, groups them for players, writes a Dutch overview of the functional changes without technical details, lists the manual checks and the Firestore rules changes. Never merges. Use when the user says "make a release PR", "release to main", "prepare a release" or runs /release-pr.
 argument-hint: (none)
 ---
 
@@ -150,7 +150,7 @@ The second command lists the PRs that merged into `develop` after the cut. They 
 
 ## Step 6: Write the body
 
-Write the body to a file in your scratchpad. Use this layout. Write in English, in short sentences.
+Write the body to a file in your scratchpad. Use this layout. Write in English, in short sentences. Only "Wat is er nieuw" is in Dutch.
 
 ```
 ## Functional context
@@ -160,6 +160,11 @@ Release of `develop` to `main` (live on koejon.web.app), cut as `<REL>`. It cont
 - **<Player-facing theme>** (#<issue>, #<issue>): <what a player sees or gets now, 1-2 sentences>.
 - **<Theme>** (#<issue>): <...>
 - **Docs / CI / tooling**: <one line for changes that players do not see>.
+
+## Wat is er nieuw
+
+- <Een functionele wijziging in het Nederlands, 1-2 zinnen: wat een speler nu ziet of kan.>
+- <...>
 
 ## Approach
 
@@ -189,6 +194,7 @@ Not in this release: <open PRs into develop, as #<n> (<short reason: draft, open
 Rules:
 
 - **Functional context**: group by what players notice, not by PR. Each bullet names its issues. Put docs, skills, CI and refactors in one last bullet.
+- **Wat is er nieuw**: a Dutch overview of all functional changes, for players and other non-technical readers. Write it in Dutch, not in English. Use the same changes as "Functional context", but leave out everything that players do not notice (docs, skills, CI, refactors, tests). No technical information: no PR or issue numbers, no file, function or field names, no words such as Firestore, engine, host, state, CI or PWA. Use the game words of the app (troef, slag, boomke, maat). If no change is functional, write one bullet: `Geen zichtbare wijzigingen voor spelers.`
 - **Approach**: one row per PR in `<PRS>`, every PR, sorted by number. Group PRs that belong together in one row (`#43, #44, #45`).
 - **Checks**: take the checks from the PRs, do not invent new features to check. Merge duplicates.
 - Do not copy whole PR bodies. Do not invent changes that no PR describes.
@@ -233,6 +239,7 @@ Give, in short sentences:
 - The PR link, and if you made it or refreshed it.
 - The release branch `<REL>`, and if you cut it now or it already existed.
 - The number of PRs in the release, and the player-facing themes.
+- The "Wat is er nieuw" list from the body, unchanged, in a code block, so that the user can copy it.
 - If Firestore rules or the engine state shape change.
 - What is not in the release, also the PRs merged into `develop` after the cut.
 - That the user must do the checks and then merge by hand. The merge deploys the live site.
