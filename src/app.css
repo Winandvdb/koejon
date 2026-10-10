@@ -1796,7 +1796,8 @@ button.tag {
 
 /* Won tricks: one face-down card per trick, next to the hand. Out of the
    flow, so a growing pile never moves the seat. */
-.trick-pile {
+.trick-pile,
+.deck-stack {
   --cw: calc(var(--card) * 0.4);
   position: absolute;
   width: var(--cw);
@@ -1808,11 +1809,13 @@ button.tag {
   inset: 0;
 }
 
-.trick-pile.decl .card-back {
+.trick-pile.decl .card-back,
+.stack-part.decl .card-back {
   box-shadow: 0 0 0 2px var(--team-decl), 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
-.trick-pile.def .card-back {
+.trick-pile.def .card-back,
+.stack-part.def .card-back {
   box-shadow: 0 0 0 2px var(--team-def), 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
@@ -1827,6 +1830,50 @@ button.tag {
   top: calc(100% + var(--cw) * 0.8);
   left: 50%;
   margin-left: calc(var(--cw) * -0.7);
+}
+
+/* The next deck forms in the middle at the cut: each packet slides in from
+   where it lay (--fx/--fy), then all cards square up into one deck. Same card
+   size as the trick piles. */
+.deck-stack {
+  left: 50%;
+  top: 50%;
+  margin-left: calc(var(--cw) * -0.5);
+  margin-top: calc(var(--cw) * -0.7);
+}
+
+.stack-part {
+  position: absolute;
+  inset: 0;
+  animation: stack-in var(--fly) cubic-bezier(0.2, 0.7, 0.3, 1) var(--d) both;
+}
+
+.stack-part .pile-card {
+  animation: stack-square var(--square) ease-in-out var(--d) forwards;
+}
+
+/* One deck belongs to no team: the team rings fade as the cards square up. */
+.stack-part .card-back {
+  animation: stack-plain var(--square) ease-in-out var(--d) forwards;
+}
+
+@keyframes stack-in {
+  from {
+    transform: translate(var(--fx), var(--fy));
+  }
+}
+
+@keyframes stack-square {
+  to {
+    translate: 0 calc(var(--k) * -1.5px);
+    rotate: 0deg;
+  }
+}
+
+@keyframes stack-plain {
+  to {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  }
 }
 
 /* ---------- Trick area ---------- */
@@ -2297,6 +2344,13 @@ button.tag {
 
   .confetti {
     display: none;
+  }
+
+  .stack-part,
+  .stack-part .pile-card,
+  .stack-part .card-back {
+    animation-duration: 0s;
+    animation-delay: 0s;
   }
 }
 
