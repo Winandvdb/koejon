@@ -425,4 +425,35 @@ describe('guest seat after the host was away (#54)', () => {
     host.dispose()
     warn.mockRestore()
   })
+
+  test('a kicked player cannot reclaim the seat, a player who left can', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const storage = memoryStore()
+    const links = localLinks(ME, storage, newRoomDoc(SOLO_CODE, ME, 'Me'))!
+    let intent!: (uid: string, i: Intent) => Promise<void>
+    const link: HostLink = {
+      ...links.host,
+      onIntent: (cb) => {
+        intent = cb
+        links.host.onIntent(cb)
+      },
+    }
+    const host = await HostGame.attach(SOLO_CODE, ME, link, { storage, botDelay: () => 1e9 })
+    await intent('G', { kind: 'join', name: 'Guest' })
+    await intent('H', { kind: 'join', name: 'Other' })
+    host.addBot(3)
+    host.startGame()
+    await intent('G', { kind: 'leave' })
+    host.kickSeat(2)
+    await vi.waitFor(async () => expect((await links.host.load())!.seats[2]?.bot).toBe(true))
+
+    await intent('H', { kind: 'join', name: 'Other' })
+    await intent('G', { kind: 'join', name: 'Guest' })
+    const seats = (await links.host.load())!.seats
+    expect(seats[2]).toMatchObject({ bot: true })
+    expect(seats[2]!.uid).not.toBe('H')
+    expect(seats[1]).toEqual({ uid: 'G', name: 'Guest', bot: false })
+    host.dispose()
+    vi.restoreAllMocks()
+  })
 })
