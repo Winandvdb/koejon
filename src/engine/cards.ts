@@ -28,6 +28,8 @@ export function fullDeck(): Card[] {
   return deck
 }
 
+export const isRedSuit = (s: Suit): boolean => s === 'H' || s === 'D'
+
 export function sameCard(a: Card, b: Card): boolean {
   return a.s === b.s && a.r === b.r
 }

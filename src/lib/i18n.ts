@@ -1,4 +1,5 @@
 import { derived, writable } from 'svelte/store'
+import type { BotLevel } from '../bots/bot'
 import type { Card, Suit } from '../engine'
 
 export type Lang = 'nl' | 'en'
@@ -320,6 +321,19 @@ export type Dict = (typeof dict)['nl']
 
 export const lang = writable<Lang>('nl')
 export const t = derived(lang, (l) => dict[l])
+
+export const levelNames = (d: Record<'lvlEasy' | 'lvlNormal' | 'lvlHard', string>): Record<BotLevel, string> => ({
+  easy: d.lvlEasy,
+  normal: d.lvlNormal,
+  hard: d.lvlHard,
+})
+
+/** Locale for dates and numbers. */
+export const localeOf = (l: Lang) => (l === 'nl' ? 'nl-BE' : 'en-GB')
+
+/** Name of seat `i`; "Speler 1" / "Player 1" while the seat has none. */
+export const seatName = (d: { player: string }, name: string | null | undefined, i: number) =>
+  name || `${d.player} ${i + 1}`
 
 export const SUIT_GLYPH: Record<Suit, string> = { S: '♠', H: '♥', D: '♦', C: '♣' }
 

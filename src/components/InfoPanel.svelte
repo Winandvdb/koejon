@@ -1,7 +1,7 @@
 <script lang="ts">
   import { slide } from 'svelte/transition'
-  import { teamOf, trickWinnerIndex, type PublicState, type TrickCard } from '../engine'
-  import { SUIT_GLYPH, lang, suitName, t } from '../lib/i18n'
+  import { isRedSuit, teamOf, trickWinnerIndex, type PublicState, type TrickCard } from '../engine'
+  import { SUIT_GLYPH, lang, seatName, suitName, t } from '../lib/i18n'
   import type { RoomOpts, SeatInfo } from '../lib/net-types'
   import CardView from './CardView.svelte'
 
@@ -19,10 +19,8 @@
 
   let showLast = $state(false)
 
-  const name = (i: number) => seats[i]?.name ?? `#${i}`
+  const name = (i: number) => seatName($t, seats[i]?.name, i)
   const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
-
-  const redSuit = (s: string) => s === 'H' || s === 'D'
 
   /** Suit currently on offer while bidding runs (round 1 = first card, else second). */
   const proposed = $derived.by(() => {
@@ -65,11 +63,11 @@
   <div class="info-head">
     <span class="info-title">
       {#if pub.trump}
-        <span class="suitglyph" class:g-red={redSuit(pub.trump)}>{SUIT_GLYPH[pub.trump]}</span>
+        <span class="suitglyph" class:g-red={isRedSuit(pub.trump)}>{SUIT_GLYPH[pub.trump]}</span>
         {suitName(pub.trump, $lang)}
         <em class="lvltag">{$t[pub.level === 1 ? 'level1' : 'level2']}</em>
       {:else if proposed}
-        <span class="suitglyph" class:g-red={redSuit(proposed)}>{SUIT_GLYPH[proposed]}</span>
+        <span class="suitglyph" class:g-red={isRedSuit(proposed)}>{SUIT_GLYPH[proposed]}</span>
         {suitName(proposed, $lang)}?
       {:else}
         {$t.trump}: —
