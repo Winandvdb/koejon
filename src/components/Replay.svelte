@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { shownHand, teamOf, toPublic, turnedVisible } from '../engine'
-  import { replaySteps, type KjnMatch } from '../lib/kjn'
+  import { shownHand, teamOf, toPublic, turnedVisible, type State } from '../engine'
+  import type { KjnMatch } from '../lib/kjn'
   import { downloadKjn } from '../lib/download'
   import { levelNames, seatName, t } from '../lib/i18n'
   import { arrangeHand, cardKey, sortMode } from '../lib/prefs'
@@ -17,6 +17,7 @@
 
   let {
     match,
+    steps,
     kjn,
     at,
     seat: my,
@@ -27,6 +28,8 @@
     onclose,
   }: {
     match: KjnMatch
+    /** Engine state after each recorded action (`loadKjn`). */
+    steps: State[]
     /** KJN/1 text of the match, for the download. */
     kjn: string
     /** When the match finished; unknown for a file. */
@@ -53,7 +56,6 @@
     if (file) onopenfile(file)
   }
 
-  const steps = $derived(replaySteps(match))
   /** Index of the first step of each hand. */
   const starts = $derived(
     steps.flatMap((s, k) => (k === 0 || s.handNumber !== steps[k - 1].handNumber ? [k] : [])),

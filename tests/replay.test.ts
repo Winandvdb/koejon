@@ -49,16 +49,21 @@ describe('loading a match to replay', () => {
   const { kjn } = finishedMatch(7)
 
   test('a valid file loads', async () => {
-    const m = await readKjnFile(new Blob([kjn]))
-    expect(serializeKjn(m)).toBe(kjn)
-    expect(loadKjn(kjn)).toEqual(m)
+    const { match } = await readKjnFile(new Blob([kjn]))
+    expect(serializeKjn(match)).toBe(kjn)
+    expect(loadKjn(kjn).match).toEqual(match)
+  })
+
+  test('a loaded match comes with its replay steps', () => {
+    const { match, steps } = loadKjn(kjn)
+    expect(steps).toEqual(replaySteps(match))
   })
 
   test('a file saved with Windows line endings, a BOM or no final newline loads', () => {
-    const m = loadKjn(kjn)
-    expect(loadKjn(kjn.replace(/\n/g, '\r\n'))).toEqual(m)
-    expect(loadKjn('\uFEFF' + kjn.trimEnd())).toEqual(m)
-    expect(loadKjn(kjn + '\n\n')).toEqual(m)
+    const { match } = loadKjn(kjn)
+    expect(loadKjn(kjn.replace(/\n/g, '\r\n')).match).toEqual(match)
+    expect(loadKjn('\uFEFF' + kjn.trimEnd()).match).toEqual(match)
+    expect(loadKjn(kjn + '\n\n').match).toEqual(match)
   })
 
   test('an invalid record is refused', async () => {
