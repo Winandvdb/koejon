@@ -125,14 +125,16 @@ describe('sampleWorld', () => {
   })
 
   it('gives the cards only one seat may hold to that seat', () => {
-    // Match 144, trick 3: seats 2 and 3 are out of clubs and seat 1 is out
-    // of hearts and diamonds, so seat 1 must hold the three clubs left.
-    // Match 94, trick 5: seat 1 may hold only spades and needs two, so it
-    // must hold both spades left. A random deal with retries finds these
-    // rarely (1 time in 56 for match 144) and gave up after 50 dead ends.
+    // Match 3, trick 5 (diamonds trump): seat 1 is out of clubs and
+    // diamonds and no hearts are left, so it must hold both spades left.
+    // Match 1, trick 5 (clubs trump): seat 1 is out of diamonds and the four
+    // cards seat 2 cannot see are two diamonds and two spades, so seat 1
+    // must hold both spades. A random deal with retries
+    // finds such spots rarely and gave up after 50 dead ends. The spots come
+    // from bot matches: a change to the bot's play moves them.
     const cases = [
-      { seed: 144, played: 10, last: 'S10', seat: 0, forced: ['CA', 'CJ', 'CK'] },
-      { seed: 94, played: 18, last: 'HA', seat: 2, forced: ['SA', 'SK'] },
+      { seed: 3, played: 16, last: 'H10', seat: 2, forced: ['SA', 'SQ'] },
+      { seed: 1, played: 18, last: 'CQ', seat: 2, forced: ['SK', 'SQ'] },
     ]
     for (const { seed, played, last, seat, forced } of cases) {
       const pos = positions(seed).find(
