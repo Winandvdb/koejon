@@ -6,6 +6,7 @@ import { safeStorage } from './storage'
 /** Finished matches on this device only: never uploaded. */
 export const HISTORY_KEY = 'koejon-history'
 export const HISTORY_MAX = 20
+const PERSIST_KEY = 'koejon-persist-asked'
 
 export interface HistoryEntry {
   /** Random, local to this device. */
@@ -60,8 +61,16 @@ export function addHistory(
   }
   // After the list write: a failed write must not count a match twice.
   keepDropped(next.slice(0, -HISTORY_MAX), store)
-  // The statistics live here too: ask the browser not to evict them.
-  ;(globalThis.navigator as Navigator | undefined)?.storage?.persist?.().catch(() => {})
+  // The statistics live here too: ask the browser not to evict them. Only
+  // once per device: Firefox shows a prompt for it.
+  try {
+    if (!store.getItem(PERSIST_KEY)) {
+      store.setItem(PERSIST_KEY, '1')
+      ;(globalThis.navigator as Navigator | undefined)?.storage?.persist?.().catch(() => {})
+    }
+  } catch {
+    // Blocked storage: nothing to keep.
+  }
   return true
 }
 

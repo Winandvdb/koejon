@@ -173,7 +173,7 @@
         <section class="stats" aria-label={$t.statsTitle}>
           <h3 class="small muted">{$t.statsTitle}</h3>
           <dl class="stats-grid">
-            {#each statRows as [label, n] (label)}
+            {#each statRows as [label, n], i (i)}
               <div class="stat"><dt>{label}</dt><dd>{n}</dd></div>
             {/each}
           </dl>

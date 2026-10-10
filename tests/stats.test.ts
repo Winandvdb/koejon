@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { matchScore } from '../src/engine'
 import { addHistory, HISTORY_KEY, HISTORY_MAX, readHistory } from '../src/lib/history'
-import { parseKjn, type KjnHand, type KjnMatch } from '../src/lib/kjn'
+import { parseKjn, replaySteps, type KjnHand, type KjnMatch } from '../src/lib/kjn'
 import type { KeyValueStore } from '../src/lib/link-local'
 import { EMPTY_STATS, matchStats, STATS_KEY, totalStats } from '../src/lib/stats'
 import { finishedMatch, memoryStore } from './helpers'
@@ -81,6 +81,24 @@ describe('statistics of one match', () => {
     expect(s.score).toBe(matchScore({ lines: final.lines, winner: final.winner! }, 0))
     expect(s.bidsWon).toBeLessThanOrEqual(s.bidsMade)
   })
+
+  test('crosses agree with the lines the engine crosses', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const m = parseKjn(finishedMatch(seed).kjn)
+      const count = [new Map<number, number>(), new Map<number, number>()]
+      let prev: [number, number] | null = null
+      for (const s of replaySteps(m)) {
+        if (prev && s.lastResult && (s.phase === 'SCORED' || s.phase === 'GAME_OVER') && s.tricksPlayed === 6)
+          for (const t of [0, 1]) {
+            const n = prev[t] - s.lines[t]
+            count[t].set(n, (count[t].get(n) ?? 0) + 1)
+          }
+        prev = s.phase === 'PLAYING' ? [s.lines[0], s.lines[1]] : null
+      }
+      for (const seat of [0, 1])
+        expect(matchStats(m, seat)).toMatchObject({ doubles: count[seat].get(2) ?? 0, triples: count[seat].get(3) ?? 0 })
+    }
+  })
 })
 
 describe('statistics on this device', () => {
@@ -128,10 +146,12 @@ describe('statistics on this device', () => {
     expect(totalStats(readHistory(broken), broken)).toEqual(EMPTY_STATS)
   })
 
-  test('keeping a match asks the browser to keep the data', () => {
+  test('keeping matches asks the browser once to keep the data', () => {
     const persist = vi.fn(async () => true)
     vi.stubGlobal('navigator', { storage: { persist } })
-    addHistory({ seat: 0, names: [], kjn: finishedMatch(4).kjn }, memoryStore())
+    const store = memoryStore()
+    addHistory({ seat: 0, names: [], kjn: finishedMatch(4).kjn }, store)
+    addHistory({ seat: 0, names: [], kjn: finishedMatch(6).kjn }, store)
     expect(persist).toHaveBeenCalledOnce()
   })
 })
