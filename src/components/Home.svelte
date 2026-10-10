@@ -5,6 +5,7 @@
   import { parseKjn } from '../lib/kjn'
   import { appUrl } from '../lib/link-p2p'
   import { CODE_LENGTH } from '../lib/room'
+  import { totalStats } from '../lib/stats'
   import { safeStorage } from '../lib/storage'
   import type { Card } from '../engine'
   import { BOT_LEVELS } from '../bots/bot'
@@ -59,8 +60,20 @@
     if (online && name.trim() && code.trim()) onjoin(code.trim(), name.trim())
   }
 
+  const kept = readHistory()
+  const stats = totalStats(kept)
+  const statRows = $derived([
+    [$t.statPlayed, stats.played],
+    [$t.statWon, stats.won],
+    [$t.statScore, stats.score],
+    [$t.statDoubles, stats.doubles],
+    [$t.statTriples, stats.triples],
+    [$t.statBidsMade, stats.bidsMade],
+    [$t.statBidsWon, stats.bidsWon],
+  ] as const)
+
   /** Newest first, with winner and final lines read from the record. */
-  const matches = readHistory()
+  const matches = [...kept]
     .reverse()
     .map((e) => {
       try {
@@ -156,6 +169,16 @@
 
     <div class="panel home-panel home-history">
       <h2>{$t.playedMatches}</h2>
+      {#if stats.played > 0}
+        <section class="stats" aria-label={$t.statsTitle}>
+          <h3 class="small muted">{$t.statsTitle}</h3>
+          <dl class="stats-grid">
+            {#each statRows as [label, n] (label)}
+              <div class="stat"><dt>{label}</dt><dd>{n}</dd></div>
+            {/each}
+          </dl>
+        </section>
+      {/if}
       {#if matches.length === 0}
         <p class="muted">{$t.noMatches}</p>
       {:else}

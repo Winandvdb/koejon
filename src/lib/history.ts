@@ -1,5 +1,6 @@
 import { parseKjn } from './kjn'
 import type { KeyValueStore } from './link-local'
+import { keepDropped } from './stats'
 import { safeStorage } from './storage'
 
 /** Finished matches on this device only: never uploaded. */
@@ -50,13 +51,18 @@ export function addHistory(
     names: [...entry.names],
     kjn: entry.kjn,
   }
+  const next = [...list, item]
   try {
-    store.setItem(HISTORY_KEY, JSON.stringify([...list, item].slice(-HISTORY_MAX)))
-    return true
+    store.setItem(HISTORY_KEY, JSON.stringify(next.slice(-HISTORY_MAX)))
   } catch {
     // Storage full or blocked: this match is not kept, the game goes on.
     return false
   }
+  // After the list write: a failed write must not count a match twice.
+  keepDropped(next.slice(0, -HISTORY_MAX), store)
+  // The statistics live here too: ask the browser not to evict them.
+  ;(globalThis.navigator as Navigator | undefined)?.storage?.persist?.().catch(() => {})
+  return true
 }
 
 export function removeHistory(id: string, store: KeyValueStore = safeStorage): void {
