@@ -19,7 +19,7 @@ Other browsers only send intents (play this card, bid, pass).
 | `npm run build` | `svelte-check` (type check of `src/`, and of `tests/` + `scripts/` via `tsconfig.test.json`) + production build. Must pass. |
 | `npm run dev` | Dev server. Needs `firebase emulators:start` in another shell for multiplayer. Solo play needs no emulator. |
 | `npm run e2e` | Full match against the Firestore emulator. Optional. |
-| `npm run bench -- [--base origin/develop] [--matches 500] [--level normal]` | Bot benchmark (`scripts/bot-benchmark.mjs`): this checkout's bot against the bot of a git ref. Prints win rate and bidding stats. Run it for every bot change: the win rate plus its ± margin must reach 50%. |
+| `npm run bench -- [--base origin/develop] [--matches 500] [--level normal] [--a <spec>] [--b <spec>] [--jobs <n>]` | Bot benchmark (`scripts/bot-benchmark.mjs`): any two bots against each other. `--a`/`--b` take `[<git ref>@]<spec>`: an algorithm id, inline JSON or a bot configuration file (parsed by `scripts/bot-spec.mjs`, shared with bot:trace). Without them this checkout's bot plays the `--base` ref bot at `--level`; a ref without the bot framework falls back to its `botAction`. Prints win rate, per-side decision timing and bidding stats. Run it for every bot change: the win rate plus its ± margin must reach 50%. |
 
 Before you say a change is done, run `npm test` and `npm run build`. Both must pass.
 
