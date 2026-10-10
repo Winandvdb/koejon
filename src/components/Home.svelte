@@ -62,14 +62,42 @@
 
   const kept = readHistory()
   const stats = totalStats(kept)
+  const avg = $derived(
+    (stats.score / Math.max(1, stats.played)).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', {
+      maximumFractionDigits: 1,
+    }),
+  )
+  /** One row per subject: a label, then "number word" pairs. */
   const statRows = $derived([
-    [$t.statPlayed, stats.played],
-    [$t.statWon, stats.won],
-    [$t.statScore, stats.score],
-    [$t.statDoubles, stats.doubles],
-    [$t.statTriples, stats.triples],
-    [$t.statBidsMade, stats.bidsMade],
-    [$t.statBidsWon, stats.bidsWon],
+    [
+      $t.statGames,
+      [
+        [stats.played, $t.statPlayed],
+        [stats.won, $t.statWon],
+        [stats.played - stats.won, $t.statLost],
+      ],
+    ],
+    [
+      $t.statScore,
+      [
+        [stats.score, $t.statTotal],
+        [avg, $t.statAvg],
+      ],
+    ],
+    [
+      $t.statCrosses,
+      [
+        [stats.doubles, $t.statDoubles],
+        [stats.triples, $t.statTriples],
+      ],
+    ],
+    [
+      $t.statBids,
+      [
+        [stats.bidsMade, $t.statBidsMade],
+        [stats.bidsWon, $t.statBidsWon],
+      ],
+    ],
   ] as const)
 
   /** Newest first, with winner and final lines read from the record. */
@@ -172,9 +200,16 @@
       {#if stats.played > 0}
         <section class="stats" aria-label={$t.statsTitle}>
           <h3 class="small muted">{$t.statsTitle}</h3>
-          <dl class="stats-grid">
-            {#each statRows as [label, n], i (i)}
-              <div class="stat"><dt>{label}</dt><dd>{n}</dd></div>
+          <dl class="stats-rows">
+            {#each statRows as [label, items], i (i)}
+              <div class="stats-row">
+                <dt>{label}</dt>
+                <dd>
+                  {#each items as [n, what], j (j)}
+                    <span class="stat"><b>{n}</b> {what}</span>
+                  {/each}
+                </dd>
+              </div>
             {/each}
           </dl>
         </section>
