@@ -1,6 +1,6 @@
 import { fullDeck, RANK_ORDER, sameCard, trickPoints, trickWinnerIndex } from './cards'
 import { rngShuffle } from './rng'
-import type { Action, BoomkeMark, Card, State, Suit } from './types'
+import type { Action, BoomkeMark, Card, Phase, State, Suit } from './types'
 import { START_LINES } from './types'
 
 const freshMarks = (startLines: number): BoomkeMark[] =>
@@ -23,9 +23,22 @@ export class IllegalActionError extends Error {
 
 /** Teams are seats {0,2} and {1,3}. */
 export const teamOf = (seat: number) => seat % 2
-const leftOf = (seat: number) => (seat + 1) % 4
+export const leftOf = (seat: number) => (seat + 1) % 4
+export const partnerOf = (seat: number) => (seat + 2) % 4
 /** The dealer's right neighbour cuts. */
 export const cutterOf = (dealer: number) => (dealer + 3) % 4
+
+/** The bidding phases, the dealer's choice included. */
+export const isBidding = (phase: Phase) =>
+  phase === 'BIDDING_R1' || phase === 'BIDDING_R2' || phase === 'DEALER_CHOICE'
+
+/** The seats in the order they get their cards: the dealer's left neighbour first, the dealer last. */
+export const dealOrder = (dealer: number): number[] => [
+  leftOf(dealer),
+  partnerOf(dealer),
+  cutterOf(dealer),
+  dealer,
+]
 
 /** Packet sizes `seat` may lift right now (dealer draw or cut); empty when none. */
 export function liftRange(s: State, seat: number): number[] {
@@ -206,7 +219,7 @@ export function legalActions(s: State, seat: number): Action[] {
       // the partner's first lead is still pending — it may be ignored.
       if (
         s.bidder === seat &&
-        s.turn === (s.bidder + 2) % 4 &&
+        s.turn === partnerOf(s.bidder) &&
         s.tricksPlayed === 0 &&
         s.trick.length === 0 &&
         !s.troefkeAsked
@@ -257,14 +270,21 @@ function nextDeck(s: State): Card[] {
 
 function doDeal(s: State): void {
   const deck = nextDeck(s)
-  const order = [leftOf(s.dealer), (s.dealer + 2) % 4, (s.dealer + 3) % 4, s.dealer]
   const hands: Card[][] = [[], [], [], []]
   let i = 0
   for (let round = 0; round < 3; round++) {
-    for (const seat of order) {
+    for (const seat of dealOrder(s.dealer)) {
       hands[seat].push(deck[i++], deck[i++])
     }
   }
+  dealHands(s, s.dealer, hands)
+}
+
+/** Puts dealt `hands` on the table for `dealer` and opens round 1 of the bidding. */
+export function dealHands(s: State, dealer: number, hands: Card[][]): void {
+  s.dealer = dealer
+  s.dealerDraw = null
+  s.piles = [[], []]
   s.hands = hands
   const dh = hands[s.dealer]
   s.turned = { first: dh[5], second: dh[4], secondUp: false }
@@ -503,7 +523,7 @@ export function apply(state: State, action: Action): State {
       if (s.trick.length === 4) {
         resolveTrick(s)
       } else {
-        s.turn = (s.turn + 1) % 4
+        s.turn = leftOf(s.turn)
       }
       break
     }
@@ -525,10 +545,7 @@ export function apply(state: State, action: Action): State {
 
 /** True when `seat` may not look at their cards (dealer during bidding). */
 function handMasked(s: State, seat: number): boolean {
-  return (
-    seat === s.dealer &&
-    (s.phase === 'BIDDING_R1' || s.phase === 'BIDDING_R2' || s.phase === 'DEALER_CHOICE')
-  )
+  return seat === s.dealer && isBidding(s.phase)
 }
 
 /** The hand a given seat is allowed to see; null means "all face down". */

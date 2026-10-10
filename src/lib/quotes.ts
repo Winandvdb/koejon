@@ -1,4 +1,4 @@
-import { RANK_ORDER, teamOf, trickPoints } from '../engine'
+import { partnerOf, RANK_ORDER, teamOf, trickPoints } from '../engine'
 import type { PublicState, TrickCard } from '../engine'
 import type { QuoteEvent } from './net-types'
 
@@ -234,7 +234,7 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
       // Overbuying the trump that just took the partner's ace.
       const lastTc = shown[shown.length - 1]
       if (shown.length >= 3 && lastTc.card.s === trump) {
-        const partner = (lastTc.seat + 2) % 4
+        const partner = partnerOf(lastTc.seat)
         const ai = shown.findIndex((tc) => tc.seat === partner && tc.card.r === 'A')
         const bought =
           ai >= 0 &&

@@ -1,7 +1,9 @@
 import {
   choiceSuits,
   legalActions,
+  leftOf,
   legalCards,
+  partnerOf,
   RANK_ORDER,
   RANK_POINTS,
   RANKS,
@@ -12,8 +14,7 @@ import {
 } from '../engine'
 import type { Action, Card, Rank, State, Suit, TrickCard } from '../engine'
 
-const partnerOf = (seat: number) => (seat + 2) % 4
-const oppSeatsOf = (seat: number) => [(seat + 1) % 4, (seat + 3) % 4]
+const oppSeatsOf = (seat: number) => [leftOf(seat), leftOf(partnerOf(seat))]
 
 // ---- Tunables --------------------------------------------------------------
 

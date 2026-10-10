@@ -32,6 +32,18 @@ describe('deal', () => {
     expect(legalActions(s, 3)).toHaveLength(0)
   })
 
+  it('deals the same cards for a seed as it did before (frozen)', () => {
+    const s = dealtState(123, 2)
+    expect(s.hands.map((h) => h.map((c) => c.s + c.r).join(' '))).toEqual([
+      'HK CJ SA C9 CQ H9',
+      'HQ S10 D9 SJ DJ SK',
+      'DK CK S9 SQ HJ DQ',
+      'C10 D10 DA HA CA H10',
+    ])
+    expect(s.turned).toEqual({ first: C('D', 'Q'), second: C('H', 'J'), secondUp: false })
+    expect(s.rng).toBe(-1647318399)
+  })
+
   it('deals deterministically for a fixed seed', () => {
     const a = dealtState(123)
     const b = dealtState(123)

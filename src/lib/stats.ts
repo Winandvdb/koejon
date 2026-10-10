@@ -1,4 +1,4 @@
-import { matchScore, START_LINES } from '../engine'
+import { matchScore, START_LINES, teamOf } from '../engine'
 import { parseKjn } from './kjn'
 import type { KjnMatch } from './kjn'
 import type { KeyValueStore } from './link-local'
@@ -33,7 +33,7 @@ const add = (a: PlayerStats, b: PlayerStats): PlayerStats => ({
 /** The numbers of `seat` in one finished match; an unfinished one counts nothing. */
 export function matchStats(m: KjnMatch, seat: number): PlayerStats {
   if (m.winner === null || !m.lines) return { ...EMPTY_STATS }
-  const team = seat % 2
+  const team = teamOf(seat)
   const s: PlayerStats = {
     ...EMPTY_STATS,
     played: 1,
