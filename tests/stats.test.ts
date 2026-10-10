@@ -90,6 +90,7 @@ describe('statistics of one match', () => {
     expect(s.bidsWon).toBeLessThanOrEqual(s.bidsMade)
   })
 
+  // 20 full bot matches plus their replays: past 5 s on a busy CI runner.
   test('crosses agree with the lines the engine crosses', () => {
     for (let seed = 1; seed <= 20; seed++) {
       const m = parseKjn(finishedMatch(seed).kjn)
@@ -106,7 +107,7 @@ describe('statistics of one match', () => {
       for (const seat of [0, 1])
         expect(matchStats(m, seat)).toMatchObject({ doubles: count[seat].get(2) ?? 0, triples: count[seat].get(3) ?? 0 })
     }
-  })
+  }, 30_000)
 })
 
 describe('players or bots', () => {

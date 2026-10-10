@@ -6,12 +6,42 @@ const hand = [C('H', '9'), C('S', 'K'), C('H', 'A'), C('S', '9'), C('D', 'J'), C
 const keys = (cs: ReturnType<typeof C>[]) => cs.map(cardKey)
 
 describe('arrangeHand', () => {
+  // H and D are red: with three suits the black S goes between them.
   test('high: by suit, high to low', () => {
-    expect(keys(arrangeHand(hand, 'high', []))).toEqual(['SK', 'S9', 'HA', 'H10', 'H9', 'DJ'])
+    expect(keys(arrangeHand(hand, 'high', []))).toEqual(['HA', 'H10', 'H9', 'SK', 'S9', 'DJ'])
   })
 
   test('low: by suit, low to high', () => {
-    expect(keys(arrangeHand(hand, 'low', []))).toEqual(['S9', 'SK', 'H9', 'H10', 'HA', 'DJ'])
+    expect(keys(arrangeHand(hand, 'low', []))).toEqual(['H9', 'H10', 'HA', 'S9', 'SK', 'DJ'])
+  })
+
+  const suitsOf = (cs: ReturnType<typeof C>[]) => [...new Set(cs.map((c) => c.s))].join('')
+  const ofSuits = (suits: string) => [...suits].map((s) => C(s as 'S', '9'))
+
+  test('four suits alternate black and red: S H C D', () => {
+    const four = [C('D', 'A'), C('C', 'K'), C('H', 'Q'), C('S', 'J')]
+    expect(suitsOf(arrangeHand(four, 'high', []))).toBe('SHCD')
+    expect(suitsOf(arrangeHand(four, 'low', []))).toBe('SHCD')
+  })
+
+  test.each([
+    ['SHD', 'HSD'],
+    ['SHC', 'SHC'],
+    ['SDC', 'SDC'],
+    ['HDC', 'HCD'],
+  ])('three suits %s: no two of one colour touch (%s)', (suits, want) => {
+    expect(suitsOf(arrangeHand(ofSuits(suits), 'high', []))).toBe(want)
+    expect(suitsOf(arrangeHand(ofSuits(suits), 'low', []))).toBe(want)
+  })
+
+  test.each([
+    ['DS', 'SD'],
+    ['CS', 'SC'],
+    ['DH', 'HD'],
+    ['C', 'C'],
+  ])('two suits or one suit keep the base order: %s -> %s', (suits, want) => {
+    expect(suitsOf(arrangeHand(ofSuits(suits), 'high', []))).toBe(want)
+    expect(suitsOf(arrangeHand(ofSuits(suits), 'low', []))).toBe(want)
   })
 
   test('manual without an order keeps the deal order', () => {
