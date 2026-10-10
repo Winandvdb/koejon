@@ -26,6 +26,12 @@ export function deckStack(pub: PublicState): StackPart[] | null {
     .map((team) => ({ from: 'pile', team, count: pub.tricksWon[team] }))
 }
 
+/** Deal timing, shared by the table (animation) and the host (it waits for it). */
+export const DEAL_STEP = 130
+export const DEAL_FLY = 300
+/** The last pair has landed. */
+export const DEAL_MS = 11 * DEAL_STEP + DEAL_FLY
+
 /** One pair of the deal: two deck positions, counted from the top, to one seat. */
 export interface DealPair {
   seat: number
@@ -39,4 +45,9 @@ export function dealPairs(dealer: number): DealPair[] {
     seat: (dealer + 1 + (i % 4)) % 4,
     from: [2 * i, 2 * i + 1],
   }))
+}
+
+/** The pair (index in `dealPairs`) that brings card `k` of `seat`'s dealt hand. */
+export function pairOfCard(dealer: number, seat: number, k: number): number {
+  return Math.floor(k / 2) * 4 + ((seat - dealer + 3) % 4)
 }

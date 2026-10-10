@@ -97,6 +97,22 @@ describe('cut', () => {
     expect(s2.piles).toEqual([[...stacked.slice(20), ...stacked.slice(0, 20)], []])
     expect(legalActions(s2, 1)).toEqual([{ type: 'deal', seat: 1 }])
   })
+
+  it('deals per two, clockwise from the left of the dealer, from the top of the cut deck', () => {
+    for (const dealer of [0, 1, 2, 3]) {
+      const s = apply({ ...cutting(), dealer }, { type: 'cut', seat: (dealer + 3) % 4, n: 9 })
+      const deck = s.piles[0]
+      const dealt = apply(s, { type: 'deal', seat: dealer })
+      // Left neighbour, partner, right neighbour, dealer: 2 cards each, three times.
+      const left = (dealer + 1) % 4
+      for (let round = 0; round < 3; round++) {
+        for (let k = 0; k < 4; k++) {
+          const top = 8 * round + 2 * k
+          expect(dealt.hands[(left + k) % 4].slice(2 * round, 2 * round + 2)).toEqual(deck.slice(top, top + 2))
+        }
+      }
+    }
+  })
 })
 
 describe('createMatch', () => {

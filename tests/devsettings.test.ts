@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import { botAction } from '../src/bots/bot'
 import type { Action } from '../src/engine'
 import { get } from 'svelte/store'
+import { DEAL_MS } from '../src/lib/deckstack'
 import { DEV_DEFAULTS, devSettings, parseDev, setDev, type BotSpeed, type DevSettings } from '../src/lib/devsettings'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import type { GameDoc } from '../src/lib/kjn'
@@ -26,6 +27,7 @@ async function solo(dev: Partial<DevSettings>, click: (a: Action) => boolean, op
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,
+    dealLingerMs: 0,
     dev: () => ({ ...DEV_DEFAULTS, ...dev }),
     ...opts,
   })
@@ -80,19 +82,40 @@ describe('dev settings', () => {
     g.close()
   }, 30_000)
 
-  test('bot speed divides the bot delay and both lingers', async () => {
+  test('bot speed divides the bot delay and the lingers', async () => {
     const spy = vi.spyOn(globalThis, 'setTimeout')
-    const g = await solo({ speed: 5 }, () => true, { botDelay: () => 50, drawLingerMs: 100, bidLingerMs: 75 })
-    await until(() => (g.pub()?.handNumber ?? 0) >= 1)
+    // The host deals, as in the app: no table sends `deal` itself.
+    const g = await solo({ speed: 5 }, (a) => a.type !== 'deal', {
+      botDelay: () => 50,
+      drawLingerMs: 100,
+      bidLingerMs: 75,
+      dealLingerMs: 125,
+    })
+    // Two deals: in at least one a bot bids first, so the host waits after it.
+    await until(() => (g.pub()?.handNumber ?? 0) >= 2)
     g.close()
     const waits = new Set(spy.mock.calls.map((c) => c[1]))
-    // 50 / 5, 100 / 5 (deal), 75 / 5 (after a bid or draw).
-    for (const ms of [10, 20, 15]) expect(waits).toContain(ms)
-    for (const ms of [50, 100, 75]) expect(waits).not.toContain(ms)
+    // 50 / 5, 100 / 5 (deal), 75 / 5 (after a bid or draw), 125 / 5 (after the deal).
+    for (const ms of [10, 20, 15, 25]) expect(waits).toContain(ms)
+    for (const ms of [50, 100, 75, 125]) expect(waits).not.toContain(ms)
+  }, 30_000)
+
+  test('after the deal, the first bid waits for the deal animation', async () => {
+    const spy = vi.spyOn(globalThis, 'setTimeout')
+    // The host deals, as in the app: no table sends `deal` itself.
+    const g = await solo({}, (a) => a.type !== 'deal', { dealLingerMs: undefined })
+    await until(() => (g.pub()?.handNumber ?? 0) >= 2)
+    g.close()
+    expect(spy.mock.calls.map((c) => c[1])).toContain(DEAL_MS + 300)
   }, 30_000)
 
   test('instant bot speed waits 0 ms', async () => {
-    const g = await solo({ speed: 'instant' }, () => true, { botDelay: () => 60_000, drawLingerMs: 60_000, bidLingerMs: 60_000 })
+    const g = await solo({ speed: 'instant' }, () => true, {
+      botDelay: () => 60_000,
+      drawLingerMs: 60_000,
+      bidLingerMs: 60_000,
+      dealLingerMs: 60_000,
+    })
     await until(() => (g.pub()?.handNumber ?? 0) >= 1)
     g.close()
   }, 30_000)

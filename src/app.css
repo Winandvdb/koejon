@@ -1876,39 +1876,51 @@ button.tag {
   }
 }
 
-/* The deal: pairs leave the top of the deck one by one and stay at the hands
-   until the real cards show. The deck gets lower with each pair. Above the
-   dealer panel (.felt-overlay), so my own pairs stay in sight. */
+/* The deal: the deck slides to the dealer (--dx/--dy), one layer per pair.
+   Each layer goes when its pair leaves; the deck gets lower with each pair.
+   Above the dealer panel (.felt-overlay), so it stays in sight. */
 .deck-stack.deal {
   z-index: 11;
+  animation: deck-to-dealer 400ms ease-in-out both;
 }
 
-.deal-pair {
-  position: absolute;
-  inset: 0;
-  z-index: var(--z);
-  translate: 0 calc(var(--k) * -0.75px);
-  animation: deal-fly var(--fly) cubic-bezier(0.3, 0.6, 0.3, 1) var(--d) forwards;
-}
-
-/* A pair lies square in the deck and fans out once it lands. */
-.deal-pair .pile-card + .pile-card {
-  animation: deal-fan 150ms ease-out calc(var(--d) + var(--fly)) forwards;
-}
-
-/* At the hand a later round lies on top of an earlier one, all at one height. */
-@keyframes deal-fly {
+@keyframes deck-to-dealer {
   to {
-    transform: translate(var(--tx), var(--ty));
-    translate: 0 0;
-    z-index: var(--landed);
+    translate: var(--dx) var(--dy);
   }
 }
 
-@keyframes deal-fan {
+.deal-layer {
+  position: absolute;
+  inset: 0;
+  translate: 0 calc(var(--k) * -0.75px);
+}
+
+.deal-layer.going {
+  animation: deal-leave 1ms linear var(--d) forwards;
+}
+
+@keyframes deal-leave {
   to {
-    translate: calc(var(--cw) * 0.18) 0;
-    rotate: 7deg;
+    visibility: hidden;
+  }
+}
+
+/* A dealt card flies from the dealer's deck (--fx/--fy) into its place in the
+   hand, hidden until its pair leaves the deck. Only `translate`: the hover
+   lift of a hand card uses `transform`. */
+.dealt {
+  animation: deal-in var(--fly) cubic-bezier(0.3, 0.6, 0.3, 1) var(--d) both;
+}
+
+@keyframes deal-in {
+  from {
+    translate: var(--fx) var(--fy);
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 1;
   }
 }
 
@@ -2385,8 +2397,9 @@ button.tag {
   .stack-part,
   .stack-part .pile-card,
   .stack-part .card-back,
-  .deal-pair,
-  .deal-pair .pile-card + .pile-card {
+  .deck-stack.deal,
+  .deal-layer.going,
+  .dealt {
     animation-duration: 0s;
     animation-delay: 0s;
   }

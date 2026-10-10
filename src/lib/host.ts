@@ -10,6 +10,7 @@ import type { GameDoc, KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
 import { safeStorage } from './storage'
 import { DEV_DEFAULTS, type DevSettings } from './devsettings'
+import { DEAL_MS } from './deckstack'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
 import type { HostLink } from './transport'
 
@@ -42,6 +43,9 @@ export interface HostOptions {
    *  event before the next automatic action, so the announcement is readable.
    *  Default 2 s. */
   bidLingerMs?: number
+  /** Min. pause after the deal before the next automatic action, so every
+   *  table can deal the cards out per two first. Default: the deal animation. */
+  dealLingerMs?: number
   /** Where the full engine state is kept for reload recovery. Only this
    *  browser (same anonymous uid) can be host, so it never leaves the device.
    *  Default: localStorage when present and not blocked; none in plain Node. */
@@ -95,6 +99,7 @@ export class HostGame {
   private heartbeatMs: number
   private drawLingerMs: number
   private bidLingerMs: number
+  private dealLingerMs: number
   private storage: HostOptions['storage']
   private onCommit: HostOptions['onCommit']
   private quoteRand: () => number
@@ -126,6 +131,8 @@ export class HostGame {
     this.botDelay = opts.botDelay ?? (() => 500 + Math.random() * 500)
     this.drawLingerMs = opts.drawLingerMs ?? 3000
     this.bidLingerMs = opts.bidLingerMs ?? 2000
+    // A little over the animation: a guest sees the deal a moment later.
+    this.dealLingerMs = opts.dealLingerMs ?? DEAL_MS + 300
     this.storage = opts.storage ?? safeStorage
     this.onCommit = opts.onCommit
     this.quoteRand = opts.quoteRand ?? Math.random
@@ -698,8 +705,15 @@ export class HostGame {
       lastEv === 'draw' ||
       lastEv === 'draw-tie' ||
       lastEv === 'draw-win'
+    // The cards just went out: every table deals them per two first.
+    const dealLinger = lastEv === 'deal'
     const speed = this.dev().speed
-    const base = Math.max(this.botDelay(), drawLinger ? this.drawLingerMs : 0, bidLinger ? this.bidLingerMs : 0)
+    const base = Math.max(
+      this.botDelay(),
+      drawLinger ? this.drawLingerMs : 0,
+      bidLinger ? this.bidLingerMs : 0,
+      dealLinger ? this.dealLingerMs : 0,
+    )
     const wait = speed === 'instant' ? 0 : base / speed
     this.botTimer = setTimeout(() => {
       this.botTimer = null

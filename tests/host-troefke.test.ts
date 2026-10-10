@@ -51,6 +51,7 @@ async function bidderAsks(): Promise<boolean> {
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,
+    dealLingerMs: 0,
     quoteRand: () => 1,
   })
   try {

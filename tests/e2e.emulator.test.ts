@@ -77,6 +77,7 @@ describe('emulator e2e', () => {
       heartbeatMs: 60_000,
       drawLingerMs: 20,
       bidLingerMs: 20,
+      dealLingerMs: 20,
       storage: saved,
       onCommit: () => commits++,
     })

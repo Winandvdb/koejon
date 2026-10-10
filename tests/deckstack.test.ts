@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { apply, createMatch, fullDeck, sameCard, toPublic } from '../src/engine'
 import type { Card, State } from '../src/engine'
-import { dealPairs, deckStack } from '../src/lib/deckstack'
+import { dealPairs, deckStack, pairOfCard } from '../src/lib/deckstack'
 import type { StackPart } from '../src/lib/deckstack'
 import { C, cutAndDeal, dealtState, lastTrickState } from './helpers'
 
@@ -84,10 +84,15 @@ describe('deck animation against the engine, card for card', () => {
   const stacked = (parts: StackPart[], cardsOf: (p: StackPart) => Card[]) =>
     [...parts].reverse().flatMap(cardsOf)
 
-  /** Give out `deck` as the animated pairs do. */
+  /** Give out `deck` as the animated pairs do. Each card of a hand must come
+   *  with the pair the table times it with (`pairOfCard`). */
   function dealtHands(deck: Card[], dealer: number): Card[][] {
     const hands: Card[][] = [[], [], [], []]
-    for (const p of dealPairs(dealer)) hands[p.seat].push(deck[p.from[0]], deck[p.from[1]])
+    dealPairs(dealer).forEach((p, i) => {
+      const h = hands[p.seat]
+      expect([pairOfCard(dealer, p.seat, h.length), pairOfCard(dealer, p.seat, h.length + 1)]).toEqual([i, i])
+      h.push(deck[p.from[0]], deck[p.from[1]])
+    })
     return hands
   }
 
