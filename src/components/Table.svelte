@@ -5,14 +5,19 @@
   import type { SessionView } from '../lib/room'
   import { DEAL_FLY, DEAL_MS, DEAL_STEP, deckStack, pairOfCard } from '../lib/deckstack'
   import type { StackPart } from '../lib/deckstack'
-  import { SUIT_GLYPH, t } from '../lib/i18n'
+  import { SUIT_GLYPH, seatName, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
-  import type { SeatInfo } from '../lib/net-types'
   import { DEFAULT_ROOM_OPTS } from '../lib/net-types'
+  import { DIR, isPlaying, lastBids, lingerTrick as lingerOf, relSeat, showBids as showBidsOf, sideOf, troefkeBubble } from '../lib/table'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
+  import Nameplate from './Nameplate.svelte'
+  import Opponent from './Opponent.svelte'
   import PacketLift from './PacketLift.svelte'
+  import ResultPanel from './ResultPanel.svelte'
+  import TrickArea from './TrickArea.svelte'
+  import TurnedCards from './TurnedCards.svelte'
 
   let {
     view,
@@ -37,17 +42,8 @@
   const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
   const playingTeam = $derived(pub.bidder === null ? null : teamOf(pub.bidder))
 
-  const name = (i: number) => seats[i]?.name ?? `#${i}`
-  /** Relative position: 0 bottom (me), 1 left, 2 top, 3 right. */
-  const rel = (seat: number) => (seat - my + 4) % 4
-  /** Fly direction from each screen position toward the centre. */
-  const DIR = [
-    { x: 0, y: 160 },
-    { x: -180, y: 0 },
-    { x: 0, y: -160 },
-    { x: 180, y: 0 },
-  ]
-  const TILT = [-4, 3, -2, 5]
+  const name = (i: number) => seatName($t, seats[i]?.name, i)
+  const rel = (seat: number) => relSeat(seat, my)
   /** Each won trick lies clearly askew on the pile, so the tricks can be counted. The skew
    *  differs per hand, team and trick, but is derived, not random: a redraw must not move
    *  a card, and every client must see the same pile. Neighbours turn opposite ways. */
@@ -66,7 +62,7 @@
 
   const myTurn = $derived(pub.actionSeats.includes(my))
   const legalPlays = $derived(
-    new Set(view.legal.flatMap((a) => (a.type === 'play' ? [a.card.s + a.card.r] : []))),
+    new Set(view.legal.flatMap((a) => (a.type === 'play' ? [cardKey(a.card)] : []))),
   )
   const has = (type: Action['type']) => view.legal.some((a) => a.type === type)
   const chooseSuits = $derived(
@@ -85,26 +81,13 @@
   )
   const showTurned = $derived(turnedVisible(pub))
 
-  const playing = $derived(
-    pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER',
-  )
+  const playing = $derived(isPlaying(pub))
 
   /** Seats still to confirm the current pause (start of hand or completed trick). */
   const pendingAcks = $derived(
-    pub.phase === 'PLAYING' && pub.trickAcks.length < 4
-      ? [0, 1, 2, 3].filter((s) => !pub.trickAcks.includes(s))
-      : ([] as number[]),
+    pub.phase === 'PLAYING' && pub.trickAcks.length < 4 ? pub.actionSeats : ([] as number[]),
   )
-  /** A completed trick lingers on the felt until the winner leads again. */
-  const lingerTrick = $derived(
-    playing && pub.trick.length === 0 && pub.lastTrick !== null ? pub.lastTrick : null,
-  )
-  /** Trick cards to render: the trick in progress, or the lingering last one. */
-  const showCards = $derived(
-    pub.phase === 'PLAYING' && pub.trick.length > 0 ? pub.trick : lingerTrick,
-  )
-  /** Lingered cards fly out towards the seat that won the trick. */
-  const lingerExit = $derived(DIR[rel(pub.leader)])
+  const lingerTrick = $derived(lingerOf(pub))
   /** Won tricks on a team's pile. A trick still lingering on the felt joins the
    *  pile when it flies off; after the last trick it joins at once for the score. */
   const pileCount = (team: number) =>
@@ -195,33 +178,8 @@
     )
   }
 
-  /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
-  const lastBid = $derived.by(() => {
-    const map = new Map<number, string>()
-    for (let i = pub.log.length - 1; i >= 0; i--) {
-      const ev = pub.log[i]
-      if (
-        ev.t === 'deal' ||
-        ev.t === 'first-dealer' ||
-        ev.t === 'all-pass' ||
-        ev.t === 'second-card' ||
-        ev.t === 'score' ||
-        ev.t === 'tied'
-      )
-        break
-      if (ev.seat === undefined || map.has(ev.seat)) continue
-      if (ev.t === 'pass' || ev.t === 'dealer-pass') map.set(ev.seat, $t.pass)
-      else if (ev.t === 'play-call') map.set(ev.seat, $t.play)
-    }
-    return map
-  })
-
-  /** Bubbles stay up during bidding, the dealer announce and until the first card falls. */
-  const showBids = $derived(
-    biddingPhase ||
-      pub.phase === 'DEALING' ||
-      (pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0),
-  )
+  const lastBid = $derived(lastBids(pub.log))
+  const showBids = $derived(showBidsOf(pub))
 
   const acting = (i: number) => pub.actionSeats.includes(i)
 
@@ -312,9 +270,7 @@
 
   /** A bubble floats above my nameplate: the wait hint below must lift clear of it. */
   const meBubble = $derived(
-    sayings[my] !== undefined ||
-      (showBids && lastBid.has(my)) ||
-      (pub.troefkeAsked && my === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0),
+    sayings[my] !== undefined || (showBids && lastBid.has(my)) || troefkeBubble(pub, my),
   )
 
   $effect(() => {
@@ -325,51 +281,26 @@
   })
 </script>
 
-{#snippet nameplate(seat: number)}
-  {@const s: SeatInfo | null = seats[seat]}
-  {@const side = playingTeam !== null && playing ? (teamOf(seat) === playingTeam ? 'decl' : 'def') : null}
-  <div class="nameplate" class:active={acting(seat)} class:decl={side === 'decl'} class:def={side === 'def'}>
-    <span class="avatar">{s?.bot ? '🤖' : name(seat).slice(0, 1).toUpperCase()}</span>
-    <span class="np-name">
-      {name(seat)}{#if seat === my}<span class="np-muted"> ({$t.you})</span>{/if}
-    </span>
-    {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
-    {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
-    {#if opts.score && playing}<span class="chip tricks">{pub.tricksWon[teamOf(seat)]}</span>{/if}
-    <div class="bubbles" class:has-say={!!sayings[seat]}>
-      {#if showBids && lastBid.has(seat)}<span class="bubble" in:scale={{ start: 0.6, duration: 180 }}>{lastBid.get(seat)}</span>{/if}
-      {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
-        <span class="bubble troef" in:scale={{ start: 0.6, duration: 180 }}>{$t.troefWanted}</span>
-      {/if}
-      {#if sayings[seat]}<span class="bubble say" in:scale={{ start: 0.6, duration: 180 }}>{sayings[seat].text}</span>{/if}
-    </div>
-    {#if isHost && s && !s.bot && seat !== my}
-      <button
-        class="icon-btn tiny kick"
-        title={$t.remove}
-        aria-label={$t.remove}
-        onclick={() => onkick(seat)}>✕</button>
-    {/if}
-  </div>
+{#snippet nameplateOf(seat: number)}
+  {@const s = seats[seat]}
+  <Nameplate
+    name={name(seat)}
+    bot={!!s?.bot}
+    you={seat === my}
+    active={acting(seat)}
+    side={sideOf(pub, seat)}
+    dealer={seat === pub.dealer}
+    bidder={pub.bidder === seat}
+    tricks={opts.score && playing ? pub.tricksWon[teamOf(seat)] : null}
+    bid={showBids ? lastBid.get(seat) : undefined}
+    troef={troefkeBubble(pub, seat)}
+    say={sayings[seat]?.text}
+    onkick={isHost && s && !s.bot && seat !== my ? () => onkick(seat) : undefined}
+  />
 {/snippet}
 
 {#snippet turnedAt(seat: number)}
-  {#if showTurned && seat === pub.dealer && pub.turned}
-    <!-- The dealer's last pair: dealt card 6 lies face up, card 5 face down. -->
-    <div class="turned-at" title={$t.turnedCard}>
-      <span class="mini-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, 5) : undefined}>
-        <CardView card={pub.turned.first} />
-      </span>
-      <span
-        class="mini-card"
-        class:dealt={freshDeal}
-        style={freshDeal ? dealIn(seat, 4) : undefined}
-        in:scale={{ duration: freshDeal ? 0 : 250 }}
-      >
-        <CardView card={pub.turned.secondUp ? pub.turned.second : null} />
-      </span>
-    </div>
-  {/if}
+  <TurnedCards {pub} {seat} fresh={freshDeal} dealStyle={(k) => dealIn(seat, k)} />
 {/snippet}
 
 {#snippet trickPile(team: number)}
@@ -400,19 +331,17 @@
 {/snippet}
 
 {#snippet opponent(seat: number, pos: number)}
-  <div class="seat seat-p{pos}">
-    {@render nameplate(seat)}
-    <div class="opp-hand" class:vertical={pos !== 2} class:horizontal={pos === 2}>
-      {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
-        <div class="opp-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, k) : undefined}>
-          <div class="card-back"></div>
-        </div>
-      {/each}
-      <!-- One pile per team, right by the hand: ours at my partner, theirs at the left opponent. -->
-      {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
-    </div>
-    {@render turnedAt(seat)}
-  </div>
+  <Opponent {pos}>
+    {#snippet nameplate()}{@render nameplateOf(seat)}{/snippet}
+    {#snippet turned()}{@render turnedAt(seat)}{/snippet}
+    {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
+      <div class="opp-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, k) : undefined}>
+        <div class="card-back"></div>
+      </div>
+    {/each}
+    <!-- One pile per team, right by the hand: ours at my partner, theirs at the left opponent. -->
+    {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
+  </Opponent>
 {/snippet}
 
 <div class="table-wrap">
@@ -428,27 +357,7 @@
       {@render opponent((my + 3) % 4, 3)}
 
       <div class="area-center">
-        <div class="trick-area">
-          <!-- One keyed list across trick → linger: cards already on the felt
-               stay put, only the newly played card flies in. -->
-          {#if showCards}
-            {#each showCards as tc, i ((lingerTrick ? pub.tricksPlayed - 1 : pub.tricksPlayed) + '-' + tc.seat)}
-              <div
-                class="trick-card tp{rel(tc.seat)}"
-                class:done={lingerTrick !== null}
-                class:won={lingerTrick !== null && tc.seat === pub.leader}
-                style="rotate: {TILT[(i + showCards[0].seat) % 4]}deg; z-index: {i + 1}"
-                in:fly={{
-                  x: DIR[rel(tc.seat)].x * 0.8,
-                  y: DIR[rel(tc.seat)].y * 0.8,
-                  duration: 240,
-                }}
-                out:fly={{ x: lingerExit.x * 1.6, y: lingerExit.y * 1.6, duration: 420 }}
-              >
-                <CardView card={tc.card} />
-              </div>
-            {/each}
-          {/if}
+        <TrickArea {pub} {my}>
           {#if stack && !deckOut}
             <div class="deck-stack" style="--fly: {STACK_FLY}ms; --square: {STACK_SQUARE}ms">
               {#each stack as part, i (i)}
@@ -490,7 +399,7 @@
               {/each}
             </div>
           {/if}
-        </div>
+        </TrickArea>
       </div>
 
       <div
@@ -539,44 +448,8 @@
               <div class="small">{name(lastCut.seat!)} {$t.cutDid}</div>
             {/if}
           </div>
-        {:else if pub.phase === 'SCORED' && pub.lastResult}
-          {@const r = pub.lastResult}
-          <div class="panel overlay-panel result" in:scale={{ duration: 220 }}>
-            <div class="result-head">{$t.scored}</div>
-            <div class="result-score">
-              <span class="rs-name">{$t.wij}</span>
-              <b class="rs-num">{r.points[myTeam]}–{r.points[1 - myTeam]}</b>
-              <span class="rs-name">{$t.zij}</span>
-            </div>
-            <div class="result-flags">
-              {#if r.draw}
-                <span class="chip">{$t.draw}</span>
-              {:else}
-                <span class="chip flag-win">{teamName(r.winnerTeam)} {$t.wins}</span>
-                <span class="chip">{r.erased} {$t.erased}</span>
-                {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
-                {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
-              {/if}
-            </div>
-          </div>
-        {:else if pub.phase === 'GAME_OVER'}
-          {@const r = pub.lastResult}
-          <div class="panel overlay-panel result over" in:scale={{ duration: 260 }}>
-            <div class="result-head">{$t.gameOver}</div>
-            {#if r}
-              <div class="result-score">
-                <span class="rs-name">{$t.wij}</span>
-                <b class="rs-num">{r.points[myTeam]}–{r.points[1 - myTeam]}</b>
-                <span class="rs-name">{$t.zij}</span>
-              </div>
-              <div class="result-flags">
-                <span class="chip">{r.erased} {$t.erased}</span>
-                {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
-                {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
-              </div>
-            {/if}
-            <strong>{teamName(pub.winner!)} {$t.wins}!</strong>
-          </div>
+        {:else if (pub.phase === 'SCORED' && pub.lastResult) || pub.phase === 'GAME_OVER'}
+          <ResultPanel {pub} {myTeam} />
         {/if}
 
         <!-- Action buttons float on the felt, raised like table buttons.
@@ -658,7 +531,7 @@
 
       <div class="area-me">
         <div class="me-anchor">
-          {@render nameplate(my)}
+          {@render nameplateOf(my)}
           {@render turnedAt(my)}
           {#if myTurn}
             <span class="turn-hint" in:fly={{ x: -8, duration: 200 }}>{$t.yourTurnHint}</span>
@@ -684,7 +557,7 @@
             </div>
           {/each}
         {:else}
-          {#each displayHand ?? [] as c, i (`${pub.handNumber}-${c.s}${c.r}`)}
+          {#each displayHand ?? [] as c, i (`${pub.handNumber}-${cardKey(c)}`)}
             <!-- In manual mode cards stay enabled so they can be dragged;
                  the click handler still only plays legal cards. -->
             <button
