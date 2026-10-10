@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store'
-import { RANK_ORDER, SUITS } from '../engine'
-import type { Card } from '../engine'
+import { RANK_ORDER } from '../engine'
+import type { Card, Suit } from '../engine'
 
 /** How the own hand is shown: by suit high→low, by suit low→high, or in the
  *  player's own (dragged) order. */
@@ -36,6 +36,21 @@ sortMode.subscribe((v) => {
 
 export const cardKey = (c: Card) => c.s + c.r
 
+// Display order only, black and red alternate. The engine's SUITS stays as
+// is: it fixes the deck order, so seeded deals and KJN replays.
+const HAND_SUITS: Suit[] = ['S', 'H', 'C', 'D']
+const isRed = (s: Suit) => s === 'H' || s === 'D'
+
+/** The suits in the hand, in display order. With three suits the one suit of
+ *  the other colour goes in the middle, so no two suits of one colour touch. */
+function suitOrder(hand: Card[]): Suit[] {
+  const suits = HAND_SUITS.filter((s) => hand.some((c) => c.s === s))
+  if (suits.length !== 3) return suits
+  const odd = suits.find((s) => suits.filter((t) => isRed(t) === isRed(s)).length === 1)!
+  const [a, b] = suits.filter((s) => s !== odd)
+  return [a, odd, b]
+}
+
 /** The hand in display order. In manual mode `order` (card keys) leads; cards
  *  not in it (a new hand) follow in deal order, and played cards just drop out. */
 export function arrangeHand(hand: Card[], mode: SortMode | null, order: string[]): Card[] {
@@ -47,8 +62,9 @@ export function arrangeHand(hand: Card[], mode: SortMode | null, order: string[]
     return hand.map((c, i) => ({ c, i })).sort((a, b) => pos(a.c) - pos(b.c) || a.i - b.i).map((x) => x.c)
   }
   const dir = mode === 'low' ? 1 : -1
+  const suits = suitOrder(hand)
   return [...hand].sort(
-    (a, b) => SUITS.indexOf(a.s) - SUITS.indexOf(b.s) || dir * (RANK_ORDER[a.r] - RANK_ORDER[b.r]),
+    (a, b) => suits.indexOf(a.s) - suits.indexOf(b.s) || dir * (RANK_ORDER[a.r] - RANK_ORDER[b.r]),
   )
 }
 
