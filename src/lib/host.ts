@@ -1,4 +1,4 @@
-import { apply, createMatch, legalActions, pendingSeats, START_LINES, toPublic, visibleHand } from '../engine'
+import { apply, createMatch, legalActions, pendingSeats, START_LINES, teamOf, toPublic, visibleHand } from '../engine'
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
@@ -353,7 +353,7 @@ export class HostGame {
    *  is a human seat when the team has one. */
   private async beginMatch(seed: number): Promise<void> {
     const humanSeat = (team: number) =>
-      this.seats.findIndex((s, i) => i % 2 === team && s !== null && !s.bot)
+      this.seats.findIndex((s, i) => teamOf(i) === team && s !== null && !s.bot)
     const drawerA = humanSeat(0)
     const drawerB = humanSeat(1)
     const dev = this.dev()

@@ -1,4 +1,4 @@
-import { pendingSeats } from './engine'
+import { isBidding, pendingSeats } from './engine'
 import type {
   BoomkeMark,
   Card,
@@ -90,8 +90,7 @@ export function toPublic(s: State): PublicState {
  *  leader would otherwise never get to see the second card. */
 export function turnedVisible(pub: PublicState): boolean {
   if (pub.turned === null) return false
-  if (pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE')
-    return true
+  if (isBidding(pub.phase)) return true
   return pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0
 }
 

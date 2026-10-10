@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fly, scale } from 'svelte/transition'
   import type { Action, Card } from '../engine'
-  import { shownHand, teamOf, turnedVisible } from '../engine'
+  import { isBidding, shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { DEAL_FLY, DEAL_MS, DEAL_STEP, deckStack, pairOfCard } from '../lib/deckstack'
   import type { StackPart } from '../lib/deckstack'
@@ -76,9 +76,7 @@
   /** The cut of this deal, shown while the dealer deals. */
   const lastCut = $derived(pub.log.findLast((ev) => ev.t === 'cut'))
 
-  const biddingPhase = $derived(
-    pub.phase === 'BIDDING_R1' || pub.phase === 'BIDDING_R2' || pub.phase === 'DEALER_CHOICE',
-  )
+  const biddingPhase = $derived(isBidding(pub.phase))
   const showTurned = $derived(turnedVisible(pub))
 
   const playing = $derived(isPlaying(pub))
