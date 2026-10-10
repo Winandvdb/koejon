@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { teamOf } from '../engine'
-  import { t } from '../lib/i18n'
+  import { levelNames, seatName, t } from '../lib/i18n'
   import type { RoomDoc } from '../lib/net-types'
+  import Avatar from './Avatar.svelte'
 
   let {
     room,
@@ -44,7 +45,7 @@
   }
 
   const full = $derived(room.seats.every((s) => s !== null))
-  const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
+  const lvlName = $derived(levelNames($t))
   const myTeam = $derived(teamOf(mySeat))
   const teamName = (seat: number) => (teamOf(seat) === myTeam ? $t.wij : $t.zij)
 
@@ -97,8 +98,8 @@
             onclick={() => pickSeat(i)}
           >
             {#if seat}
-              {@const nm = seat.name || `${$t.player} ${i + 1}`}
-              <span class="avatar">{seat.bot ? '🤖' : nm.slice(0, 1).toUpperCase()}</span>
+              {@const nm = seatName($t, seat.name, i)}
+              <Avatar name={nm} bot={seat.bot} />
               <span class="seat-nm">{nm}</span>
               {#if i === mySeat}<span class="tag">{$t.you}</span>{/if}
               {#if seat.uid === room.hostUid}<span class="tag">{$t.host}</span>{/if}

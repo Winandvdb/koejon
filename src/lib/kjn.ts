@@ -4,7 +4,7 @@
  * engine build that produced it. Incompatible changes need a new format
  * version: KJN/1 records must keep parsing exactly as they do today.
  */
-import { apply, createMatch } from '../engine'
+import { apply, createMatch, dealHands } from '../engine'
 import type { Action, Card, HandResult, Rank, State, Suit } from '../engine'
 
 export const KJN_FORMAT = 'KJN/1'
@@ -329,16 +329,15 @@ export function gameDoc(m: KjnMatch): GameDoc | null {
 }
 
 const sameResult = (r: HandResult, k: KjnResult) => {
-  const crossed = [0, 0]
-  crossed[r.winnerTeam] = r.erased
+  const a = toResult(r)
   return (
-    r.playingTeam === k.playing &&
-    r.points[0] === k.points[0] &&
-    r.points[1] === k.points[1] &&
-    crossed[0] === k.crossed[0] &&
-    crossed[1] === k.crossed[1] &&
-    r.kapot === k.kapot &&
-    r.koei === k.koei
+    a.playing === k.playing &&
+    a.points[0] === k.points[0] &&
+    a.points[1] === k.points[1] &&
+    a.crossed[0] === k.crossed[0] &&
+    a.crossed[1] === k.crossed[1] &&
+    a.kapot === k.kapot &&
+    a.koei === k.koei
   )
 }
 
@@ -371,32 +370,9 @@ function runKjn(m: KjnMatch, step: (s: State) => void): State {
   }
   m.hands.forEach((h, i) => {
     const n = i + 1
-    const lead = (h.dealer + 1) % 4
-    s = {
-      ...s,
-      phase: 'BIDDING_R1',
-      handNumber: s.handNumber + 1,
-      dealer: h.dealer,
-      dealerDraw: null,
-      hands: h.deal.map((d) => d.map(copy)),
-      turned: { first: h.turned[0], second: h.turned[1], secondUp: false },
-      trump: null,
-      level: 0,
-      bidder: null,
-      bidIndex: 0,
-      turn: lead,
-      leader: lead,
-      trick: [],
-      lastTrick: null,
-      prevTrick: null,
-      trickAcks: [lead],
-      troefkeAsked: false,
-      tricksPlayed: 0,
-      tricksWon: [0, 0],
-      points: [0, 0],
-      piles: [[], []],
-      log: [...s.log, { t: 'deal', seat: h.dealer, card: h.turned[0] }],
-    }
+    // A copy: `step` may keep the state of the previous hand.
+    s = structuredClone(s)
+    dealHands(s, h.dealer, h.deal.map((d) => d.map(copy)))
     step(s)
     for (const b of h.auction.flat()) act({ type: 'bid', ...b })
     if (h.choice !== undefined) act({ type: 'choose', seat: h.dealer, suit: h.choice })

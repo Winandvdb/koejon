@@ -8,14 +8,14 @@ import {
 } from '../src/engine'
 import type { State } from '../src/engine'
 import { botAction, BOT_LEVELS, type BotLevel } from '../src/bots/bot'
-import { mulberry } from './helpers'
+import { seededRandom } from '../src/lib/seed'
 
 const MATCHES = 60
 const STEP_CAP = 20000
 
 function runMatch(seed: number, level: BotLevel): { state: State; steps: number; hands: number } {
   let s = createMatch(seed)
-  const rand = mulberry(seed * 7919 + 13)
+  const rand = seededRandom(seed * 7919 + 13)
   let steps = 0
   let lastTrickSeen = 0
 

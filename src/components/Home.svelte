@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fly } from 'svelte/transition'
-  import { lang, t } from '../lib/i18n'
+  import { lang, levelNames, localeOf, seatName, t } from '../lib/i18n'
   import { readHistory, type HistoryEntry } from '../lib/history'
   import { parseKjn, type SeatKind } from '../lib/kjn'
   import { appUrl } from '../lib/link-p2p'
@@ -33,7 +33,7 @@
   let botLevel = $state<BotLevel>(
     savedLevel && BOT_LEVELS.includes(savedLevel) ? savedLevel : 'normal',
   )
-  const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
+  const lvlName = $derived(levelNames($t))
   let code = $state(inviteCode.toUpperCase())
   let invited = $state(!!inviteCode)
   // Multiplayer needs Firestore; solo plays on without a network.
@@ -70,7 +70,7 @@
   const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole))
   const avgScore = $derived(stats.score / Math.max(1, stats.played))
   const avgText = $derived(
-    avgScore.toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { maximumFractionDigits: 1 }),
+    avgScore.toLocaleString(localeOf($lang), { maximumFractionDigits: 1 }),
   )
 
   /** The newest few; the statistics above keep the panel tall enough. */
@@ -89,16 +89,15 @@
       }
     })
 
-  const seatName = (e: HistoryEntry, i: number) => e.names[i] || `${$t.player} ${i + 1}`
   /** The bot mark after a name: the level, or "partly" for a seat a bot took over. */
   const botMark = (k: SeatKind | undefined) =>
     k === 'mixed' ? $t.botPartly : k?.startsWith('bot-') ? lvlName[k.slice(4) as BotLevel] : null
   const when = (ms: number) =>
-    new Date(ms).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })
+    new Date(ms).toLocaleString(localeOf($lang), { dateStyle: 'short', timeStyle: 'short' })
 </script>
 
 {#snippet player(e: HistoryEntry, i: number, seats: SeatKind[] | null)}
-  {seatName(e, i)}{#if botMark(seats?.[i])}<span class="seat-bot">🤖 {botMark(seats?.[i])}</span>{/if}
+  {seatName($t, e.names[i], i)}{#if botMark(seats?.[i])}<span class="seat-bot">🤖 {botMark(seats?.[i])}</span>{/if}
 {/snippet}
 
 {#snippet num(n: number | string, label: string, tone = '', suffix = '')}

@@ -2,12 +2,18 @@
   import { shownHand, teamOf, toPublic, turnedVisible } from '../engine'
   import { replaySteps, type KjnMatch } from '../lib/kjn'
   import { downloadKjn } from '../lib/download'
-  import { t } from '../lib/i18n'
-  import { arrangeHand, sortMode } from '../lib/prefs'
+  import { levelNames, seatName, t } from '../lib/i18n'
+  import { arrangeHand, cardKey, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
+  import { isPlaying, lastBids, showBids, sideOf, troefkeBubble } from '../lib/table'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
+  import Nameplate from './Nameplate.svelte'
+  import Opponent from './Opponent.svelte'
+  import ResultPanel from './ResultPanel.svelte'
+  import TrickArea from './TrickArea.svelte'
+  import TurnedCards from './TurnedCards.svelte'
 
   let {
     match,
@@ -58,21 +64,18 @@
   const hand = $derived(s.handNumber)
   const last = $derived(steps.length - 1)
 
-  const lvlName = $derived({ easy: $t.lvlEasy, normal: $t.lvlNormal, hard: $t.lvlHard })
+  const lvlName = $derived(levelNames($t))
   const seats: SeatInfo[] = $derived(
     [0, 1, 2, 3].map((k) => {
       const kind = match.seats[k]
       const bot = kind.startsWith('bot-')
       const fallback = bot
         ? `${$t.botName} ${k + 1} · ${lvlName[kind.slice(4) as keyof typeof lvlName]}`
-        : `${$t.player} ${k + 1}`
+        : seatName($t, '', k)
       return { uid: '', name: names[k] || fallback, bot }
     }),
   )
   const myTeam = $derived(teamOf(my))
-  const teamName = (team: number) => (team === myTeam ? $t.wij : $t.zij)
-  const rel = (seat: number) => (seat - my + 4) % 4
-  const TILT = [-4, 3, -2, 5]
 
   const go = (k: number) => (i = Math.max(0, Math.min(last, k)))
   const prevHand = () => go(i > starts[hand - 1] ? starts[hand - 1] : (starts[hand - 2] ?? 0))
@@ -89,65 +92,35 @@
   })
 
   const showTurned = $derived(turnedVisible(pub))
-  const playing = $derived(pub.phase === 'PLAYING' || pub.phase === 'SCORED' || pub.phase === 'GAME_OVER')
-  const playingTeam = $derived(pub.bidder === null ? null : teamOf(pub.bidder))
-  const lingerTrick = $derived(playing && pub.trick.length === 0 ? pub.lastTrick : null)
-  const showCards = $derived(pub.phase === 'PLAYING' && pub.trick.length > 0 ? pub.trick : lingerTrick)
   const handOf = (seat: number) => arrangeHand(shownHand(pub, seat, s.hands[seat]), $sortMode, [])
 
-  /** Latest bid each seat announced this hand, read back from the log. */
-  const lastBid = $derived.by(() => {
-    const map = new Map<number, string>()
-    for (let k = pub.log.length - 1; k >= 0; k--) {
-      const ev = pub.log[k]
-      if (ev.t === 'deal' || ev.t === 'all-pass' || ev.t === 'second-card' || ev.t === 'score') break
-      if (ev.seat === undefined || map.has(ev.seat)) continue
-      if (ev.t === 'pass' || ev.t === 'dealer-pass') map.set(ev.seat, $t.pass)
-      else if (ev.t === 'play-call') map.set(ev.seat, $t.play)
-    }
-    return map
-  })
-  const showBids = $derived(
-    !playing || (pub.phase === 'PLAYING' && pub.tricksPlayed === 0 && pub.trick.length === 0),
-  )
+  const lastBid = $derived(lastBids(pub.log))
+  const bidsShown = $derived(showBids(pub))
 </script>
 
-{#snippet nameplate(seat: number)}
-  {@const side = playingTeam !== null && playing ? (teamOf(seat) === playingTeam ? 'decl' : 'def') : null}
-  <div class="nameplate" class:active={pub.actionSeats.includes(seat)} class:decl={side === 'decl'} class:def={side === 'def'}>
-    <span class="avatar">{seats[seat].bot ? '🤖' : seats[seat].name.slice(0, 1).toUpperCase()}</span>
-    <span class="np-name">{seats[seat].name}</span>
-    {#if seat === pub.dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
-    {#if pub.bidder === seat}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
-    {#if playing}<span class="chip tricks">{pub.tricksWon[teamOf(seat)]}</span>{/if}
-    <div class="bubbles">
-      {#if showBids && lastBid.has(seat)}<span class="bubble">{lastBid.get(seat)}</span>{/if}
-      {#if pub.troefkeAsked && seat === pub.bidder && pub.tricksPlayed === 0 && pub.trick.length === 0}
-        <span class="bubble troef">{$t.troefWanted}</span>
-      {/if}
-    </div>
-  </div>
-{/snippet}
-
-{#snippet turnedAt(seat: number)}
-  {#if showTurned && seat === pub.dealer && pub.turned}
-    <div class="turned-at" title={$t.turnedCard}>
-      <span class="mini-card"><CardView card={pub.turned.first} /></span>
-      <span class="mini-card"><CardView card={pub.turned.secondUp ? pub.turned.second : null} /></span>
-    </div>
-  {/if}
+{#snippet nameplateOf(seat: number)}
+  <Nameplate
+    name={seats[seat].name}
+    bot={seats[seat].bot}
+    active={pub.actionSeats.includes(seat)}
+    side={sideOf(pub, seat)}
+    dealer={seat === pub.dealer}
+    bidder={pub.bidder === seat}
+    tricks={isPlaying(pub) ? pub.tricksWon[teamOf(seat)] : null}
+    bid={bidsShown ? lastBid.get(seat) : undefined}
+    troef={troefkeBubble(pub, seat)}
+    animate={false}
+  />
 {/snippet}
 
 {#snippet opponent(seat: number, pos: number)}
-  <div class="seat seat-p{pos}">
-    {@render nameplate(seat)}
-    <div class="opp-hand open" class:vertical={pos !== 2} class:horizontal={pos === 2}>
-      {#each handOf(seat) as c (c.s + c.r)}
-        <div class="opp-card"><CardView card={c} /></div>
-      {/each}
-    </div>
-    {@render turnedAt(seat)}
-  </div>
+  <Opponent {pos} open>
+    {#snippet nameplate()}{@render nameplateOf(seat)}{/snippet}
+    {#snippet turned()}<TurnedCards {pub} {seat} animate={false} />{/snippet}
+    {#each handOf(seat) as c (cardKey(c))}
+      <div class="opp-card"><CardView card={c} /></div>
+    {/each}
+  </Opponent>
 {/snippet}
 
 <svelte:window
@@ -213,60 +186,28 @@
       {@render opponent((my + 3) % 4, 3)}
 
       <div class="area-center">
-        <div class="trick-area">
-          {#if showCards}
-            {#each showCards as tc, k (tc.seat)}
-              <div
-                class="trick-card tp{rel(tc.seat)}"
-                class:done={lingerTrick !== null}
-                class:won={lingerTrick !== null && tc.seat === pub.leader}
-                style="rotate: {TILT[(k + showCards[0].seat) % 4]}deg; z-index: {k + 1}"
-              >
-                <CardView card={tc.card} />
-              </div>
-            {/each}
-          {/if}
-        </div>
+        <TrickArea {pub} {my} animate={false} />
       </div>
 
       <div class="felt-overlay" class:lifted={showTurned && my === pub.dealer} class:scored={pub.phase === 'SCORED' || pub.phase === 'GAME_OVER'}>
         {#if pub.phase === 'CUTTING'}
           <div class="panel overlay-panel"><strong>{$t.allPassed}</strong></div>
         {:else if (pub.phase === 'SCORED' || pub.phase === 'GAME_OVER') && pub.lastResult}
-          {@const r = pub.lastResult}
-          <div class="panel overlay-panel result" class:over={pub.phase === 'GAME_OVER'}>
-            <div class="result-head">{pub.phase === 'GAME_OVER' ? $t.gameOver : $t.scored}</div>
-            <div class="result-score">
-              <span class="rs-name">{$t.wij}</span>
-              <b class="rs-num">{r.points[myTeam]}–{r.points[1 - myTeam]}</b>
-              <span class="rs-name">{$t.zij}</span>
-            </div>
-            <div class="result-flags">
-              {#if r.draw}
-                <span class="chip">{$t.draw}</span>
-              {:else}
-                <span class="chip flag-win">{teamName(r.winnerTeam)} {$t.wins}</span>
-                <span class="chip">{r.erased} {$t.erased}</span>
-                {#if r.kapot}<span class="chip flag-bad">{$t.kapot}</span>{/if}
-                {#if r.koei}<span class="chip flag-koei">+{$t.koei}</span>{/if}
-              {/if}
-            </div>
-            {#if pub.phase === 'GAME_OVER'}<strong>{teamName(pub.winner!)} {$t.wins}!</strong>{/if}
-          </div>
+          <ResultPanel {pub} {myTeam} animate={false} />
         {/if}
       </div>
 
       <div class="area-me">
         <div class="me-anchor">
-          {@render nameplate(my)}
-          {@render turnedAt(my)}
+          {@render nameplateOf(my)}
+          <TurnedCards {pub} seat={my} animate={false} />
         </div>
       </div>
     </div>
 
     <div class="my-hand-wrap">
       <div class="my-hand">
-        {#each handOf(my) as c (c.s + c.r)}
+        {#each handOf(my) as c (cardKey(c))}
           <div class="hand-card"><CardView card={c} /></div>
         {/each}
       </div>
