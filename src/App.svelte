@@ -14,11 +14,11 @@
   import { roomRef, saveGame } from './lib/link-firestore'
   import { localLinks, SOLO_CODE } from './lib/link-local'
   import { appUrl } from './lib/link-p2p'
-  import type { RoomDoc } from './lib/net-types'
+  import { DEFAULT_ROOM_OPTS, type RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
   import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
-  import { lang, t } from './lib/i18n'
+  import { lang, localeOf, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, playerName, sortMode } from './lib/prefs'
   import { safeStorage } from './lib/storage'
   import { devSettings } from './lib/devsettings'
@@ -331,7 +331,7 @@
   function onReplay(e: HistoryEntry) {
     err = ''
     try {
-      const label = new Date(e.finishedAt).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', {
+      const label = new Date(e.finishedAt).toLocaleString(localeOf($lang), {
         dateStyle: 'medium',
         timeStyle: 'short',
       })
@@ -371,12 +371,13 @@
       <div class="settings-pop panel">
         {#if view?.room}
           {@const r = view.room}
-          {@const hostCtl = r.hostUid !== uid}
+          {@const notHost = r.hostUid !== uid}
+          {@const roomOpts = r.opts ?? DEFAULT_ROOM_OPTS}
           <label>
             <input
               type="checkbox"
-              checked={r.opts?.info ?? true}
-              disabled={hostCtl}
+              checked={roomOpts.info}
+              disabled={notHost}
               onchange={(e) => host?.setOption('info', e.currentTarget.checked)}
             />
             {$t.showInfo}
@@ -384,8 +385,8 @@
           <label>
             <input
               type="checkbox"
-              checked={r.opts?.score ?? false}
-              disabled={hostCtl}
+              checked={roomOpts.score}
+              disabled={notHost}
               onchange={(e) => host?.setOption('score', e.currentTarget.checked)}
             />
             {$t.showScore}

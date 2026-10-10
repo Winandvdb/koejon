@@ -1,4 +1,4 @@
-import { apply, createMatch, legalActions, pendingSeats, START_LINES, toPublic, visibleHand } from '../engine'
+import { apply, createMatch, legalActions, pendingSeats, START_LINES, teamOf, toPublic, visibleHand } from '../engine'
 import type { Action, State } from '../engine'
 import { botAction, BOT_LEVELS } from '../bots/bot'
 import type { BotLevel } from '../bots/bot'
@@ -8,7 +8,7 @@ import type { HandDoc, Intent, QuoteEvent, RoomOpts, SeatInfo } from './net-type
 import { gameDoc, newKjn, recordAction } from './kjn'
 import type { GameDoc, KjnMatch, SeatKind } from './kjn'
 import { QuoteBook } from './quotes'
-import { safeStorage } from './storage'
+import { readJson, safeStorage } from './storage'
 import { DEV_DEFAULTS, type DevSettings } from './devsettings'
 import { DEAL_MS } from './deckstack'
 import { BOT_UID_PREFIX, DEFAULT_ROOM_OPTS } from './net-types'
@@ -70,9 +70,14 @@ const quotesKey = (code: string) => `koejon-quotes-${code}`
 const seatsKey = (code: string) => `koejon-seats-${code}`
 const kjnKey = (code: string) => `koejon-kjn-${code}`
 const finalKey = (code: string) => `koejon-kjn-final-${code}`
+/** Every per-room key: destroyRoom removes them all. */
+const ROOM_KEYS = [engineKey, seqKey, quotesKey, seatsKey, kjnKey, finalKey]
 /** Finished records not uploaded yet, from any room: a new match never drops one. */
 const PENDING_KEY = 'koejon-games-pending'
 const PENDING_MAX = 20
+
+/** A player name from the wire: text, at most 20 characters. */
+const cleanName = (name: unknown): string => String(name ?? '').slice(0, 20)
 
 interface PendingGame {
   /** Fixed doc id, reused on every retry. */
@@ -100,7 +105,7 @@ export class HostGame {
   private drawLingerMs: number
   private bidLingerMs: number
   private dealLingerMs: number
-  private storage: HostOptions['storage']
+  private storage: KeyValueStore
   private onCommit: HostOptions['onCommit']
   private quoteRand: () => number
   private rand: () => number
@@ -255,9 +260,15 @@ export class HostGame {
       const taken = new Set(this.seats.map((s) => s?.name))
       const free = BOT_NAMES.filter((n) => !taken.has(n))
       const name = free[Math.floor(this.rand() * free.length)] ?? `Bot ${seat + 1}`
-      this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}:${this.rand().toString(36).slice(2, 8)}`, name, bot: true, botLevel: level }
+      this.seats[seat] = { uid: this.botUid(seat), name, bot: true, botLevel: level }
       await this.commit()
     })
+  }
+
+  /** A uid for a bot that no player can claim. A player who leaves keeps their
+   *  own uid on the bot seat instead, so they can reclaim it. */
+  private botUid(seat: number): string {
+    return `${BOT_UID_PREFIX}${seat}:${this.rand().toString(36).slice(2, 8)}`
   }
 
   /** Rotate a bot's difficulty: easy → normal → hard. */
@@ -342,7 +353,7 @@ export class HostGame {
    *  is a human seat when the team has one. */
   private async beginMatch(seed: number): Promise<void> {
     const humanSeat = (team: number) =>
-      this.seats.findIndex((s, i) => i % 2 === team && s !== null && !s.bot)
+      this.seats.findIndex((s, i) => teamOf(i) === team && s !== null && !s.bot)
     const drawerA = humanSeat(0)
     const drawerB = humanSeat(1)
     const dev = this.dev()
@@ -371,7 +382,7 @@ export class HostGame {
         // Unlike a voluntary leave, the seat gets a bot uid: a kicked player
         // cannot reclaim it by rejoining. The next publish drops their hand.
         console.warn('[host] seat', seat, 'uid', s.uid, 'turns bot: kick')
-        this.seats[seat] = { uid: `${BOT_UID_PREFIX}${seat}`, name: s.name, bot: true }
+        this.seats[seat] = { uid: this.botUid(seat), name: s.name, bot: true }
       }
       await this.commit()
     })
@@ -383,12 +394,7 @@ export class HostGame {
     await this.busy.catch(() => {})
     await this.link.destroy(this.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
     try {
-      this.storage?.removeItem(engineKey(this.code))
-      this.storage?.removeItem(seqKey(this.code))
-      this.storage?.removeItem(quotesKey(this.code))
-      this.storage?.removeItem(seatsKey(this.code))
-      this.storage?.removeItem(kjnKey(this.code))
-      this.storage?.removeItem(finalKey(this.code))
+      for (const key of ROOM_KEYS) this.storage.removeItem(key(this.code))
     } catch {
       // Storage blocked: nothing to clean up.
     }
@@ -403,7 +409,7 @@ export class HostGame {
       if (ri >= 0) {
         this.seats[ri] = {
           uid,
-          name: String(intent.name ?? '').slice(0, 20) || this.seats[ri]!.name,
+          name: cleanName(intent.name) || this.seats[ri]!.name,
           bot: false,
         }
         await this.commit()
@@ -412,7 +418,7 @@ export class HostGame {
         if (i >= 0) {
           this.seats[i] = {
             uid,
-            name: String(intent.name ?? '').slice(0, 20) || 'Speler',
+            name: cleanName(intent.name) || 'Speler',
             bot: false,
           }
           await this.commit()
@@ -517,27 +523,13 @@ export class HostGame {
 
   // ---- persistence ----
 
-  private readEngine(): State | null {
-    try {
-      const json = this.storage?.getItem(engineKey(this.code))
-      return json ? (JSON.parse(json) as State) : null
-    } catch {
-      return null
-    }
-  }
+  private readEngine = () => readJson<State | null>(this.storage, engineKey(this.code), null)
 
-  private readSeats(): (SeatInfo | null)[] | null {
-    try {
-      const json = this.storage?.getItem(seatsKey(this.code))
-      return json ? (JSON.parse(json) as (SeatInfo | null)[]) : null
-    } catch {
-      return null
-    }
-  }
+  private readSeats = () => readJson<(SeatInfo | null)[] | null>(this.storage, seatsKey(this.code), null)
 
   private readSeq(): number {
     try {
-      return Number(this.storage?.getItem(seqKey(this.code)) ?? 0) || 0
+      return Number(this.storage.getItem(seqKey(this.code)) ?? 0) || 0
     } catch {
       return 0
     }
@@ -545,9 +537,9 @@ export class HostGame {
 
   /** Said-lines bookkeeping survives a reload, like the engine state. */
   private readQuotes(): QuoteBook | null {
+    const saved = readJson<Parameters<typeof QuoteBook.fromJSON>[0] | null>(this.storage, quotesKey(this.code), null)
     try {
-      const json = this.storage?.getItem(quotesKey(this.code))
-      return json ? QuoteBook.fromJSON(JSON.parse(json)) : null
+      return saved ? QuoteBook.fromJSON(saved) : null
     } catch {
       return null
     }
@@ -555,42 +547,37 @@ export class HostGame {
 
   private writeQuotes(): void {
     try {
-      this.storage?.setItem(quotesKey(this.code), JSON.stringify(this.quoteBook))
+      this.storage.setItem(quotesKey(this.code), JSON.stringify(this.quoteBook))
     } catch {
       // Storage full or blocked: quotes may repeat after a reload.
     }
   }
 
-  private readKjn(): KjnMatch | null {
-    try {
-      const json = this.storage?.getItem(kjnKey(this.code))
-      return json ? (JSON.parse(json) as KjnMatch) : null
-    } catch {
-      return null
-    }
+  /** A fired quote joins the log (the last 12 are published) and is saved. */
+  private addQuote(q: QuoteEvent): void {
+    this.quoteLog = [...this.quoteLog, q].slice(-12)
+    this.writeQuotes()
   }
+
+  private readKjn = () => readJson<KjnMatch | null>(this.storage, kjnKey(this.code), null)
 
   private readFinal(): string | null {
     try {
-      return this.storage?.getItem(finalKey(this.code)) ?? null
+      return this.storage.getItem(finalKey(this.code)) ?? null
     } catch {
       return null
     }
   }
 
   private readPending(): PendingGame[] {
-    try {
-      const list = JSON.parse(this.storage?.getItem(PENDING_KEY) ?? '[]') as unknown
-      return Array.isArray(list) ? (list as PendingGame[]) : []
-    } catch {
-      return []
-    }
+    const list = readJson<unknown>(this.storage, PENDING_KEY, [])
+    return Array.isArray(list) ? (list as PendingGame[]) : []
   }
 
   private writePending(list: PendingGame[]): void {
     try {
-      if (list.length) this.storage?.setItem(PENDING_KEY, JSON.stringify(list))
-      else this.storage?.removeItem(PENDING_KEY)
+      if (list.length) this.storage.setItem(PENDING_KEY, JSON.stringify(list))
+      else this.storage.removeItem(PENDING_KEY)
     } catch {
       // Storage full or blocked: this record is lost, which is acceptable.
     }
@@ -601,13 +588,13 @@ export class HostGame {
     const seq = ++this.seq
     if (this.kjn) this.markMixed()
     try {
-      this.storage?.setItem(engineKey(this.code), JSON.stringify(this.state))
-      this.storage?.setItem(seqKey(this.code), String(seq))
-      this.storage?.setItem(seatsKey(this.code), JSON.stringify(this.seats))
-      if (this.kjn) this.storage?.setItem(kjnKey(this.code), JSON.stringify(this.kjn))
-      else this.storage?.removeItem(kjnKey(this.code))
-      if (this.finalKjn) this.storage?.setItem(finalKey(this.code), this.finalKjn)
-      else this.storage?.removeItem(finalKey(this.code))
+      this.storage.setItem(engineKey(this.code), JSON.stringify(this.state))
+      this.storage.setItem(seqKey(this.code), String(seq))
+      this.storage.setItem(seatsKey(this.code), JSON.stringify(this.seats))
+      if (this.kjn) this.storage.setItem(kjnKey(this.code), JSON.stringify(this.kjn))
+      else this.storage.removeItem(kjnKey(this.code))
+      if (this.finalKjn) this.storage.setItem(finalKey(this.code), this.finalKjn)
+      else this.storage.removeItem(finalKey(this.code))
     } catch {
       // Storage full or blocked: the game goes on, only reload recovery is lost.
     }
@@ -619,10 +606,7 @@ export class HostGame {
     const pub = toPublic(this.state)
     // The host decides which quotes fire: every client then shows the same.
     const q = this.quoteBook.pick(pub, Date.now(), this.quoteRand)
-    if (q) {
-      this.quoteLog = [...this.quoteLog, q].slice(-12)
-      this.writeQuotes()
-    }
+    if (q) this.addQuote(q)
     // Only once all hands are played out: the record holds every dealt card.
     const kjn = this.state.phase === 'GAME_OVER' ? this.finalKjn : null
     // The version only moves forward when the publish lands.
@@ -747,8 +731,7 @@ export class HostGame {
         if (still.length !== 1 || still[0] !== seat) return
         const q = this.quoteBook.hurry(seat, Date.now(), this.quoteRand)
         if (q) {
-          this.quoteLog = [...this.quoteLog, q].slice(-12)
-          this.writeQuotes()
+          this.addQuote(q)
           await this.commit() // publishes the nag and re-arms this timer
         } else {
           // Every bystander is on cooldown: try again later.

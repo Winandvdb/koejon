@@ -18,7 +18,8 @@ import {
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import type { GuestEvents, GuestLink, HostLink } from '../src/lib/transport'
-import { memoryStore, mulberry, until } from './helpers'
+import { seededRandom } from '../src/lib/seed'
+import { memoryStore, until } from './helpers'
 
 const MATCHES = 30
 
@@ -32,7 +33,7 @@ interface TruthHand {
 /** A bot match, recorded as KJN and, separately, straight from the engine. */
 function runMatch(seed: number): { rec: KjnMatch; truth: TruthHand[]; final: State } {
   let s = createMatch(seed)
-  const rand = mulberry(seed * 7919 + 13)
+  const rand = seededRandom(seed * 7919 + 13)
   const rec = newKjn('test', ['bot-normal', 'bot-normal', 'bot-normal', 'bot-normal'])
   const truth: TruthHand[] = []
   for (let steps = 0; s.phase !== 'GAME_OVER'; steps++) {

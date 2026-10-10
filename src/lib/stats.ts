@@ -1,8 +1,8 @@
-import { matchScore, START_LINES } from '../engine'
+import { matchScore, START_LINES, teamOf } from '../engine'
 import { parseKjn } from './kjn'
 import type { KjnMatch } from './kjn'
 import type { KeyValueStore } from './link-local'
-import { safeStorage } from './storage'
+import { readJson, safeStorage } from './storage'
 
 /** Personal statistics of the player on this device. Team values count for both players. */
 export interface PlayerStats {
@@ -33,7 +33,7 @@ const add = (a: PlayerStats, b: PlayerStats): PlayerStats => ({
 /** The numbers of `seat` in one finished match; an unfinished one counts nothing. */
 export function matchStats(m: KjnMatch, seat: number): PlayerStats {
   if (m.winner === null || !m.lines) return { ...EMPTY_STATS }
-  const team = seat % 2
+  const team = teamOf(seat)
   const s: PlayerStats = {
     ...EMPTY_STATS,
     played: 1,
@@ -71,8 +71,6 @@ export function matchGroup(m: KjnMatch, seat: number): StatsGroup {
 
 export const sumGroups = (g: GroupStats): PlayerStats => add(g.players, g.bots)
 
-const emptyGroups = (): GroupStats => ({ players: { ...EMPTY_STATS }, bots: { ...EMPTY_STATS } })
-
 /** Adds each entry's numbers to its group in `into`. */
 function addEntries(into: GroupStats, entries: { seat: number; kjn: string }[]): GroupStats {
   for (const e of entries) {
@@ -88,12 +86,8 @@ function addEntries(into: GroupStats, entries: { seat: number; kjn: string }[]):
 }
 
 function readDropped(store: KeyValueStore): GroupStats {
-  try {
-    const saved = JSON.parse(store.getItem(STATS_KEY) ?? '{}') as Partial<Record<StatsGroup, Partial<PlayerStats>>>
-    return { players: { ...EMPTY_STATS, ...saved.players }, bots: { ...EMPTY_STATS, ...saved.bots } }
-  } catch {
-    return emptyGroups()
-  }
+  const saved = readJson<Partial<Record<StatsGroup, Partial<PlayerStats>>> | null>(store, STATS_KEY, null)
+  return { players: { ...EMPTY_STATS, ...saved?.players }, bots: { ...EMPTY_STATS, ...saved?.bots } }
 }
 
 /** Matches leave the history: keep their numbers in the stored totals. */

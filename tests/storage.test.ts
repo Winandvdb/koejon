@@ -1,7 +1,7 @@
 import { get } from 'svelte/store'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { safeStorage } from '../src/lib/storage'
-import { blockStorage } from './helpers'
+import { readJson, safeStorage } from '../src/lib/storage'
+import { blockStorage, memoryStore } from './helpers'
 
 const thrower = () => {
   throw new DOMException('Quota exceeded', 'QuotaExceededError')
@@ -10,6 +10,34 @@ const thrower = () => {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetModules()
+})
+
+describe('readJson', () => {
+  test('gives the stored value', () => {
+    const store = memoryStore()
+    store.setItem('k', '{"a":1}')
+    expect(readJson(store, 'k', null)).toEqual({ a: 1 })
+  })
+
+  test('gives the fallback for a missing or broken value', () => {
+    const store = memoryStore()
+    expect(readJson(store, 'k', [])).toEqual([])
+    store.setItem('k', '{broken')
+    expect(readJson(store, 'k', 'fallback')).toBe('fallback')
+  })
+
+  test('gives the fallback when the store throws', () => {
+    expect(readJson({ getItem: thrower, setItem: thrower, removeItem: thrower }, 'k', 7)).toBe(7)
+  })
+
+  test('gives the fallback when storage is blocked', () => {
+    const restore = blockStorage()
+    try {
+      expect(readJson(safeStorage, 'k', 'fallback')).toBe('fallback')
+    } finally {
+      restore()
+    }
+  })
 })
 
 describe('blocked storage', () => {
