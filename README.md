@@ -197,8 +197,12 @@ Solo play stays offline; only the finished match is uploaded, signing in first
 when the match started offline. If the queue is lost while offline (storage
 cleared), the record is lost, which is acceptable.
 
-Not stored: unfinished matches, matches the host began on an older build, and
-bot-only matches from tests or `npm run bench`.
+Not stored: unfinished matches, matches the host began on an older build,
+bot-only matches from tests or `npm run bench`, and matches that no human played
+to the end. At `GAME_OVER` at least one seat must still be `human`; a seat that
+changed hands is `mixed` and does not count. Without such a seat the host makes
+no record at all: no upload and no `room.kjn`, so also no local history entry and
+no download.
 
 The rules check only what every build must keep: signed in, create only (the app
 cannot read, change or delete games), at most 12 fields, a `format` of the form
