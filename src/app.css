@@ -1746,6 +1746,11 @@ button.tag {
   animation: stack-square var(--square) ease-in-out var(--d) forwards;
 }
 
+/* One deck belongs to no team: the team rings fade as the cards square up. */
+.stack-part .card-back {
+  animation: stack-plain var(--square) ease-in-out var(--d) forwards;
+}
+
 @keyframes stack-in {
   from {
     transform: translate(var(--fx), var(--fy));
@@ -1756,6 +1761,12 @@ button.tag {
   to {
     translate: 0 calc(var(--k) * -1.5px);
     rotate: 0deg;
+  }
+}
+
+@keyframes stack-plain {
+  to {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   }
 }
 
@@ -2230,7 +2241,8 @@ button.tag {
   }
 
   .stack-part,
-  .stack-part .pile-card {
+  .stack-part .pile-card,
+  .stack-part .card-back {
     animation-duration: 0s;
     animation-delay: 0s;
   }
