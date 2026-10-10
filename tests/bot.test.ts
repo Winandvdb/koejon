@@ -403,6 +403,27 @@ describe('bot card play', () => {
     expect(botAction(s, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('D', 'J') })
   })
 
+  it('after a troefke the bidder takes the trump lead with the boss trump', () => {
+    // Partner seat 3 opens trump on the troefke; seat 2 still plays after the bidder.
+    const troefke = { leader: 3, troefkeAsked: true }
+    const hand = [C('H', 'A'), C('H', '10'), C('D', '9'), C('C', '9')]
+    // The partner's HJ wins so far, but the HK is still out.
+    const partnerWins = followState([{ seat: 3, card: C('H', 'J') }, { seat: 0, card: C('H', '9') }], hand, troefke)
+    // An opponent tops the partner with the HQ.
+    const oppWins = followState([{ seat: 3, card: C('H', '9') }, { seat: 0, card: C('H', 'Q') }], hand, troefke)
+    for (const level of ['easy', 'normal', 'hard'] as const) {
+      expect(botAction(partnerWins, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+      expect(botAction(oppWins, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+    }
+    // The partner's HK is the highest trump left: no need to overtake it.
+    const sealed = followState(
+      [{ seat: 3, card: C('H', 'K') }, { seat: 0, card: C('H', '9') }],
+      [C('H', 'A'), C('H', '10'), C('D', '9')],
+      troefke,
+    )
+    expect(botAction(sealed, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '10') })
+  })
+
   it('buys an early trick with a lone high trump that the ace will pull', () => {
     // HK is the only trump and HA is out. As player 2 on a 2-point lead it
     // buys now, also though the partner plays 4th.

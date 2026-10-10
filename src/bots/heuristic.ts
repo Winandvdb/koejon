@@ -367,6 +367,23 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   const decided = s.points[0] >= 21 || s.points[1] >= 21
   if (decided && !sweep && !antiKapot) return because(why, 'hand decided: dump', dump(s.trick, seat, legal, trump))
 
+  // Troefke: the partner opens trump and the bidder pulls. An opponent still
+  // plays after the bidder, so take the trick with a trump nobody left can
+  // beat, unless the partner's trump already is one.
+  const pc = s.trick[winnerIdx].card
+  const sealed = partnerWinning && (read.bossOut === null || RANK_ORDER[pc.r] >= RANK_ORDER[read.bossOut])
+  const troefkeLead =
+    s.troefkeAsked && s.tricksPlayed === 0 && seat === s.bidder && s.trick[0].card.s === trump
+  if (troefkeLead && oppToAct.length > 0 && !sealed) {
+    const boss = legal.filter(
+      (c) =>
+        c.s === trump &&
+        (read.bossOut === null || RANK_ORDER[c.r] > RANK_ORDER[read.bossOut]) &&
+        wouldWin(s.trick, seat, c, trump),
+    )
+    if (boss.length) return because(why, 'troefke: take the trump lead with the boss trump', lowest(boss))
+  }
+
   if (partnerWinning) {
     // Vet the trick — never overtake, and mind who can still beat partner.
     const safe = noUndertrump(
@@ -377,7 +394,6 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
     if (safe.length === 0) return because(why, 'forced to overtake partner', cheapest(legal, trump))
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
     if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
-    const pc = s.trick[winnerIdx].card
     const partnerSafe =
       oppToAct.length === 0 ||
       (pc.s === trump &&
