@@ -230,6 +230,7 @@ async function open(storage: KeyValueStore, fresh: boolean, save?: Save) {
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,
+    dealLingerMs: 0,
   })
   host.onError = (e) => {
     throw e

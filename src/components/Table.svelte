@@ -3,7 +3,7 @@
   import type { Action, Card } from '../engine'
   import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
-  import { deckStack } from '../lib/deckstack'
+  import { DEAL_FLY, DEAL_MS, DEAL_STEP, deckStack, pairOfCard } from '../lib/deckstack'
   import type { StackPart } from '../lib/deckstack'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
@@ -128,7 +128,9 @@
   // Old browsers have no matchMedia.
   const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   const stackLand = $derived(stack ? (stack.length - 1) * STACK_STEP + STACK_FLY : 0)
-  const cutDelay = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE + STACK_HOLD : 0)
+  /** The deck has squared up: the cut panel and the deal wait for it. */
+  const stackDone = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE : 0)
+  const cutDelay = $derived(stackDone && stackDone + STACK_HOLD)
   const stackFrom = (part: StackPart) => {
     if (part.from === 'hand') return `--fx: ${DIR[rel(part.seat)].x}px; --fy: ${DIR[rel(part.seat)].y}px`
     const p = PILE_FROM[part.team === myTeam ? 0 : 1]
@@ -136,6 +138,62 @@
   }
   /** Cards already on the deck below packet `i`: each card lies a hair higher. */
   const stackBelow = (i: number) => stack!.slice(0, i).reduce((n, p) => n + p.count, 0)
+
+  /** The deal. In DEALING the deck slides to the dealer once this felt's stack
+   *  has formed. When the engine has dealt (`deal` last in the log), the real
+   *  hand cards fly from there straight into the hands, per two, in the order
+   *  the engine dealt them (`pairOfCard`). The host waits for it before the
+   *  first bid; a blind dealer gets backs, as always during the bidding. */
+  const DEAL_PAUSE = 150
+  /** Where each hand lies, in card widths from the middle, seen from my seat. */
+  const HAND_AT = [
+    { x: 0, y: 2.6 },
+    { x: -2.4, y: 0 },
+    { x: 0, y: -2.2 },
+    { x: 2.4, y: 0 },
+  ]
+  /** The deck lies in front of the dealer, three quarters of the way from the middle. */
+  const deckAt = $derived({ x: HAND_AT[rel(pub.dealer)].x * 0.75, y: HAND_AT[rel(pub.dealer)].y * 0.75 })
+  const dealing = $derived(pub.phase === 'DEALING')
+  const freshDeal = $derived(pub.phase === 'BIDDING_R1' && pub.log.at(-1)?.t === 'deal')
+  /** Client clock: when the stack on this felt has formed (0: no stack). */
+  let stackReadyAt = 0
+  let deckOut = $state(false)
+  let dealOver = $state(false)
+  $effect(() => {
+    if (!stack) stackReadyAt = 0
+    else if (!stackReadyAt) stackReadyAt = performance.now() + stackDone
+  })
+  $effect(() => {
+    if (!dealing) {
+      deckOut = false
+      return
+    }
+    const timer = setTimeout(
+      () => (deckOut = true),
+      reducedMotion ? 0 : Math.max(DEAL_PAUSE, stackReadyAt - performance.now()),
+    )
+    return () => clearTimeout(timer)
+  })
+  $effect(() => {
+    if (!freshDeal) {
+      dealOver = false
+      return
+    }
+    const timer = setTimeout(() => (dealOver = true), reducedMotion ? 0 : DEAL_MS)
+    return () => clearTimeout(timer)
+  })
+  /** The cards are still going out: the action buttons wait. */
+  const dealRunning = $derived(freshDeal && !dealOver)
+  /** Card `k` of `seat`'s dealt hand flies from the deck into its place when the
+   *  pair that brings it leaves the deck. */
+  const dealIn = (seat: number, k: number) => {
+    const to = HAND_AT[rel(seat)]
+    return (
+      `--d: ${pairOfCard(pub.dealer, seat, k) * DEAL_STEP}ms; --fly: ${DEAL_FLY}ms; ` +
+      `--fx: calc(var(--card) * ${deckAt.x - to.x}); --fy: calc(var(--card) * ${deckAt.y - to.y})`
+    )
+  }
 
   /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
@@ -297,9 +355,17 @@
 
 {#snippet turnedAt(seat: number)}
   {#if showTurned && seat === pub.dealer && pub.turned}
+    <!-- The dealer's last pair: dealt card 6 lies face up, card 5 face down. -->
     <div class="turned-at" title={$t.turnedCard}>
-      <span class="mini-card"><CardView card={pub.turned.first} /></span>
-      <span class="mini-card" in:scale={{ duration: 250 }}>
+      <span class="mini-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, 5) : undefined}>
+        <CardView card={pub.turned.first} />
+      </span>
+      <span
+        class="mini-card"
+        class:dealt={freshDeal}
+        style={freshDeal ? dealIn(seat, 4) : undefined}
+        in:scale={{ duration: freshDeal ? 0 : 250 }}
+      >
         <CardView card={pub.turned.secondUp ? pub.turned.second : null} />
       </span>
     </div>
@@ -338,7 +404,9 @@
     {@render nameplate(seat)}
     <div class="opp-hand" class:vertical={pos !== 2} class:horizontal={pos === 2}>
       {#each Array(Math.max(0, pub.handCounts[seat] - (showTurned && seat === pub.dealer ? 2 : 0))) as _, k (k)}
-        <div class="opp-card"><div class="card-back"></div></div>
+        <div class="opp-card" class:dealt={freshDeal} style={freshDeal ? dealIn(seat, k) : undefined}>
+          <div class="card-back"></div>
+        </div>
       {/each}
       <!-- One pile per team, right by the hand: ours at my partner, theirs at the left opponent. -->
       {#if pos !== 3}{@render trickPile(teamOf(seat))}{/if}
@@ -381,7 +449,7 @@
               </div>
             {/each}
           {/if}
-          {#if stack}
+          {#if stack && !deckOut}
             <div class="deck-stack" style="--fly: {STACK_FLY}ms; --square: {STACK_SQUARE}ms">
               {#each stack as part, i (i)}
                 <div
@@ -398,6 +466,26 @@
                       <div class="card-back"></div>
                     </div>
                   {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
+          {#if (dealing && deckOut) || dealRunning}
+            <!-- The deck at the dealer, one layer per pair, the first pair on top:
+                 each layer goes when its pair leaves. A first deal has no stacked
+                 deck to take over, so its deck comes in. -->
+            <div
+              class="deck-stack deal"
+              style="--dx: calc(var(--card) * {deckAt.x}); --dy: calc(var(--card) * {deckAt.y})"
+              in:scale={{ start: 0.6, duration: stack ? 0 : 220 }}
+            >
+              {#each Array(12) as _, j (j)}
+                <div
+                  class="deal-layer"
+                  class:going={freshDeal}
+                  style="--k: {11 - j}; --d: {j * DEAL_STEP}ms; z-index: {12 - j}"
+                >
+                  <div class="pile-card"><div class="card-back"></div></div>
                 </div>
               {/each}
             </div>
@@ -494,7 +582,9 @@
         <!-- Action buttons float on the felt, raised like table buttons.
              On the first deal the sort question comes first: it holds
              back the bid buttons until the player has chosen. -->
-        {#if askSort}
+        {#if dealRunning}
+          <!-- The cards are still going out: nothing to choose yet. -->
+        {:else if askSort}
           <span class="fab-caption" in:fly={{ y: 8, duration: 200 }}>{$t.sortAsk}</span>
           <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
             {#each SORT_MODES as m (m)}
@@ -589,7 +679,9 @@
       >
         {#if view.hand === null}
           {#each Array(Math.max(0, pub.handCounts[my] - (showTurned ? 2 : 0))) as _, k (k)}
-            <div class="hand-card"><div class="card-back"></div></div>
+            <div class="hand-card" class:dealt={freshDeal} style={freshDeal ? dealIn(my, k) : undefined}>
+              <div class="card-back"></div>
+            </div>
           {/each}
         {:else}
           {#each displayHand ?? [] as c, i (`${pub.handNumber}-${c.s}${c.r}`)}
@@ -603,7 +695,9 @@
               data-card={cardKey(c)}
               disabled={!manualSort && !canPlay(c)}
               aria-disabled={!canPlay(c)}
-              in:fly={{ y: -160, duration: 320, delay: 120 + i * 45 }}
+              class:dealt={freshDeal}
+              style={freshDeal ? dealIn(my, view.hand.findIndex((h) => cardKey(h) === cardKey(c))) : undefined}
+              in:fly={{ y: -160, duration: freshDeal ? 0 : 320, delay: 120 + i * 45 }}
               onclick={() => {
                 if (canPlay(c) && !justDragged) send({ type: 'play', seat: my, card: c })
               }}

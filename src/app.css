@@ -1876,6 +1876,54 @@ button.tag {
   }
 }
 
+/* The deal: the deck slides to the dealer (--dx/--dy), one layer per pair.
+   Each layer goes when its pair leaves; the deck gets lower with each pair.
+   Above the dealer panel (.felt-overlay), so it stays in sight. */
+.deck-stack.deal {
+  z-index: 11;
+  animation: deck-to-dealer 400ms ease-in-out both;
+}
+
+@keyframes deck-to-dealer {
+  to {
+    translate: var(--dx) var(--dy);
+  }
+}
+
+.deal-layer {
+  position: absolute;
+  inset: 0;
+  translate: 0 calc(var(--k) * -0.75px);
+}
+
+.deal-layer.going {
+  animation: deal-leave 1ms linear var(--d) forwards;
+}
+
+@keyframes deal-leave {
+  to {
+    visibility: hidden;
+  }
+}
+
+/* A dealt card flies from the dealer's deck (--fx/--fy) into its place in the
+   hand, hidden until its pair leaves the deck. Only `translate`: the hover
+   lift of a hand card uses `transform`. */
+.dealt {
+  animation: deal-in var(--fly) cubic-bezier(0.3, 0.6, 0.3, 1) var(--d) both;
+}
+
+@keyframes deal-in {
+  from {
+    translate: var(--fx) var(--fy);
+    opacity: 0;
+  }
+
+  15% {
+    opacity: 1;
+  }
+}
+
 /* ---------- Trick area ---------- */
 
 .trick-area {
@@ -2348,7 +2396,10 @@ button.tag {
 
   .stack-part,
   .stack-part .pile-card,
-  .stack-part .card-back {
+  .stack-part .card-back,
+  .deck-stack.deal,
+  .deal-layer.going,
+  .dealt {
     animation-duration: 0s;
     animation-delay: 0s;
   }
