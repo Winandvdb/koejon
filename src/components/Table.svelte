@@ -3,6 +3,7 @@
   import type { Action, Card } from '../engine'
   import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
+  import { deckStack } from '../lib/deckstack'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
@@ -108,6 +109,23 @@
   const pileCount = (team: number) =>
     pub.tricksWon[team] -
     (pub.phase === 'PLAYING' && lingerTrick !== null && teamOf(pub.leader) === team ? 1 : 0)
+
+  /** At the cut, the packets that form the next deck slide to the middle one by
+   *  one, then square up. The cut panel waits for it; a cut ends it at once. */
+  const stack = $derived(deckStack(pub))
+  const STACK_FLY = 380
+  const STACK_STEP = 260
+  const STACK_SQUARE = 200
+  /** Where each trick pile lay: beside my partner (ours) or under my left opponent (theirs). */
+  const PILE_FROM = [
+    { x: 50, y: -170 },
+    { x: -180, y: 70 },
+  ]
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+  const stackLand = $derived(stack ? (stack.length - 1) * STACK_STEP + STACK_FLY : 0)
+  const cutDelay = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE : 0)
+  /** Cards already on the deck below packet `i`: each card lies a hair higher. */
+  const stackBelow = (i: number) => stack!.slice(0, i).reduce((n, p) => n + p.count, 0)
 
   /** Latest bid ("Ik ga"/"Pas") each seat announced this hand, read back from the log. */
   const lastBid = $derived.by(() => {
@@ -353,6 +371,28 @@
               </div>
             {/each}
           {/if}
+          {#if stack}
+            <div class="deck-stack" style="--fly: {STACK_FLY}ms; --square: {STACK_SQUARE}ms">
+              {#each stack as part, i (i)}
+                {@const from = part.from === 'pile' ? PILE_FROM[part.team === myTeam ? 0 : 1] : DIR[rel(part.seat)]}
+                <div
+                  class="stack-part"
+                  class:decl={part.from === 'pile' && part.team === playingTeam}
+                  class:def={part.from === 'pile' && part.team !== playingTeam}
+                  style="--fx: {from.x}px; --fy: {from.y}px; --d: {i * STACK_STEP}ms"
+                >
+                  {#each Array(part.count) as _, k (k)}
+                    <div
+                      class="pile-card"
+                      style="{part.from === 'pile' ? `${pileSkew(pub.handNumber, part.team, k)}; ` : ''}--k: {stackBelow(i) + k}; --d: {stackLand}ms"
+                    >
+                      <div class="card-back"></div>
+                    </div>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </div>
 
@@ -386,7 +426,7 @@
             {/if}
           </div>
         {:else if pub.phase === 'CUTTING'}
-          <div class="panel overlay-panel" in:scale={{ duration: 200 }}>
+          <div class="panel overlay-panel" in:scale={{ duration: 200, delay: cutDelay }}>
             <strong>{name(pub.dealer)} {$t.isDealer}</strong>
             {#if liftSizes.length > 0}
               <h3>{$t.cutTitle}</h3>
