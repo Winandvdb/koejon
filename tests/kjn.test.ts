@@ -2,7 +2,8 @@ import { describe, expect, it, test } from 'vitest'
 import { apply, createMatch, pendingSeats } from '../src/engine'
 import type { Action, Card, HandResult, State } from '../src/engine'
 import { botAction } from '../src/bots/bot'
-import { HostGame } from '../src/lib/host'
+import { DEV_DEFAULTS, type DevSettings } from '../src/lib/devsettings'
+import { HostGame, type HostOptions } from '../src/lib/host'
 import type { GameDoc, KjnMatch } from '../src/lib/kjn'
 import {
   gameDoc,
@@ -16,7 +17,7 @@ import {
 } from '../src/lib/kjn'
 import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
-import type { HostLink } from '../src/lib/transport'
+import type { GuestEvents, GuestLink, HostLink } from '../src/lib/transport'
 import { memoryStore, mulberry, until } from './helpers'
 
 const MATCHES = 30
@@ -208,6 +209,7 @@ describe('KJN/1 format', () => {
 // ---- host ----
 
 const UID = 'me'
+const OTHER = 'other'
 const PENDING = 'koejon-games-pending'
 
 type Save = (id: string, g: GameDoc) => Promise<void>
@@ -220,10 +222,25 @@ const collect =
     games.push(g)
   }
 
-/** A host on an in-memory link; without `save` the link cannot upload. */
-async function open(storage: KeyValueStore, fresh: boolean, save?: Save) {
+/** A host on an in-memory link; without `save` the link cannot upload.
+ *  `join` seats a second human on its own session, who plays every turn it
+ *  gets: the local link itself serves one uid only. */
+async function open(storage: KeyValueStore, fresh: boolean, save?: Save, opts: HostOptions = {}) {
   const links = localLinks(UID, storage, fresh ? newRoomDoc(SOLO_CODE, UID, 'Me') : undefined)!
-  const link: HostLink = save ? { ...links.host, saveGame: save } : links.host
+  let intentCb: Parameters<HostLink['onIntent']>[0] | null = null
+  let otherEv: GuestEvents | null = null
+  const link: HostLink = {
+    ...links.host,
+    ...(save && { saveGame: save }),
+    onIntent: (cb) => {
+      intentCb = cb
+      links.host.onIntent(cb)
+    },
+    publish: async (u, hands) => {
+      await links.host.publish(u, hands)
+      otherEv?.state((await links.host.load())!, hands.get(OTHER) ?? null)
+    },
+  }
   const session = new RoomSession(SOLO_CODE, UID, links.guest, link)
   const host = await HostGame.attach(SOLO_CODE, UID, link, {
     storage,
@@ -231,6 +248,7 @@ async function open(storage: KeyValueStore, fresh: boolean, save?: Save) {
     drawLingerMs: 0,
     bidLingerMs: 0,
     dealLingerMs: 0,
+    ...opts,
   })
   host.onError = (e) => {
     throw e
@@ -244,12 +262,29 @@ async function open(storage: KeyValueStore, fresh: boolean, save?: Save) {
     if (v.room!.seats[v.mySeat]?.bot) return
     if (pub.actionSeats.includes(v.mySeat)) host.submit({ kind: 'act', action: botAction(v.state, v.mySeat) })
   })
+  const stops: (() => void)[] = []
+  const join = async () => {
+    const guest: GuestLink = {
+      start: (ev) => void (otherEv = ev),
+      send: (intent) => intentCb!(OTHER, structuredClone(intent)),
+      dispose: () => void (otherEv = null),
+    }
+    const other = new RoomSession(SOLO_CODE, OTHER, guest, undefined, memoryStore())
+    const unsubOther = other.view.subscribe((v) => {
+      const pub = v.room?.pub
+      if (!pub || !v.state || pub.phase === 'LOBBY' || pub.phase === 'GAME_OVER') return
+      if (pub.actionSeats.includes(v.mySeat)) void other.send({ kind: 'act', action: botAction(v.state, v.mySeat) })
+    })
+    stops.push(unsubOther, () => other.dispose())
+    await other.send({ kind: 'join', name: 'Other' })
+  }
   const close = () => {
     unsub()
+    stops.forEach((stop) => stop())
     host.dispose()
     session.dispose()
   }
-  return { host, view: () => latest, close }
+  return { host, view: () => latest, close, join }
 }
 
 describe('host game records', () => {
@@ -330,7 +365,11 @@ describe('host game records', () => {
   test('a seat that leaves and comes back within a hand is recorded as mixed', async () => {
     const games: GameDoc[] = []
     const g = await open(memoryStore(), true, collect(games))
-    await startBots(g)
+    // A second human plays the full match: without one, nothing is recorded.
+    await g.join()
+    g.host.addBot(2)
+    g.host.addBot(3, 'hard')
+    g.host.startGame()
     await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 1)
     const seatIsBot = () => !!g.view()?.room?.seats[0]?.bot
     g.host.submit({ kind: 'leave' })
@@ -339,7 +378,60 @@ describe('host game records', () => {
     g.host.submit({ kind: 'join', name: 'Me' })
     await until(() => !seatIsBot())
     await until(() => games.length > 0)
-    expect(parseKjn(games[0].kjn).seats).toEqual(['mixed', 'bot-easy', 'bot-normal', 'bot-hard'])
+    expect(parseKjn(games[0].kjn).seats).toEqual(['mixed', 'human', 'bot-normal', 'bot-hard'])
+    g.close()
+  }, 60_000)
+
+  /** A host whose bots can finish a match alone: they wait for a human to
+   *  close a scored hand, so `bots()` switches on dev autoplay. Switched on
+   *  after the start, it keeps the record. */
+  async function openBotsOnly(storage: KeyValueStore, games: GameDoc[]) {
+    const dev: Partial<DevSettings> = {}
+    const g = await open(storage, true, collect(games), { dev: () => ({ ...DEV_DEFAULTS, ...dev }) })
+    const bots = () => {
+      dev.autoplay = true
+      g.host.devChanged()
+    }
+    return { ...g, bots }
+  }
+
+  /** Nothing of the match is kept: no upload, no queue, no record on the room. */
+  function expectNoRecord(storage: KeyValueStore, g: Awaited<ReturnType<typeof open>>, games: GameDoc[]) {
+    expect(g.view()!.room!.kjn ?? null).toBeNull()
+    expect(storage.getItem(`koejon-kjn-final-${SOLO_CODE}`)).toBeNull()
+    expect(storage.getItem(PENDING)).toBeNull()
+    expect(games).toEqual([])
+  }
+
+  test('a match of bots only is not recorded', async () => {
+    const storage = memoryStore()
+    const games: GameDoc[] = []
+    const g = await openBotsOnly(storage, games)
+    // The host gives its own seat to a bot before the start.
+    g.host.submit({ kind: 'leave' })
+    await until(() => g.view()?.room?.seats[0] === null)
+    g.host.addBot(0)
+    await startBots(g)
+    await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 1)
+    expect(storage.getItem(`koejon-kjn-${SOLO_CODE}`)).not.toBeNull()
+    g.bots()
+    await until(() => g.view()?.room?.pub?.phase === 'GAME_OVER')
+    expectNoRecord(storage, g, games)
+    g.close()
+  }, 60_000)
+
+  test('a match that the only human left is not recorded', async () => {
+    const storage = memoryStore()
+    const games: GameDoc[] = []
+    const g = await openBotsOnly(storage, games)
+    await startBots(g)
+    await until(() => (g.view()?.room?.pub?.handNumber ?? 0) >= 1)
+    g.host.submit({ kind: 'leave' })
+    await until(() => !!g.view()?.room?.seats[0]?.bot)
+    expect(storage.getItem(`koejon-kjn-${SOLO_CODE}`)).not.toBeNull()
+    g.bots()
+    await until(() => g.view()?.room?.pub?.phase === 'GAME_OVER')
+    expectNoRecord(storage, g, games)
     g.close()
   }, 60_000)
 

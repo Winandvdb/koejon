@@ -479,10 +479,12 @@ export class HostGame {
     this.kjn!.seats = this.kjn!.seats.map((k, i) => (k === now[i] ? k : 'mixed'))
   }
 
-  /** GAME_OVER: the record moves to the upload queue. */
+  /** GAME_OVER: the record moves to the upload queue. Only a match that a
+   *  human played to the end is kept: bot data must not reach the stored
+   *  matches, nor the local history or a download. */
   private finishRecord(): void {
     this.markMixed()
-    const doc = gameDoc(this.kjn!)
+    const doc = this.kjn!.seats.includes('human') ? gameDoc(this.kjn!) : null
     this.kjn = null
     if (!doc) return
     this.finalKjn = doc.kjn

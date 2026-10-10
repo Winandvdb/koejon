@@ -129,8 +129,8 @@ host's kick button (lobby seat list or in-game nameplate).
 
 ## Game records (KJN/1)
 
-Every finished match, multiplayer and solo, is stored once as a KJN/1 record, for
-later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
+Every finished match that a human played to the end, multiplayer and solo, is
+stored once as a KJN/1 record, for later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
 `parseKjn`, `replayKjn`).
 
 ### Format
@@ -181,7 +181,8 @@ KJN/1 sample that must keep parsing to the same text.
 
 ### The `games` collection
 
-At `GAME_OVER` the host queues one document `games/{random id}`:
+At `GAME_OVER` the host queues one document `games/{random id}` (except for the
+matches under "Not stored" below):
 `format`, `app`, `seats`, `winner`, `hands` (count) and `kjn` (the full text, about
 6 KB; at most 100 000 characters). The in-progress record lives next to the engine
 state in the host's `localStorage` (`koejon-kjn-<code>`), so a host reload loses
@@ -197,8 +198,12 @@ Solo play stays offline; only the finished match is uploaded, signing in first
 when the match started offline. If the queue is lost while offline (storage
 cleared), the record is lost, which is acceptable.
 
-Not stored: unfinished matches, matches the host began on an older build, and
-bot-only matches from tests or `npm run bench`.
+Not stored: unfinished matches, matches the host began on an older build,
+bot-only matches from tests or `npm run bench`, and matches that no human played
+to the end. At `GAME_OVER` at least one seat must still be `human`; a seat that
+changed hands is `mixed` and does not count. Without such a seat the host makes
+no record at all: no upload and no `room.kjn`, so also no local history entry and
+no download.
 
 The rules check only what every build must keep: signed in, create only (the app
 cannot read, change or delete games), at most 12 fields, a `format` of the form
