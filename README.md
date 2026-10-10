@@ -104,22 +104,35 @@ To point the CLI at a different project, edit `.firebaserc` or run `firebase use
   cards, seeded RNG, dealer draw, dealing, bidding, legal-play rules (follow suit,
   no-underbuy, trump-led), trick resolution, boomke scoring, match end.
 - `src/bots/` — bot heuristics that only ever pick from `legalActions`.
-- `src/lib/` — `firebase.ts` (init + emulator auto-connect), `room.ts` (client session:
-  room/hand subscriptions, intents), `host.ts` (`HostGame`: authoritative loop, bot
-  scheduling, action-doc processing, heartbeat).
-- `src/components/` — Svelte UI: home, lobby, table, boomke scoreboard, log, rules dialog.
-- Firestore layout: `rooms/{code}` (public state), `rooms/{code}/hands/{uid}` (private
-  hands; `hands/host` holds bot hands), `rooms/{code}/actions/{uid}` (player intents),
-  `rooms/{code}/engine/state` (host-only serialized engine state for recovery),
-  `games/{id}` (finished matches as KJN/1 records, write-only; see below).
+- `src/lib/` — `host.ts` (`HostGame`: authoritative loop, bot scheduling, intent
+  processing, heartbeat), `room.ts` (client session: view, intents), the links
+  (`link-local.ts`, `link-p2p.ts`, `link-firestore.ts`, behind `transport.ts`),
+  `firebase.ts` (init + emulator auto-connect), and the match records: `kjn.ts`,
+  `history.ts`, `stats.ts`, `download.ts`. The `AGENTS.md` code map lists every module.
+- `src/components/` — Svelte UI: home, lobby, table, boomke scoreboard, log, rules dialog,
+  replay viewer.
+- Firestore layout: `rooms/{code}` (lobby view and public state), `rooms/{code}/hands/{uid}`
+  (private hands; `hands/host` holds bot hands), `rooms/{code}/rtc/{uid}` (WebRTC
+  signaling: the guest's offer and the host's answer), `rooms/{code}/actions/{uid}`
+  (player intents, fallback path only), `rooms/{code}/engine/state` (host-only serialized
+  engine state for recovery), `games/{id}` (finished matches as KJN/1 records,
+  write-only; see below).
 
-### Firestore data flow
+### Data flow
 
-1. A client writes `actions/{uid}` with an intent (join, leave, act).
-2. The host's snapshot listener queues it, validates it through the engine (`apply`)
-   and writes the new public state + hand docs + engine snapshot in one batch, then
-   deletes the intent doc.
-3. All clients render from the `rooms/{code}` snapshot plus their own hand doc.
+1. A guest joins the room and writes `rtc/{uid}` with a WebRTC offer. The host
+   writes its answer into the same doc. The SDPs carry all ICE candidates, so this
+   takes about two writes per connect.
+2. Over the data channel the guest sends intents (join, leave, act). The host
+   validates each one through the engine (`apply`) and sends the new public state and
+   that guest's hand back over the same channel. No Firestore traffic for game moves.
+3. Firestore keeps the lobby view (`rooms/{code}`) and the heartbeat, so a guest can
+   find the room before a channel exists.
+4. A guest whose channel does not open within a timeout falls back to Firestore. It
+   writes `actions/{uid}` with its intents. The host queues them, applies them, and
+   writes the public state, hand docs and engine snapshot in one batch. It then
+   deletes the intent doc. This guest renders from the `rooms/{code}` snapshot plus
+   its own hand doc. Other guests of the same room stay on their channel.
 
 If the host disconnects the room shows a "host left" state (no host migration — known
 limitation). Reconnects resume from the Firestore snapshot; a host reload restores the

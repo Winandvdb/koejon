@@ -69,11 +69,3 @@ export function addHistory(
   }
   return true
 }
-
-export function removeHistory(id: string, store: KeyValueStore = safeStorage): void {
-  try {
-    store.setItem(HISTORY_KEY, JSON.stringify(readHistory(store).filter((e) => e.id !== id)))
-  } catch {
-    // Blocked storage: nothing to remove.
-  }
-}

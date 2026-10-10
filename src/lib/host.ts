@@ -259,7 +259,7 @@ export class HostGame {
       if (this.state.phase !== 'LOBBY' || this.seats[seat] !== null) return
       const taken = new Set(this.seats.map((s) => s?.name))
       const free = BOT_NAMES.filter((n) => !taken.has(n))
-      const name = free[Math.floor(this.rand() * free.length)] ?? `Bot ${seat + 1}`
+      const name = free[Math.floor(this.rand() * free.length)] ?? BOT_NAMES[seat]
       this.seats[seat] = { uid: this.botUid(seat), name, bot: true, botLevel: level }
       await this.commit()
     })
@@ -418,7 +418,7 @@ export class HostGame {
         if (i >= 0) {
           this.seats[i] = {
             uid,
-            name: cleanName(intent.name) || 'Speler',
+            name: cleanName(intent.name),
             bot: false,
           }
           await this.commit()

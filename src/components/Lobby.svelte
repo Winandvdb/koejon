@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { teamOf } from '../engine'
-  import { levelNames, t } from '../lib/i18n'
+  import { levelNames, seatName, t } from '../lib/i18n'
   import type { RoomDoc } from '../lib/net-types'
   import Avatar from './Avatar.svelte'
 
@@ -98,8 +98,9 @@
             onclick={() => pickSeat(i)}
           >
             {#if seat}
-              <Avatar name={seat.name} bot={seat.bot} />
-              <span class="seat-nm">{seat.name}</span>
+              {@const nm = seatName($t, seat.name, i)}
+              <Avatar name={nm} bot={seat.bot} />
+              <span class="seat-nm">{nm}</span>
               {#if i === mySeat}<span class="tag">{$t.you}</span>{/if}
               {#if seat.uid === room.hostUid}<span class="tag">{$t.host}</span>{/if}
               {#if seat.bot}<span class="tag muted">{$t.bot}</span>{/if}

@@ -404,7 +404,7 @@
     {/if}
   </div>
   <button class="icon-btn" title={$t.rules} aria-label={$t.rules} onclick={() => (showRules = true)}>📖</button>
-  <div class="segmented lang" role="group" aria-label="Language">
+  <div class="segmented lang" role="group" aria-label={$t.language}>
     <button class:active={$lang === 'nl'} onclick={() => ($lang = 'nl')}>NL</button>
     <button class:active={$lang === 'en'} onclick={() => ($lang = 'en')}>EN</button>
   </div>
