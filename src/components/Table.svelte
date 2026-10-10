@@ -152,8 +152,8 @@
     { x: 0, y: -2.2 },
     { x: 2.4, y: 0 },
   ]
-  /** The deck lies between the dealer's hand and the middle. */
-  const deckAt = $derived({ x: HAND_AT[rel(pub.dealer)].x / 2, y: HAND_AT[rel(pub.dealer)].y / 2 })
+  /** The deck lies in front of the dealer, three quarters of the way from the middle. */
+  const deckAt = $derived({ x: HAND_AT[rel(pub.dealer)].x * 0.75, y: HAND_AT[rel(pub.dealer)].y * 0.75 })
   const dealing = $derived(pub.phase === 'DEALING')
   const freshDeal = $derived(pub.phase === 'BIDDING_R1' && pub.log.at(-1)?.t === 'deal')
   /** Client clock: when the stack on this felt has formed (0: no stack). */
