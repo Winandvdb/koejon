@@ -62,43 +62,11 @@
 
   const kept = readHistory()
   const stats = totalStats(kept)
-  const avg = $derived(
-    (stats.score / Math.max(1, stats.played)).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', {
-      maximumFractionDigits: 1,
-    }),
+  const pct = (part: number, whole: number) => Math.round((100 * part) / Math.max(1, whole))
+  const avgScore = stats.score / Math.max(1, stats.played)
+  const avgText = $derived(
+    avgScore.toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { maximumFractionDigits: 1 }),
   )
-  /** One row per subject: a label, then "number word" pairs. */
-  const statRows = $derived([
-    [
-      $t.statGames,
-      [
-        [stats.played, $t.statPlayed],
-        [stats.won, $t.statWon],
-        [stats.played - stats.won, $t.statLost],
-      ],
-    ],
-    [
-      $t.statScore,
-      [
-        [stats.score, $t.statTotal],
-        [avg, $t.statAvg],
-      ],
-    ],
-    [
-      $t.statCrosses,
-      [
-        [stats.doubles, $t.statDoubles],
-        [stats.triples, $t.statTriples],
-      ],
-    ],
-    [
-      $t.statBids,
-      [
-        [stats.bidsMade, $t.statBidsMade],
-        [stats.bidsWon, $t.statBidsWon],
-      ],
-    ],
-  ] as const)
 
   /** Phones show the newest few; wide screens scroll the full list instead. */
   const PHONE_ROWS = 5
@@ -120,6 +88,13 @@
   const when = (ms: number) =>
     new Date(ms).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })
 </script>
+
+{#snippet num(n: number | string, label: string, tone = '', suffix = '')}
+  <div class="stat-num">
+    <b class={tone}>{n}{#if suffix}<small> {suffix}</small>{/if}</b>
+    <span>{label}</span>
+  </div>
+{/snippet}
 
 <svelte:window ononline={() => (online = true)} onoffline={() => (online = false)} />
 
@@ -201,23 +176,6 @@
 
     <div class="panel home-panel home-history">
       <h2>{$t.playedMatches}</h2>
-      {#if stats.played > 0}
-        <section class="stats" aria-label={$t.statsTitle}>
-          <h3 class="small muted">{$t.statsTitle}</h3>
-          <dl class="stats-rows">
-            {#each statRows as [label, items], i (i)}
-              <div class="stats-row">
-                <dt>{label}</dt>
-                <dd>
-                  {#each items as [n, what], j (j)}
-                    <span class="stat"><b>{n}</b> {what}</span>
-                  {/each}
-                </dd>
-              </div>
-            {/each}
-          </dl>
-        </section>
-      {/if}
       {#if matches.length === 0}
         <p class="muted">{$t.noMatches}</p>
       {:else}
@@ -246,6 +204,49 @@
         {/if}
       {/if}
     </div>
+
+    {#if stats.played > 0}
+      <section class="panel home-panel home-stats">
+        <h2>{$t.statsTitle}</h2>
+        <div class="stat-cards">
+          <div class="stat-card">
+            <div class="stat-head"><h3>{$t.statGames}</h3><span>{pct(stats.won, stats.played)}{$t.statWonPct}</span></div>
+            <div class="stat-nums">
+              {@render num(stats.played, $t.statPlayed)}
+              {@render num(stats.won, $t.statWon, 'good')}
+              {@render num(stats.played - stats.won, $t.statLost, 'bad')}
+            </div>
+            <div class="stat-bar lost" aria-hidden="true"><i class="good" style="width: {pct(stats.won, stats.played)}%"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head"><h3>{$t.statScore}</h3></div>
+            <div class="stat-nums">
+              {@render num(stats.score, $t.statTotal)}
+              {@render num(avgText, $t.statAvg, '', '/ 13')}
+            </div>
+            <div class="stat-bar" aria-hidden="true"><i class="gold" style="width: {pct(avgScore, 13)}%"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head">
+              <h3>{$t.statBids}</h3>
+              {#if stats.bidsMade > 0}<span>{pct(stats.bidsWon, stats.bidsMade)}{$t.statWonPct}</span>{/if}
+            </div>
+            <div class="stat-nums">
+              {@render num(stats.bidsMade, $t.statBidsMade)}
+              {@render num(stats.bidsWon, $t.statBidsWon, 'good')}
+            </div>
+            <div class="stat-bar" aria-hidden="true"><i class="good" style="width: {pct(stats.bidsWon, stats.bidsMade)}%"></i></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-head"><h3>{$t.statCrosses}</h3></div>
+            <div class="stat-nums">
+              {@render num(stats.doubles, $t.statDoubles)}
+              {@render num(stats.triples, $t.statTriples)}
+            </div>
+          </div>
+        </div>
+      </section>
+    {/if}
     </div>
   {/if}
 </div>

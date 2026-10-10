@@ -572,6 +572,11 @@ input[type='checkbox'] {
   .more-matches {
     display: none;
   }
+
+  /* The cards need width more than height: a full row under both columns. */
+  .home-stats {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 899px) {
@@ -584,45 +589,95 @@ input[type='checkbox'] {
   align-self: flex-start;
 }
 
-.stats h3 {
-  margin: 0 0 6px;
-  font-weight: 600;
-}
-
-.stats-rows {
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-/* Subject on the left, its numbers on the right; the numbers wrap on phones. */
-.stats-row {
+/* Statistics: one card per subject, big numbers, a bar for the share. */
+.stat-cards {
   display: grid;
-  grid-template-columns: 5.5em minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.stat-head {
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
-  padding: 6px 10px;
-}
-
-.stats-row + .stats-row {
-  border-top: 1px solid var(--border);
-}
-
-.stats-row dt {
+  gap: 8px;
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-.stats-row dd {
+.stat-head h3 {
   margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 14px;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
-.stat b {
-  font-size: 1.05rem;
+.stat-nums {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 8px;
+}
+
+.stat-num {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-num b {
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+}
+
+.stat-num b small {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.stat-num span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.stat-num .good {
+  color: var(--accent);
+}
+
+.stat-num .bad {
+  color: var(--danger);
+}
+
+.stat-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+/* Matches: the rest of the bar is the lost share. */
+.stat-bar.lost {
+  background: var(--danger);
+}
+
+.stat-bar i.good {
+  background: var(--accent);
+}
+
+.stat-bar i.gold {
+  background: var(--gold);
 }
 
 .match-list {
