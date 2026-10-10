@@ -1900,8 +1900,6 @@ button.tag {
   animation: deal-leave 1ms linear var(--d) forwards;
 }
 
-/* Opacity, not visibility: Blink never applies the fill of a visibility
-   animation that is delayed a second or more (pairs 8-11 run at 1-1.4 s). */
 @keyframes deal-leave {
   to {
     opacity: 0;
