@@ -7,15 +7,16 @@ export type StackPart =
   | { from: 'hand'; seat: number; count: number }
 
 /**
- * How the next deck forms at the start of the cut, bottom packet first, so the
- * table can animate it. It follows the engine (`cutDeck`, `allPassed`): after a
- * scored hand team 0's pile goes on team 1's; after an all-passed deal the hands
- * are thrown in with seat 0's on top. Derived from the public state only, so
- * every client stacks the same way. Null for the first deal: a fresh shuffle.
+ * How the next deck forms at the cut, bottom packet first, so the table can
+ * animate it. It follows the engine (`cutDeck`, `allPassed`): after a scored
+ * hand team 0's pile goes on team 1's; after an all-passed deal the hands are
+ * thrown in with seat 0's on top. Derived from the public state only, so every
+ * client stacks the same way. The deck stays through the deal announcement: a
+ * bot cuts sooner than the animation ends. Null for the first deal: a fresh shuffle.
  */
 export function deckStack(pub: PublicState): StackPart[] | null {
-  if (pub.phase !== 'CUTTING') return null
-  if (pub.log.at(-1)?.t === 'all-pass') {
+  if (pub.phase !== 'CUTTING' && pub.phase !== 'DEALING') return null
+  if (pub.log.findLast((ev) => ev.t !== 'cut')?.t === 'all-pass') {
     return [3, 2, 1, 0].map((seat) => ({ from: 'hand', seat, count: 1 }))
   }
   if (pub.tricksWon[0] + pub.tricksWon[1] !== 6) return null

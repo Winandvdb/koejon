@@ -1690,7 +1690,8 @@ button.tag {
 
 /* Won tricks: one face-down card per trick, next to the hand. Out of the
    flow, so a growing pile never moves the seat. */
-.trick-pile {
+.trick-pile,
+.deck-stack {
   --cw: calc(var(--card) * 0.4);
   position: absolute;
   width: var(--cw);
@@ -1726,14 +1727,11 @@ button.tag {
 }
 
 /* The next deck forms in the middle at the cut: each packet slides in from
-   where it lay (--fx/--fy), then all cards square up into one deck. */
+   where it lay (--fx/--fy), then all cards square up into one deck. Same card
+   size as the trick piles. */
 .deck-stack {
-  --cw: calc(var(--card) * 0.4);
-  position: absolute;
   left: 50%;
   top: 50%;
-  width: var(--cw);
-  height: calc(var(--cw) * 1.4);
   margin-left: calc(var(--cw) * -0.5);
   margin-top: calc(var(--cw) * -0.7);
 }

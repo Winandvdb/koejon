@@ -4,6 +4,7 @@
   import { shownHand, teamOf, turnedVisible } from '../engine'
   import type { SessionView } from '../lib/room'
   import { deckStack } from '../lib/deckstack'
+  import type { StackPart } from '../lib/deckstack'
   import { SUIT_GLYPH, t } from '../lib/i18n'
   import { arrangeHand, cardKey, moveCard, SORT_LABEL, SORT_MODES, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
@@ -111,19 +112,26 @@
     (pub.phase === 'PLAYING' && lingerTrick !== null && teamOf(pub.leader) === team ? 1 : 0)
 
   /** At the cut, the packets that form the next deck slide to the middle one by
-   *  one, then square up. The cut panel waits for it; a cut ends it at once. */
+   *  one, then square up. The cut panel waits for it; the deck stays until the deal. */
   const stack = $derived(deckStack(pub))
   const STACK_FLY = 380
   const STACK_STEP = 260
   const STACK_SQUARE = 200
-  /** Where each trick pile lay: beside my partner (ours) or under my left opponent (theirs). */
+  /** Where each trick pile lay, in card widths from the middle: beside my partner
+   *  (ours) or under my left opponent (theirs). Hands come in like their cards (DIR). */
   const PILE_FROM = [
-    { x: 50, y: -170 },
-    { x: -180, y: 70 },
+    { x: 0.6, y: -2 },
+    { x: -2.1, y: 0.8 },
   ]
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+  // Old browsers have no matchMedia.
+  const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   const stackLand = $derived(stack ? (stack.length - 1) * STACK_STEP + STACK_FLY : 0)
   const cutDelay = $derived(stack && !reducedMotion ? stackLand + STACK_SQUARE : 0)
+  const stackFrom = (part: StackPart) => {
+    if (part.from === 'hand') return `--fx: ${DIR[rel(part.seat)].x}px; --fy: ${DIR[rel(part.seat)].y}px`
+    const p = PILE_FROM[part.team === myTeam ? 0 : 1]
+    return `--fx: calc(var(--card) * ${p.x}); --fy: calc(var(--card) * ${p.y})`
+  }
   /** Cards already on the deck below packet `i`: each card lies a hair higher. */
   const stackBelow = (i: number) => stack!.slice(0, i).reduce((n, p) => n + p.count, 0)
 
@@ -374,12 +382,11 @@
           {#if stack}
             <div class="deck-stack" style="--fly: {STACK_FLY}ms; --square: {STACK_SQUARE}ms">
               {#each stack as part, i (i)}
-                {@const from = part.from === 'pile' ? PILE_FROM[part.team === myTeam ? 0 : 1] : DIR[rel(part.seat)]}
                 <div
                   class="stack-part"
                   class:decl={part.from === 'pile' && part.team === playingTeam}
                   class:def={part.from === 'pile' && part.team !== playingTeam}
-                  style="--fx: {from.x}px; --fy: {from.y}px; --d: {i * STACK_STEP}ms"
+                  style="{stackFrom(part)}; --d: {i * STACK_STEP}ms"
                 >
                   {#each Array(part.count) as _, k (k)}
                     <div
