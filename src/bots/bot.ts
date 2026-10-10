@@ -1,3 +1,4 @@
+import { partnerOf } from '../engine'
 import type { Action, State } from '../engine'
 import { createAlgorithm } from './algorithm'
 import type { AlgorithmSpec, BotTrace } from './algorithm'
@@ -25,8 +26,6 @@ export interface Bot {
   name: string
   decide(state: State, seat: number, rand: () => number, trace?: BotTrace): Action
 }
-
-const partnerOf = (seat: number) => (seat + 2) % 4
 
 /**
  * Steps without a real choice, the same for every bot: lifts, the first

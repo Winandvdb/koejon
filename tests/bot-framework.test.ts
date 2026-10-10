@@ -7,7 +7,8 @@ import { botAction, BOT_LEVELS, createBot } from '../src/bots/bot'
 import type { BotLevel } from '../src/bots/bot'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
-import { C, dealtState, mulberry, playingState } from './helpers'
+import { seededRandom } from '../src/lib/seed'
+import { C, dealtState, playingState } from './helpers'
 
 const trace = (): BotTrace => ({ candidates: [], notes: [] })
 
@@ -15,7 +16,7 @@ const trace = (): BotTrace => ({ candidates: [], notes: [] })
 function decisions(seed: number, level: BotLevel): { s: State; seat: number }[] {
   const out: { s: State; seat: number }[] = []
   let s = createMatch(seed)
-  const rand = mulberry(seed * 7919 + 13)
+  const rand = seededRandom(seed * 7919 + 13)
   while (s.phase !== 'GAME_OVER') {
     const seat = pendingSeats(s)[0]
     const legal = legalActions(s, seat)
@@ -81,10 +82,10 @@ describe('heuristic reads only the observation', () => {
     let n = 0
     for (const seed of [1, 2, 3]) {
       for (const { s, seat } of decisions(seed, level)) {
-        const hidden = hideOthers(s, seat, mulberry(seed * 1000 + n))
+        const hidden = hideOthers(s, seat, seededRandom(seed * 1000 + n))
         if (JSON.stringify(hidden.hands) !== JSON.stringify(s.hands)) changed++
         expect(observe(hidden, seat)).toEqual(observe(s, seat))
-        expect(botAction(hidden, seat, mulberry(n), level)).toEqual(botAction(s, seat, mulberry(n), level))
+        expect(botAction(hidden, seat, seededRandom(n), level)).toEqual(botAction(s, seat, seededRandom(n), level))
         n++
       }
     }
@@ -223,7 +224,7 @@ describe('value of a hand', () => {
     let hands = 0
     for (const seed of [1, 2, 3, 4]) {
       let s = createMatch(seed)
-      const rand = mulberry(seed)
+      const rand = seededRandom(seed)
       while (s.phase !== 'GAME_OVER') {
         const next = apply(s, botAction(s, pendingSeats(s)[0], rand, 'hard'))
         if (next.phase !== s.phase && (next.phase === 'SCORED' || next.phase === 'GAME_OVER')) {
