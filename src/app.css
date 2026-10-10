@@ -545,8 +545,8 @@ input[type='checkbox'] {
   gap: 16px;
 }
 
-/* Wide screens: start and history side by side; the history takes the
-   start panel's height and scrolls inside it. */
+/* Wide screens: start and history side by side; the statistics make the
+   history column the taller one. */
 @media (min-width: 900px) {
   .home:has(.home-cols) {
     max-width: 940px;
@@ -555,34 +555,18 @@ input[type='checkbox'] {
   .home-cols {
     display: grid;
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    align-items: stretch;
-  }
-
-  .home-history {
-    contain: size;
-    min-height: 260px;
-  }
-
-  .home-history .match-list {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-  }
-
-  .more-matches {
-    display: none;
-  }
-
-  /* The cards need width more than height: a full row under both columns. */
-  .home-stats {
-    grid-column: 1 / -1;
+    align-items: start;
   }
 }
 
-@media (max-width: 899px) {
-  .match-list li.extra {
-    display: none;
-  }
+/* The played matches under the statistics, in the same panel. */
+.home-sub {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.match-list li.extra {
+  display: none;
 }
 
 .more-matches {
