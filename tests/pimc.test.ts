@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action, State } from '../src/engine'
-import { createAlgorithm } from '../src/bots/algorithm'
+import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { AlgorithmSpec, BotTrace } from '../src/bots/algorithm'
 import { createBot } from '../src/bots/bot'
 import { sampleWorld } from '../src/bots/determinize'
@@ -12,6 +12,13 @@ import { seededRandom } from '../src/lib/seed'
 import { C, dealtState, decisions, hideOthers, playingState } from './helpers'
 
 const SAMPLES = 3
+
+// A test anchor that is easy to predict: always the last legal card.
+registerAlgorithm('last-card', () => ({
+  id: 'last-card',
+  supports: (obs) => obs.legal.every((a) => a.type === 'play'),
+  decide: (obs) => obs.legal[obs.legal.length - 1],
+}))
 
 /** Seed's first deal (dealer 0): seat 3 bids on the 1st card, so seat 1, its partner, leads. */
 function troefkeState(seed: number): State {
@@ -221,6 +228,52 @@ describe('pimc', () => {
     expect(troefke).toBeGreaterThan(0)
   }, 120_000)
 
+  it.each([0, 0.25, Infinity])('keeps the anchor card unless the best card beats it by more than margin %s', (margin) => {
+    const kept = { yes: 0, no: 0, tie: 0 }
+    for (const seed of [5, 6]) {
+      play(seed, 300, { id: 'pimc', samples: SAMPLES, anchor: 'last-card', margin }, (s, a, trace) => {
+        if (a.seat % 2 !== 0 || trace.algorithm !== 'pimc' || a.type !== 'play' || trace.candidates.length < 2) return
+        const legal = legalActions(s, a.seat)
+        const anchor = legal[legal.length - 1]
+        const own = trace.candidates.find((c) => JSON.stringify(c.action) === JSON.stringify(anchor))
+        // After a troefke the partner weighs only trumps: then the anchor card may be out.
+        if (!own) {
+          expect(trace.notes.some((n) => n.startsWith('anchor'))).toBe(false)
+          return
+        }
+        const gain = trace.candidates[0].score! - own.score!
+        // The trace still lists the actions best first.
+        expect(trace.candidates[0].score).toBe(Math.max(...trace.candidates.map((c) => c.score!)))
+        if (gain <= margin) {
+          expect(a).toEqual(anchor)
+          expect(trace.notes.at(-1)).toMatch(/^anchor last-card \w+: kept/)
+          kept.yes++
+          if (gain === 0 && trace.candidates[0] !== own) kept.tie++
+        } else {
+          expect(a).toEqual(trace.candidates[0].action)
+          expect(trace.notes.at(-1)).toMatch(/^anchor last-card \w+: replaced/)
+          kept.no++
+        }
+      })
+    }
+    expect(kept.yes).toBeGreaterThan(5)
+    if (margin === Infinity) expect(kept.no).toBe(0)
+    else expect(kept.no).toBeGreaterThan(5)
+    // margin 0: a tie the cost order gives to another card goes to the anchor.
+    if (margin === 0) expect(kept.tie).toBeGreaterThan(0)
+  }, 120_000)
+
+  it('plays as before without an anchor: no anchor note, the best card first', () => {
+    let n = 0
+    play(4, 300, { id: 'pimc', samples: SAMPLES }, (s, a, trace) => {
+      if (a.seat % 2 !== 0 || trace.algorithm !== 'pimc') return
+      expect(trace.notes.some((x) => x.startsWith('anchor'))).toBe(false)
+      expect(trace.candidates[0].action).toEqual(a)
+      n++
+    })
+    expect(n).toBeGreaterThan(20)
+  }, 120_000)
+
   it('takes the number of worlds as an option and rejects the rest', () => {
     expect(createAlgorithm('pimc').id).toBe('pimc')
     expect(createAlgorithm({ id: 'pimc', samples: 5 }).id).toBe('pimc')
@@ -231,5 +284,11 @@ describe('pimc', () => {
     expect(() => createAlgorithm({ id: 'pimc', samples: 0 })).toThrow(/positive integer/)
     expect(() => createAlgorithm({ id: 'pimc', samples: 2.5 })).toThrow(/positive integer/)
     expect(() => createAlgorithm({ id: 'pimc', samples: '5' })).toThrow(/positive integer/)
+    expect(createAlgorithm({ id: 'pimc', anchor: 'heuristic:hard', margin: 0.25 }).id).toBe('pimc')
+    expect(createAlgorithm({ id: 'pimc', anchor: 'heuristic:hard' }).id).toBe('pimc')
+    expect(() => createAlgorithm({ id: 'pimc', margin: 0.25 })).toThrow(/margin needs an anchor/)
+    expect(() => createAlgorithm({ id: 'pimc', anchor: 'heuristic:hard', margin: -0.1 })).toThrow(/margin must be a number >= 0/)
+    expect(() => createAlgorithm({ id: 'pimc', anchor: 'heuristic:hard', margin: '1' })).toThrow(/margin must be a number >= 0/)
+    expect(() => createAlgorithm({ id: 'pimc', anchor: 'nope' })).toThrow(/unknown algorithm/)
   })
 })

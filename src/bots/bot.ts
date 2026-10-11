@@ -92,11 +92,27 @@ export function createBot(config: BotConfig | AlgorithmSpec): Bot {
  */
 export const HARD_PIMC = { samples: 10, partnerSamples: 2 }
 
-/** The bot of each level: `hard` plays its cards and the troefke with pimc and bids with `heuristic:hard`. */
+/**
+ * The `hard` bot plays the `heuristic:hard` card unless pimc finds one more
+ * than this many lines better: with few worlds pimc's choice is often close
+ * to a coin flip, and players find those cards strange, as partner too (#178).
+ */
+export const HARD_ANCHOR_MARGIN = 0.5
+
+/**
+ * The bot of each level: `hard` plays its cards and the troefke with pimc,
+ * anchored to the `heuristic:hard` card, and bids with `heuristic:hard`.
+ */
 export const LEVEL_CONFIGS: Record<BotLevel, BotConfig | AlgorithmSpec> = {
   easy: 'heuristic:easy',
   normal: 'heuristic:normal',
-  hard: { name: 'pimc-hard', rules: [{ use: { id: 'pimc', ...HARD_PIMC } }, { use: 'heuristic:hard' }] },
+  hard: {
+    name: 'pimc-hard',
+    rules: [
+      { use: { id: 'pimc', ...HARD_PIMC, anchor: 'heuristic:hard', margin: HARD_ANCHOR_MARGIN } },
+      { use: 'heuristic:hard' },
+    ],
+  },
 }
 
 const LEVEL_BOTS = Object.fromEntries(

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { legalActions, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
+import { apply, createMatch, legalActions, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
+import type { BotTrace } from '../src/bots/algorithm'
+import { createBot, HARD_ANCHOR_MARGIN, LEVEL_CONFIGS } from '../src/bots/bot'
+import { seededRandom } from '../src/lib/seed'
 import { scanMatches } from './helpers'
 
 // Seed scans: rules checked in every match where the situation occurs, in
@@ -123,4 +126,36 @@ describe('bot seed scans', () => {
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
+
+  it('hard level: a card other than the anchor card beats it by more than the margin', () => {
+    // pimc is slow: few seeds, but every card decision counts.
+    const hard = createBot(LEVEL_CONFIGS.hard)
+    let found = 0
+    let kept = 0
+    for (let seed = 1; seed <= 2; seed++) {
+      let s = createMatch(seed)
+      const rand = seededRandom(seed * 7919 + 13)
+      while (s.phase !== 'GAME_OVER') {
+        const trace: BotTrace = { candidates: [], notes: [] }
+        const a = hard.decide(s, pendingSeats(s)[0], rand, trace)
+        const note = trace.notes.find((n) => n.startsWith('anchor heuristic:hard '))
+        if (a.type === 'play' && note) {
+          const text = note.split(' ')[2].replace(/:$/, '')
+          const anchor = trace.candidates.find((c) => c.action.type === 'play' && `${c.action.card.r}${c.action.card.s}` === text)!
+          const gain = trace.candidates[0].score! - anchor.score!
+          if (anchor.action.type === 'play' && anchor.action.card.r === a.card.r && anchor.action.card.s === a.card.s) {
+            expect(gain, note).toBeLessThanOrEqual(HARD_ANCHOR_MARGIN + 1e-9)
+            kept++
+          } else {
+            found++
+            expect(a, note).toEqual(trace.candidates[0].action)
+            expect(gain, note).toBeGreaterThan(HARD_ANCHOR_MARGIN)
+          }
+        }
+        s = apply(s, a)
+      }
+    }
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+    expect(kept).toBeGreaterThan(found)
+  }, 300_000)
 })
