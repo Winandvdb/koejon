@@ -84,9 +84,10 @@ export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   dealerSameSuit: 0.98,
   dealerLowSame: 0.31,
   dealerAce: 0.65,
-  dealerKing: 0.3,
-  // Set by hand, not tuned (#175): people almost never go blind on two weak
-  // suits. Tuned, it drifted to 0.25 on noise; 0.05 plays as well against bots.
+  // Set by hand, not tuned (#175): people almost never go blind on two suits
+  // without an ace. Tuned, these drifted to 0.3 and 0.25 on noise; the low
+  // values play as well against bots.
+  dealerKing: 0.1,
   dealerWeak: 0.05,
   contestMin: 4,
   cheapWin: 10,

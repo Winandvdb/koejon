@@ -27,8 +27,8 @@ export const PARAMS = [
   { key: 'dealerSameSuit', lo: 0, hi: 1, step: 0.01 },
   { key: 'dealerLowSame', lo: 0, hi: 1, step: 0.01 },
   { key: 'dealerAce', lo: 0, hi: 1, step: 0.01 },
-  { key: 'dealerKing', lo: 0, hi: 1, step: 0.01 },
-  // Close to how people play (#175); bot self-play cannot tell it from noise.
+  // Close to how people play (#175); bot self-play cannot tell them from noise.
+  { key: 'dealerKing', lo: 0, hi: 1, step: 0.01, fixed: true },
   { key: 'dealerWeak', lo: 0, hi: 1, step: 0.01, fixed: true },
   { key: 'contestMin', lo: 1, hi: 12, step: 1 },
   { key: 'cheapWin', lo: 2, hi: 14, step: 1 },

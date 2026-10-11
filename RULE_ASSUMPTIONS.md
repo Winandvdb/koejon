@@ -115,8 +115,8 @@ environment deviations. Each entry lists the chosen behavior.
   so a bot dealer may not rate its hand for the dealer choice either. It looks only at
   the two turned cards. An `easy` bot picks a shown suit at random (≈70% play). A
   `normal` or `hard` bot goes with a fixed chance: two cards of one suit almost always
-  (less with two low cards); two suits on the higher card, more often with an ace or a
-  king, and only 5% with a top card of Q or lower, as people almost never go there.
+  (less with two low cards); two suits on the higher card, often with an ace on top,
+  but only 10% with a king and 5% with a Q or lower, as people almost never go there.
   Every level goes when a win ends the match.
 - **Room update fencing** — every host commit must set `version` to exactly
   `version + 1` (enforced in `firestore.rules`); heartbeat-only writes are exempt.
