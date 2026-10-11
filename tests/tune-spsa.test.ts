@@ -5,13 +5,14 @@ import { PARAMS, spsa, toOptions, toPoint } from '../scripts/tune-spsa.mjs'
 const defaults = { ...HEURISTIC_DEFAULTS } as Record<string, number>
 
 /** One SPSA run on a made-up score; returns the result and every seed list. */
-async function run(seed: number, score: (o: Record<string, number>) => number, generations = 5) {
+async function run(seed: number, score: (o: Record<string, number>) => number, generations = 5, fixed?: string[]) {
   const seeds: number[][] = []
   const best = await spsa({
     start: defaults,
     generations,
     seed,
     seedsPerGen: 4,
+    fixed,
     evaluate: async (plus, minus, s) => {
       seeds.push(s)
       return [score(plus), score(minus)]
@@ -62,5 +63,12 @@ describe('tune-spsa', () => {
       PARAMS.reduce((d, p) => d + ((o[p.key] - mid[p.key]) / (p.hi - p.lo)) ** 2, 0)
     const { best } = await run(3, (o) => 0.5 - 0.1 * dist(o), 200)
     expect(dist(best)).toBeLessThan(dist(defaults) / 4)
+  })
+
+  it('never moves a fixed constant', async () => {
+    // The score pulls bidThreshold1 up, but it is fixed.
+    const { best } = await run(1, (o) => 0.01 * o.bidThreshold1 + 0.02 * o.dealerAce, 50, ['bidThreshold1'])
+    expect(best.bidThreshold1).toBe(defaults.bidThreshold1)
+    expect(best.dealerAce).toBeGreaterThan(defaults.dealerAce)
   })
 })

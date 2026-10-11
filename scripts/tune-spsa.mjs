@@ -96,10 +96,11 @@ export function toPoint(options) {
  *   seedsPerGen: number,
  *   evaluate: (plus: Record<string, number>, minus: Record<string, number>, seeds: number[]) => Promise<[number, number]>,
  *   onStep?: (step: SpsaStep) => void,
- * }} run
+ *   fixed?: string[],
+ * }} run  `fixed`: constants that keep their start value
  * @returns {Promise<Record<string, number>>} the options after the last step
  */
-export async function spsa({ start, generations, seed, seedsPerGen, evaluate, onStep }) {
+export async function spsa({ start, generations, seed, seedsPerGen, evaluate, onStep, fixed = [] }) {
   const rand = mulberry32(seed)
   const A = Math.max(1, Math.round(0.1 * generations))
   const a = STEP0 * (A + 1) ** ALPHA
@@ -107,7 +108,9 @@ export async function spsa({ start, generations, seed, seedsPerGen, evaluate, on
   for (let k = 0; k < generations; k++) {
     const ak = a / (k + 1 + A) ** ALPHA
     const ck = C / (k + 1) ** GAMMA
-    const delta = u.map(() => (rand() < 0.5 ? -1 : 1))
+    // A fixed constant gets no perturbation, so it never moves. Draw for it
+    // anyway: the other constants then see the same draws as without --fixed.
+    const delta = u.map((_, i) => (rand() < 0.5 ? -1 : 1) * (fixed.includes(PARAMS[i].key) ? 0 : 1))
     // Match seeds far above the bench's 1..N, so `npm run bench` checks on new seeds.
     const seeds = Array.from({ length: seedsPerGen }, () => 1_000_000 + Math.floor(rand() * 1e9))
     const [plus, minus] = await evaluate(

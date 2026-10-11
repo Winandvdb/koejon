@@ -3,6 +3,7 @@
 // checkout's heuristic:hard, each seed played twice with the sides swapped.
 //
 //   npm run tune -- [--generations 50] [--matches 200] [--seed 1] [--jobs 4] [--out tune-heuristic.json]
+//                   [--fixed bidThreshold1,bidThreshold2]
 //
 // --matches is the number of seeds per candidate and generation. The result
 // is the same for the same --seed, --generations and --matches, whatever
@@ -23,8 +24,14 @@ const { values: opt } = parseArgs({
     seed: { type: 'string', default: '1' },
     jobs: { type: 'string', default: '1' },
     out: { type: 'string', default: 'tune-heuristic.json' },
+    fixed: { type: 'string', default: '' },
   },
 })
+// Constants that keep their default, for example the bid thresholds: a
+// bot that bids far less can win more but plays a duller game.
+const FIXED = opt.fixed.split(',').filter(Boolean)
+for (const k of FIXED)
+  if (!PARAMS.some((p) => p.key === k)) throw new Error(`--fixed: unknown constant '${k}'`)
 /** @param {string} name */
 function positiveInt(name) {
   const v = Number(opt[/** @type {keyof typeof opt} */ (name)])
@@ -96,7 +103,8 @@ const write = (/** @type {Record<string, number>} */ options) =>
   writeFileSync(opt.out, `${JSON.stringify({ id: 'heuristic:hard', ...options }, null, 2)}\n`)
 
 console.log(
-  `Tuning heuristic:hard: ${GENERATIONS} generations, ${MATCHES} seeds x 2 per candidate, seed ${SEED}, ${JOBS} jobs`,
+  `Tuning heuristic:hard: ${GENERATIONS} generations, ${MATCHES} seeds x 2 per candidate, seed ${SEED}, ${JOBS} jobs` +
+    (FIXED.length ? `, fixed: ${FIXED.join(', ')}` : ''),
 )
 let t0 = performance.now()
 const best = await spsa({
@@ -104,6 +112,7 @@ const best = await spsa({
   generations: GENERATIONS,
   seed: SEED,
   seedsPerGen: MATCHES,
+  fixed: FIXED,
   evaluate: (plus, minus, seeds) => Promise.all([score(plus, seeds), score(minus, seeds)]),
   onStep({ gen, plus, minus, options }) {
     const s = ((performance.now() - t0) / 1000).toFixed(1)
