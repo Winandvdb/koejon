@@ -466,8 +466,9 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       trump,
     )
     if (safe.length === 0) {
-      // The trick stays ours: follow suit to keep the trump, and the card's
-      // points go to our side. A kapot run keeps the old rule.
+      // Our team already holds the trick: follow suit to keep the trump, and
+      // the card's points go to our side. In a kapot run with an opponent
+      // still to play, the trick is worth the cheapest card, also a trump.
       const follow = legal.filter((c) => c.s !== trump)
       const kapotRun = (sweep || antiKapot) && oppToAct.length > 0
       if (follow.length && !kapotRun) {

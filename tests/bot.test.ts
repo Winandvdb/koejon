@@ -297,18 +297,30 @@ describe('bot card play', () => {
   })
 
   it('follows suit, not trump, when every card overtakes the partner', () => {
-    // Partner seat3 leads S9, seat0 is void. SJ and H9 both beat the S9.
-    const third = followState(
-      [
-        { seat: 3, card: C('S', '9') },
-        { seat: 0, card: C('D', '9') },
-      ],
-      [C('S', 'J'), C('H', '9'), C('D', '10'), C('C', '10')],
-    )
+    // Partner seat3 leads S9, seat0 is void. SJ and H10 both beat the S9.
+    const partnerLeads = [
+      { seat: 3, card: C('S', '9') },
+      { seat: 0, card: C('D', '9') },
+    ]
+    const third = followState(partnerLeads, [C('S', 'J'), C('H', '10'), C('D', '10'), C('C', '10')], {
+      leader: 3,
+    })
     // Seat2 still plays: the cheap point goes, the trump stays home.
     for (const level of ['easy', 'normal', 'hard'] as const) {
       expect(botAction(third, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'J') })
     }
+    // No cheap card of the suit: the lowest one, still no trump and no ace.
+    const rich = followState(partnerLeads, [C('S', 'A'), C('S', 'K'), C('H', '10'), C('C', '10')], {
+      leader: 3,
+    })
+    expect(botAction(rich, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('S', 'K') })
+    // Our kapot run with an opponent still to play: the cheapest card, here the trump.
+    const sweep = followState(partnerLeads, [C('S', 'J'), C('H', '10'), C('D', '10'), C('C', '10')], {
+      leader: 3,
+      tricksPlayed: 2,
+      tricksWon: [0, 2],
+    })
+    expect(botAction(sweep, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '10') })
     // Last to play the trick is ours: feed the king, keep the ace.
     const last = followState(
       [
@@ -316,7 +328,8 @@ describe('bot card play', () => {
         { seat: 3, card: C('S', '10') },
         { seat: 0, card: C('D', '9') },
       ],
-      [C('S', 'A'), C('S', 'K'), C('H', '9'), C('C', '10')],
+      [C('S', 'A'), C('S', 'K'), C('H', '10'), C('C', '10')],
+      { leader: 2 },
     )
     expect(botAction(last, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('S', 'K') })
   })
