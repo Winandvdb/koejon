@@ -1,4 +1,4 @@
-import { apply, createMatch, pendingSeats } from '../src/engine'
+import { apply, createMatch, legalActions, pendingSeats, rngShuffle } from '../src/engine'
 import type { Action, Card, State, Suit, TrickCard } from '../src/engine'
 import { botAction, createBot } from '../src/bots/bot'
 import type { BotLevel } from '../src/bots/bot'
@@ -44,6 +44,32 @@ export function scanMatches(
       s = apply(s, a)
     }
   }
+}
+
+/** Real decisions of a bot match: more than one legal action, not a lift or the first dealer. */
+export function decisions(seed: number, level: BotLevel): { s: State; seat: number }[] {
+  const out: { s: State; seat: number }[] = []
+  let s = createMatch(seed)
+  const rand = seededRandom(seed * 7919 + 13)
+  while (s.phase !== 'GAME_OVER') {
+    const seat = pendingSeats(s)[0]
+    const legal = legalActions(s, seat)
+    if (legal.length > 1 && !['draw', 'cut', 'chooseDealer'].includes(legal[0].type)) out.push({ s, seat })
+    s = apply(s, botAction(s, seat, rand, level))
+  }
+  return out
+}
+
+/** Same public info, other hidden cards: the other hands dealt anew, other deck and RNG. */
+export function hideOthers(s: State, seat: number, rand: () => number): State {
+  const t = structuredClone(s)
+  const others = [0, 1, 2, 3].filter((x) => x !== seat)
+  const cards = rngShuffle({ rng: Math.floor(rand() * 2 ** 31) }, others.flatMap((x) => t.hands[x]))
+  for (const x of others) t.hands[x] = cards.splice(0, t.hands[x].length)
+  t.rng = s.rng + 12345
+  t.seed = s.seed + 1
+  t.piles = [rngShuffle({ rng: 7 }, [...t.piles[0], ...t.piles[1]]), []]
+  return t
 }
 
 /** In-memory stand-in for localStorage. */

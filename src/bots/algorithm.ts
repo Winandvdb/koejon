@@ -1,6 +1,7 @@
 import type { Action } from '../engine'
 import { createHeuristic } from './heuristic'
 import type { Observation } from './observation'
+import { createPimc } from './pimc'
 
 /** One candidate an algorithm weighed, for debugging and tuning. */
 export interface TraceCandidate {
@@ -49,7 +50,10 @@ export type AlgorithmFactory = (
   create: (spec: AlgorithmSpec) => Algorithm,
 ) => Algorithm
 
-const ALGORITHMS = new Map<string, AlgorithmFactory>([['heuristic', createHeuristic]])
+const ALGORITHMS = new Map<string, AlgorithmFactory>([
+  ['heuristic', createHeuristic],
+  ['pimc', createPimc],
+])
 
 /** Add an algorithm under `name`. A name can be taken only once. */
 export function registerAlgorithm(name: string, factory: AlgorithmFactory): void {

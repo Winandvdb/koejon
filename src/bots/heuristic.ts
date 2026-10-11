@@ -304,13 +304,19 @@ function rateHand(hand: Card[], trump: Suit): number {
   return score
 }
 
+/**
+ * A hand that may ask a troefke: our trumps can take over after the trump
+ * lead — 3 trumps, or 2 with the king or ace. Search bots read a troefke as
+ * this hand.
+ */
+export function troefkeHand(cards: Card[], trump: Suit): boolean {
+  const trumps = cards.filter((c) => c.s === trump)
+  return trumps.length >= 3 || (trumps.length >= 2 && trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K']))
+}
+
 /** Ask for the trump lead only when our trumps can take over afterwards. */
 function wantsTroefke(s: Observation, rand: () => number, opt: HeuristicOptions): boolean {
-  const trumps = s.hand.filter((c) => c.s === s.trump)
-  const strong =
-    trumps.length >= 3 ||
-    (trumps.length >= 2 && trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K']))
-  return strong && rand() < opt.troefkeChance
+  return troefkeHand(s.hand, s.trump!) && rand() < opt.troefkeChance
 }
 
 // ---- Card play -----------------------------------------------------------------

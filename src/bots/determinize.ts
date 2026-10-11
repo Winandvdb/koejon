@@ -36,7 +36,7 @@ function take<T>(items: T[], n: number, rand: () => number): T[] {
  * hand may carry no log; then the three visible tricks are all that can
  * be known.
  */
-function playedCards(obs: Observation): TrickCard[] {
+export function playedCards(obs: Observation): TrickCard[] {
   for (let i = obs.log.length - 1; i >= 0; i--) {
     if (obs.log[i].t === 'deal') {
       const out: TrickCard[] = []
