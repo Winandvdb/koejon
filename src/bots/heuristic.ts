@@ -69,25 +69,56 @@ export interface HeuristicOptions {
   shortSuit: number
 }
 
+/** Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93). */
 export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
-  bidThreshold1: 11,
-  bidThreshold2: 8,
-  bidThreshold4: 7,
-  betterSuit: 2,
-  clearBid: 3,
-  loneTrumpMin: 13,
-  knijpMin: 4,
-  knijpChance: 0.85,
-  troefkeChance: 0.9,
-  dealerSameSuit: 0.9,
-  dealerLowSame: 0.15,
-  dealerAce: 0.6,
-  dealerKing: 0.25,
-  dealerWeak: 0.05,
-  contestMin: 5,
-  cheapWin: 6,
-  vetMaxRisk: 2,
+  bidThreshold1: 14.5,
+  bidThreshold2: 11.5,
+  bidThreshold4: 10.5,
+  betterSuit: 5.5,
+  clearBid: 7.5,
+  loneTrumpMin: 14.5,
+  knijpMin: 1.5,
+  knijpChance: 0.79,
+  troefkeChance: 0.73,
+  dealerSameSuit: 0.98,
+  dealerLowSame: 0.31,
+  dealerAce: 0.65,
+  dealerKing: 0.3,
+  dealerWeak: 0.25,
+  contestMin: 4,
+  cheapWin: 10,
+  vetMaxRisk: 1,
   shortSuit: 3,
+}
+
+/**
+ * Per-level overrides of the defaults. Easy keeps the hand-picked values from
+ * before the tuning: the tuned ones make every level stronger, and a beginner
+ * bot that bids fast is fine.
+ */
+const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
+  easy: {
+    bidThreshold1: 11,
+    bidThreshold2: 8,
+    bidThreshold4: 7,
+    betterSuit: 2,
+    clearBid: 3,
+    loneTrumpMin: 13,
+    knijpMin: 4,
+    knijpChance: 0.85,
+    troefkeChance: 0.9,
+    dealerSameSuit: 0.9,
+    dealerLowSame: 0.15,
+    dealerAce: 0.6,
+    dealerKing: 0.25,
+    dealerWeak: 0.05,
+    contestMin: 5,
+    cheapWin: 6,
+    vetMaxRisk: 2,
+    shortSuit: 3,
+  },
+  normal: {},
+  hard: {},
 }
 
 export const TROEFKE_CHANCE = HEURISTIC_DEFAULTS.troefkeChance
@@ -615,7 +646,8 @@ function decide(
 /**
  * The hand-written bot as algorithm `heuristic:<level>`. It decides every real
  * decision (bids, troefke, the dealer's choice, card play) from the
- * observation only. Options override `HEURISTIC_DEFAULTS`.
+ * observation only. Options override the level's values (`LEVEL_OPTIONS`
+ * over `HEURISTIC_DEFAULTS`).
  */
 export function createHeuristic(variant: string | undefined, options: Record<string, unknown>): Algorithm {
   if (!BOT_LEVELS.includes(variant as BotLevel)) throw new Error(`unknown heuristic level: ${variant}`)
@@ -625,7 +657,7 @@ export function createHeuristic(variant: string | undefined, options: Record<str
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`heuristic option ${k} must be a number`)
   }
   const profile = BOT_PROFILES[variant as BotLevel]
-  const opt: HeuristicOptions = { ...HEURISTIC_DEFAULTS, ...options }
+  const opt: HeuristicOptions = { ...HEURISTIC_DEFAULTS, ...LEVEL_OPTIONS[variant as BotLevel], ...options }
   return {
     id: `heuristic:${variant}`,
     supports: () => true,

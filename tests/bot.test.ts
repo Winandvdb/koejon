@@ -70,8 +70,8 @@ describe('bot bidding', () => {
   })
 
   it('waits on the first card with a decent hand — the 2nd card doubles the stake', () => {
-    // ~9.5 rated for hearts: enough for the 2nd card, not for the 1st.
-    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('C', '9')]
+    // 12.5 rated for hearts: enough for the 2nd card, not for the 1st.
+    const hand = [C('H', 'A'), C('H', 'K'), C('H', '9'), C('D', 'K'), C('C', '10'), C('C', '9')]
     expect(botAction(bidState(hand), 1, never)).toEqual({ type: 'bid', seat: 1, play: false })
     const r2 = bidState(hand, {
       phase: 'BIDDING_R2',
@@ -81,7 +81,7 @@ describe('bot bidding', () => {
   })
 
   it('bids that hand on the 1st card too once the stake is doubled', () => {
-    const hand = [C('H', 'K'), C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('C', '9')]
+    const hand = [C('H', 'A'), C('H', 'K'), C('H', '9'), C('D', 'K'), C('C', '10'), C('C', '9')]
     expect(botAction(bidState(hand, { multiplier: 2 }), 1, never)).toEqual({
       type: 'bid',
       seat: 1,
@@ -283,8 +283,10 @@ describe('bot card play', () => {
       { tricksPlayed: 3, tricksWon: [1, 2] },
     )
     for (const level of ['easy', 'normal', 'hard'] as const) {
-      // Smart path vets cheap points; lazy dump and a decided hand dump low.
-      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'Q') })
+      // Smart path vets cheap points (vetMaxRisk: 2 for easy, 1 tuned); lazy
+      // dump and a decided hand dump low.
+      const cheap = level === 'easy' ? C('D', 'Q') : C('C', 'J')
+      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: cheap })
       expect(botAction(s, 1, never, level)).toEqual({ type: 'play', seat: 1, card: C('C', 'J') })
       const decided = { ...s, points: [5, 21] as [number, number] }
       expect(botAction(decided, 1, smart, level)).toEqual({
@@ -613,6 +615,14 @@ describe('bot dealer choice', () => {
 })
 
 describe('bot levels', () => {
+  it('easy keeps the bid thresholds from before the tuning', () => {
+    // 12.5 rated for hearts: over easy's 11 on the 1st card, under the tuned 14.5.
+    const s = bidState([C('H', 'A'), C('H', 'K'), C('H', '9'), C('D', 'K'), C('C', '10'), C('C', '9')])
+    expect(botAction(s, 1, never, 'easy')).toEqual({ type: 'bid', seat: 1, play: true })
+    expect(botAction(s, 1, never, 'normal')).toEqual({ type: 'bid', seat: 1, play: false })
+    expect(botAction(s, 1, never, 'hard')).toEqual({ type: 'bid', seat: 1, play: false })
+  })
+
   it('easy ignores knijpen', () => {
     const s = bidState(TRASH, { lines: [2, 13] })
     expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'bid', seat: 1, play: false })
