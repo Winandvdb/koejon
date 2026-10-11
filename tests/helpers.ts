@@ -1,6 +1,8 @@
 import { apply, createMatch, pendingSeats } from '../src/engine'
-import type { Card, State, Suit, TrickCard } from '../src/engine'
-import { botAction } from '../src/bots/bot'
+import type { Action, Card, State, Suit, TrickCard } from '../src/engine'
+import { botAction, createBot } from '../src/bots/bot'
+import type { BotLevel } from '../src/bots/bot'
+import type { BotTrace } from '../src/bots/algorithm'
 import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
 import type { KeyValueStore } from '../src/lib/storage'
 import { seededRandom } from '../src/lib/seed'
@@ -19,6 +21,29 @@ export function finishedMatch(seed: number): { final: State; kjn: string } {
     s = next
   }
   return { final: s, kjn: serializeKjn(rec) }
+}
+
+/**
+ * Seed scan: play seeded matches of `heuristic:<level>` bots and show `visit`
+ * every action with the state before it and the bot's trace notes. A scan
+ * finds situations that are rare in a hand-played game, in the real game flow.
+ */
+export function scanMatches(
+  level: BotLevel,
+  seeds: number,
+  visit: (s: State, a: Action, notes: string[]) => void,
+): void {
+  const bot = createBot(`heuristic:${level}`)
+  for (let seed = 1; seed <= seeds; seed++) {
+    let s = createMatch(seed)
+    const rand = seededRandom(seed * 7919 + 13)
+    while (s.phase !== 'GAME_OVER') {
+      const trace: BotTrace = { candidates: [], notes: [] }
+      const a = bot.decide(s, pendingSeats(s)[0], rand, trace)
+      visit(s, a, trace.notes)
+      s = apply(s, a)
+    }
+  }
 }
 
 /** In-memory stand-in for localStorage. */

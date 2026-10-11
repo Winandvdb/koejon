@@ -380,6 +380,46 @@ describe('bot leads', () => {
     }
   })
 
+  it('keeps a side ace in a sweep while an opponent may still hold trump', () => {
+    const hand = [C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('D', '9')]
+    const sweep = { tricksPlayed: 1, tricksWon: [0, 1] as [number, number] }
+    for (const level of LEVELS) {
+      // Bidder, partner and short defender alike: the highest card that is no ace.
+      for (const bidder of [1, 3, 0]) {
+        expect(botAction(leadState(hand, bidder, sweep), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
+      }
+    }
+    // Trick 1: seat1 led trump and both opponents showed out: now the ace is safe.
+    const noTrumpOut = leadState(hand, 1, {
+      ...sweep,
+      log: [
+        { t: 'card', seat: 1, card: C('H', 'Q') },
+        { t: 'card', seat: 2, card: C('C', '9') },
+        { t: 'card', seat: 3, card: C('H', 'J') },
+        { t: 'card', seat: 0, card: C('D', '10') },
+        { t: 'trick', seat: 1 },
+      ],
+    })
+    for (const level of ['normal', 'hard'] as const) {
+      expect(botAction(noTrumpOut, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'A') })
+    }
+    // Easy remembers no trumps: the ace still waits.
+    expect(botAction(noTrumpOut, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
+  })
+
+  it('the partner and a short defender lead a trump before their last plain aces', () => {
+    const partnerHand = [C('H', '9'), C('S', 'A'), C('D', 'A')]
+    const defenderHand = [C('H', 'A'), C('S', 'A'), C('D', 'A')]
+    const open = { tricksPlayed: 3, tricksWon: [1, 2] as [number, number] }
+    const sweep = { tricksPlayed: 3, tricksWon: [0, 3] as [number, number] }
+    for (const level of LEVELS) {
+      for (const over of [open, sweep]) {
+        expect(botAction(leadState(partnerHand, 3, over), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+        expect(botAction(leadState(defenderHand, 0, over), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+      }
+    }
+  })
+
   it('the partner of the bidder does not lead trump, also in a sweep', () => {
     const hand = [C('H', 'A'), C('H', 'K'), C('H', '9'), C('D', '9'), C('C', '9'), C('C', '10')]
     for (const level of LEVELS) {
