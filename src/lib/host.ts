@@ -77,8 +77,10 @@ const ROOM_KEYS = [engineKey, seqKey, quotesKey, seatsKey, kjnKey, finalKey]
 const PENDING_KEY = 'koejon-games-pending'
 const PENDING_MAX = 20
 
-/** Time for the browser to paint a commit before a bot search blocks the page. */
-export const PAINT_MS = 40
+/** Time for the browser to paint a commit and play its card animations before
+ *  a bot search blocks the page: the longest is a trick that leaves the felt
+ *  (420 ms in TrickArea.svelte), which starts with the next lead. */
+export const PAINT_MS = 450
 
 /** A player name from the wire: text, at most 20 characters. */
 const cleanName = (name: unknown): string => String(name ?? '').slice(0, 20)
@@ -119,7 +121,8 @@ export class HostGame {
   private quoteBook = new QuoteBook()
   /** Quotes fired this match, newest last — published on every update. */
   private quoteLog: QuoteEvent[] = []
-  /** The last log event (JSON) and when it was first published: a linger counts from then. */
+  /** The last log event (JSON) and the commit that first had it: a linger counts from then.
+   *  The next move's publish takes as long as that one's, so guests still see the full linger. */
   private lastEvent = ''
   private eventAt = 0
   /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
@@ -210,6 +213,9 @@ export class HostGame {
       this.finalKjn = saved.phase === 'GAME_OVER' ? this.readFinal() : null
     } else if (inLobby) this.state = createMatch((this.rand() * 2 ** 31) | 0)
     else throw new Error('engine-lost')
+    // After a reload the last event shows again: its linger starts anew.
+    this.lastEvent = JSON.stringify(this.state.log[this.state.log.length - 1] ?? null)
+    this.eventAt = Date.now()
   }
 
   /** One host tab per room: a second one would answer the same guests. */
@@ -725,8 +731,8 @@ export class HostGame {
     // the acks drainBotAcks confirms: the pause comes before the first lead.
     const acking = this.state.phase === 'PLAYING' && this.state.trickAcks.length < 4
     const speed = this.dev().speed
-    // A linger counts from when its event was published: a commit without a
-    // new event (an ack) does not start it again.
+    // A linger counts from the commit of its event: a commit without a new
+    // event (an ack) does not start it again.
     const wait =
       speed === 'instant'
         ? 0
@@ -735,8 +741,8 @@ export class HostGame {
           : Math.max(this.botDelay() / speed, linger / speed - (Date.now() - this.eventAt))
     const due = Date.now() + wait
     // The bot thinks first and then waits only what is left: a slow search
-    // must not add to the pause. A moment later, so the table shows the last
-    // commit before a long search blocks this page.
+    // must not add to the pause. Not at once: the table first shows the last
+    // commit and its card animations, then a long search blocks this page.
     const think = setTimeout(() => {
       this.enqueue(async () => {
         // Cleared or replaced while queued (devChanged, dispose): not ours anymore.
@@ -746,14 +752,18 @@ export class HostGame {
         const seat = this.autoSeat()
         if (seat === undefined) return
         const move = this.botMove(seat)
-        this.botTimer = setTimeout(() => {
-          this.botTimer = null
+        // Held until its job runs, as `think`: the watchdog must not arm a
+        // second chain while the move waits in the queue.
+        const play = setTimeout(() => {
           this.enqueue(async () => {
+            if (this.disposed || this.botTimer !== play) return
+            this.botTimer = null
             // Another seat to act now, or a move that no longer fits: think again.
             if (this.autoSeat() === seat && this.tryApply(move)) await this.commit()
             else this.scheduleBots()
           })
         }, Math.max(0, due - Date.now()))
+        this.botTimer = play
       })
     }, Math.min(wait, PAINT_MS))
     this.botTimer = think

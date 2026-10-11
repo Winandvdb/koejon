@@ -95,9 +95,10 @@ describe('dev settings', () => {
     // Two deals: in at least one a bot bids first, so the host waits after it.
     await until(() => (g.pub()?.handNumber ?? 0) >= 2)
     g.close()
-    const waits = new Set(spy.mock.calls.map((c) => c[1]))
+    const waits = spy.mock.calls.map((c) => c[1] ?? 0)
     // 50 / 5, 100 / 5 (deal), 75 / 5 (after a bid or draw), 125 / 5 (after the deal).
-    for (const ms of [10, 20, 15, 25]) expect(waits).toContain(ms)
+    // A linger counts from its commit, so it is a few ms shorter by the time the bot waits.
+    for (const ms of [10, 20, 15, 25]) expect(waits.some((w) => w <= ms && w > ms - 5), `${ms} ms`).toBe(true)
     for (const ms of [50, 100, 75, 125]) expect(waits).not.toContain(ms)
   }, 30_000)
 
