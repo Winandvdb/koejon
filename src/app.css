@@ -31,6 +31,12 @@
   --fab-contrast: #17211c;
   --cta: #1f6fc4;
   --cta-contrast: #ffffff;
+  --rate-best: #1d8a5a;
+  --rate-good: #5f8f2f;
+  --rate-inaccuracy: #e0ac2e;
+  --rate-mistake: #e67e22;
+  --rate-blunder: #c0392b;
+  --rate-text: #ffffff;
   --radius: 14px;
   --card: clamp(54px, 7vw, 94px);
   color-scheme: light;
@@ -63,6 +69,12 @@
   --fab-contrast: #e4ebe7;
   --cta: #5aa2e8;
   --cta-contrast: #06121f;
+  --rate-best: #3fae74;
+  --rate-good: #8cc152;
+  --rate-inaccuracy: #e8b53a;
+  --rate-mistake: #f0913a;
+  --rate-blunder: #e25c4d;
+  --rate-text: #0b1410;
   color-scheme: dark;
 }
 
@@ -1766,6 +1778,137 @@ button.tag {
 .replay-bar .icon-btn:disabled {
   opacity: 0.35;
   cursor: default;
+}
+
+/* ---------- Replay analysis ---------- */
+
+.analysis-toggle.on {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: transparent;
+}
+
+.replay-end .analysis-toggle {
+  margin-right: 4px;
+}
+
+.analysis-panel {
+  margin: 6px 10px 0;
+  padding: 8px 10px;
+  flex: none;
+  max-height: 34vh;
+  overflow: auto;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chip.rate {
+  color: var(--rate-text);
+}
+
+.chip.rate-best {
+  background: var(--rate-best);
+}
+
+.chip.rate-good {
+  background: var(--rate-good);
+}
+
+.chip.rate-inaccuracy {
+  background: var(--rate-inaccuracy);
+  color: var(--gold-contrast);
+}
+
+.chip.rate-mistake {
+  background: var(--rate-mistake);
+  color: var(--gold-contrast);
+}
+
+.chip.rate-blunder {
+  background: var(--rate-blunder);
+}
+
+.an-muted {
+  color: var(--muted);
+}
+
+.an-move {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.an-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.an-val {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.an-val.best,
+.an-bids tr.best td {
+  border-color: var(--rate-best);
+  color: var(--rate-best);
+}
+
+.an-val.played,
+.an-bids tr.played td {
+  font-weight: 800;
+}
+
+.an-bids,
+.an-sum {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.an-bids th,
+.an-bids td {
+  padding: 1px 8px 1px 0;
+  text-align: left;
+  font-weight: inherit;
+}
+
+.an-bids th {
+  color: var(--muted);
+}
+
+.an-sum {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.an-sum caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 2px;
+}
+
+.an-sum th,
+.an-sum td {
+  padding: 1px 3px;
+  text-align: center;
+}
+
+.an-sum tr.first {
+  border-top: 1px solid var(--border);
+}
+
+.an-sum .an-name {
+  text-align: left;
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The dealer's turned cards sit at the dealer's seat during bidding. */

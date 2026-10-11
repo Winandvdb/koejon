@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { shownHand, teamOf, toPublic, turnedVisible, type State } from '../engine'
+  import { shownHand, teamOf, toPublic, turnedVisible, type Action, type State } from '../engine'
+  import { RATING_CLASSES, sameAction, summarize, type Rating, type RatingClass } from '../bots/analysis'
+  import { Analyzer } from '../lib/analysis'
   import type { KjnMatch } from '../lib/kjn'
   import { downloadKjn } from '../lib/download'
-  import { levelNames, seatName, t } from '../lib/i18n'
+  import { lang, levelNames, RATING_GLYPH, ratingNames, seatName, SUIT_GLYPH, suitName, t } from '../lib/i18n'
   import { arrangeHand, cardKey, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
   import { isPlaying, lastBids, showBids, sideOf, troefkeBubble } from '../lib/table'
@@ -98,6 +100,55 @@
 
   const lastBid = $derived(lastBids(pub.log))
   const bidsShown = $derived(showBids(pub))
+
+  // Move ratings: computed in a worker, only for the steps on screen.
+  let analysis = $state(false)
+  let analyzer: Analyzer | null = null
+  let rated = $state.raw(new Map<number, Rating[]>())
+  function toggleAnalysis() {
+    analysis = !analysis
+    if (analysis && !analyzer) {
+      const worker = new Worker(new URL('../lib/analysis-worker.ts', import.meta.url), { type: 'module' })
+      analyzer = new Analyzer(worker, kjn)
+      analyzer.results.subscribe((m) => (rated = new Map(m)))
+    }
+  }
+  $effect(() => () => analyzer?.stop())
+
+  const range = (from: number, to: number) => Array.from({ length: to - from }, (_, k) => from + k)
+  const handSteps = $derived(range(starts[hand - 1], starts[hand] ?? steps.length))
+  const handEnd = $derived(i === handSteps.at(-1))
+  /** Summaries to show here: the hand at its last step, and the match at the very end. */
+  const summaries = $derived([
+    ...(handEnd ? [{ title: $t.thisHand, steps: handSteps }] : []),
+    ...(i === last ? [{ title: $t.wholeMatch, steps: range(0, steps.length) }] : []),
+  ])
+  $effect(() => {
+    if (analysis) analyzer?.want([i, ...summaries.flatMap((x) => x.steps)])
+  })
+  const ratings = $derived(analysis ? rated.get(i) : undefined)
+  const ratingOf = (seat: number): RatingClass | undefined => ratings?.find((r) => r.seat === seat)?.rating
+  const rateName = $derived(ratingNames($t))
+  const kindRows = $derived([['bidding', $t.biddingLabel], ['play', $t.cardsLabel]] as const)
+
+  function actionLabel(a: Action): string {
+    switch (a.type) {
+      case 'play':
+        return a.card.r + SUIT_GLYPH[a.card.s]
+      case 'bid':
+        return a.play ? $t.play : $t.pass
+      case 'choose':
+        return a.suit ? `${SUIT_GLYPH[a.suit]} ${suitName(a.suit, $lang)}` : $t.pass
+      case 'troefke':
+        return $t.troefWanted
+      case 'ack':
+        return $t.noTroefke
+      default:
+        return a.type
+    }
+  }
+  const signed = (v: number) => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(2)
+  const pct = (p: number) => `${Math.round(p * 100)}%`
 </script>
 
 {#snippet nameplateOf(seat: number)}
@@ -111,6 +162,7 @@
     tricks={isPlaying(pub) ? pub.tricksWon[teamOf(seat)] : null}
     bid={bidsShown ? lastBid.get(seat) : undefined}
     troef={troefkeBubble(pub, seat)}
+    rating={ratingOf(seat)}
     animate={false}
   />
 {/snippet}
@@ -152,6 +204,9 @@
       <span class="replay-label">{$t.hand} {hand} {$t.of} {match.hands.length}</span>
     </div>
     <div class="replay-end">
+      <button class="btn tiny analysis-toggle" class:on={analysis} aria-pressed={analysis} onclick={toggleAnalysis}>
+        {$t.analysis}
+      </button>
       <div class="replay-menu" bind:this={menu}>
         <button
           class="icon-btn"
@@ -177,6 +232,77 @@
     </div>
   </div>
   {#if error}<div class="alert replay-alert">{error}</div>{/if}
+  {#if analysis}
+    <div class="panel analysis-panel" aria-live="polite">
+      {#if !ratings}
+        <div class="an-muted"><span class="spinner"></span> {$t.analysing}</div>
+      {:else if ratings.length === 0}
+        <div class="an-muted">{$t.noChoice}</div>
+      {/if}
+      {#each ratings ?? [] as r (r.seat)}
+        <div class="an-move">
+          <span class="chip rate rate-{r.rating}">{RATING_GLYPH[r.rating]}</span>
+          <b>{seats[r.seat].name}</b>: {actionLabel(r.played)} · {rateName[r.rating]}
+          {#if r.loss > 0}<span class="an-muted">({signed(-r.loss)} {$t.lostLines})</span>{/if}
+        </div>
+        {#if r.kind === 'play'}
+          <div class="an-values">
+            {#each r.values as v, k}
+              <span class="an-val" class:best={k === 0} class:played={sameAction(v.action, r.played)}>
+                {actionLabel(v.action)} <small>{signed(v.value)}</small>
+              </span>
+            {/each}
+          </div>
+        {:else}
+          <table class="an-bids">
+            <thead>
+              <tr><th></th><th>{$t.winChance}</th><th>{$t.expectedLines}</th></tr>
+            </thead>
+            <tbody>
+              {#each r.values as v, k}
+                <tr class:best={k === 0} class:played={sameAction(v.action, r.played)}>
+                  <td>{actionLabel(v.action)}</td>
+                  <td>{pct(v.win ?? 0)}</td>
+                  <td>{signed(v.value)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+          <div class="an-muted">{$t.breakEven} ({r.stake}): {pct(r.breakEven ?? 0)}</div>
+        {/if}
+        {#if !sameAction(r.values[0].action, r.played)}
+          <div class="an-muted">{$t.bestChoice}: {actionLabel(r.values[0].action)}</div>
+        {/if}
+      {/each}
+      {#each summaries as sum (sum.title)}
+        {@const done = sum.steps.filter((k) => rated.has(k))}
+        {@const counts = summarize(done.flatMap((k) => rated.get(k)!))}
+        <table class="an-sum">
+          <caption>
+            {sum.title}
+            {#if done.length < sum.steps.length}<span class="an-muted"><span class="spinner"></span> {done.length}/{sum.steps.length}</span>{/if}
+          </caption>
+          <thead>
+            <tr>
+              <th></th><th></th>
+              {#each RATING_CLASSES as c}<th title={rateName[c]}><span class="chip rate rate-{c}">{RATING_GLYPH[c]}</span></th>{/each}
+            </tr>
+          </thead>
+          <tbody>
+            {#each [0, 1, 2, 3] as seat}
+              {#each kindRows as [kind, label], row}
+                <tr class:first={row === 0}>
+                  {#if row === 0}<th rowspan="2" class="an-name">{seats[seat].name}</th>{/if}
+                  <td class="an-muted">{label}</td>
+                  {#each RATING_CLASSES as c}<td>{counts[seat][kind][c] || ''}</td>{/each}
+                </tr>
+              {/each}
+            {/each}
+          </tbody>
+        </table>
+      {/each}
+    </div>
+  {/if}
 
   <div class="table">
     <div class="felt">

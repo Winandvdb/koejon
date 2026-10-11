@@ -362,18 +362,32 @@ export function replaySteps(m: KjnMatch): State[] {
   return steps
 }
 
-function runKjn(m: KjnMatch, step: (s: State) => void): State {
+/** One replay step: the recorded action and the state it was taken in; null for a deal. */
+export type ReplayMove = { before: State; action: Action } | null
+
+/**
+ * Per step of `replaySteps`, the action that made it. `before` already has
+ * the trick acknowledgements, so the action is legal there. Throws like `replayKjn`.
+ */
+export function replayMoves(m: KjnMatch): ReplayMove[] {
+  const moves: ReplayMove[] = []
+  runKjn(m, (_, move) => moves.push(move))
+  return moves
+}
+
+function runKjn(m: KjnMatch, step: (s: State, move: ReplayMove) => void): State {
   let s = createMatch(0)
   const act = (a: Action) => {
+    const before = s
     s = apply(s, a)
-    step(s)
+    step(s, { before, action: a })
   }
   m.hands.forEach((h, i) => {
     const n = i + 1
     // A copy: `step` may keep the state of the previous hand.
     s = structuredClone(s)
     dealHands(s, h.dealer, h.deal.map((d) => d.map(copy)))
-    step(s)
+    step(s, null)
     for (const b of h.auction.flat()) act({ type: 'bid', ...b })
     if (h.choice !== undefined) act({ type: 'choose', seat: h.dealer, suit: h.choice })
     if (!h.contract) {
