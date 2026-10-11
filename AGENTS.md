@@ -62,7 +62,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/app.css` | All styles and colour tokens. | |
 | `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |
 | `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. `devbrand.ts` + `dev/` hold the dev build name and icons; a plugin emits them only when `VITE_APP_VARIANT=dev` (the dev channel and previews of PRs into develop). | The worker never caches other origins (Firebase). Registered in production builds only. |
-| `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`, and `memoryStore`, `blockStorage`, `until`. | Reuse the helpers. |
+| `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`, and `memoryStore`, `blockStorage`, `until`. Seed scans: `scanMatches(level, seeds, visit)` plays seeded bot matches and shows every action with its state and trace notes; `bot-scan.test.ts` has the scans. | Reuse the helpers. |
 | `rules/` | Game rules (NL, EN). Shown in the app. | |
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
 | `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | Prod, dev and PR previews share one database, and CI deploys the rules only from `main`. A rules change must accept every write of every build that is still in use. Keep the rules to auth, ownership, write-once and size limits. Check the exact data shape in tests, not in the rules. To make a rule stricter, first release a build that already writes the new shape, then tighten the rule in a later release. |
@@ -82,6 +82,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 - TypeScript strict. No new dependencies unless the task needs one. Pin exact versions.
 - Make the smallest change that meets the task. Do not refactor unrelated code.
 - For a bug: first write a test that fails, then fix it.
+- Prefer a seed scan to a check by hand. Many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to `tests/bot-scan.test.ts` with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
 
 ## Git and GitHub
 
