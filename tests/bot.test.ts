@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { botAction } from '../src/bots/bot'
+import { createAlgorithm } from '../src/bots/algorithm'
+import type { BotTrace } from '../src/bots/algorithm'
+import { observe } from '../src/bots/observation'
 import { seededRandom } from '../src/lib/seed'
 import { C, playingState } from './helpers'
 import { apply, createMatch } from '../src/engine'
@@ -476,6 +479,10 @@ describe('bot leads', () => {
         expect(botAction(leadState(hand, bidder, sweep), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
       }
     }
+    // The trace says why the ace waits.
+    const trace: BotTrace = { candidates: [], notes: [] }
+    createAlgorithm('heuristic:normal').decide(observe(leadState(hand, 3, sweep), 1), smart, trace)
+    expect(trace.notes).toEqual(['sweep: highest card, keeps trump, the ace waits: an opponent may trump it'])
     // Trick 1: seat1 led trump and both opponents showed out: now the ace is safe.
     const noTrumpOut = leadState(hand, 1, {
       ...sweep,
