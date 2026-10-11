@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
-import { PARAMS, spsa, toOptions, toPoint } from '../scripts/tune-spsa.mjs'
+import { PARAMS, fixedKeys, spsa, toOptions, toPoint } from '../scripts/tune-spsa.mjs'
 
 const defaults = { ...HEURISTIC_DEFAULTS } as Record<string, number>
 
@@ -69,6 +69,20 @@ describe('tune-spsa', () => {
     // The score pulls bidThreshold1 up, but it is fixed.
     const { best } = await run(1, (o) => 0.01 * o.bidThreshold1 + 0.02 * o.dealerAce, 50, ['bidThreshold1'])
     expect(best.bidThreshold1).toBe(defaults.bidThreshold1)
+    expect(best.dealerAce).toBeGreaterThan(defaults.dealerAce)
+  })
+
+  it('keeps the values set by hand unless --free names them', async () => {
+    expect(fixedKeys([])).toEqual(['dealerKing', 'dealerWeak'])
+    expect(fixedKeys(['bidThreshold1'])).toEqual(['bidThreshold1', 'dealerKing', 'dealerWeak'])
+    expect(fixedKeys([], ['dealerWeak'])).toEqual(['dealerKing'])
+    expect(() => fixedKeys([], ['nope'])).toThrow(/--free/)
+    expect(() => fixedKeys([], ['bidThreshold1'])).toThrow(/not set by hand/)
+    expect(() => fixedKeys(['dealerWeak'], ['dealerWeak'])).toThrow(/both/)
+    // The score pulls both up, as a tuning run would on noise.
+    const { best } = await run(1, (o) => o.dealerKing + o.dealerWeak + 0.02 * o.dealerAce, 50, fixedKeys([]))
+    expect(best.dealerKing).toBe(defaults.dealerKing)
+    expect(best.dealerWeak).toBe(defaults.dealerWeak)
     expect(best.dealerAce).toBeGreaterThan(defaults.dealerAce)
   })
 })

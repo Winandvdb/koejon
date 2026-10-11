@@ -67,11 +67,13 @@ function runMatch(seed: number, decide: Decide): { state: State; steps: number; 
 }
 
 describe('bot-vs-bot simulation', () => {
-  it.each(BOT_LEVELS)(`terminates ${MATCHES} complete matches of %s bots with all invariants`, (level) => {
+  // The heuristic of every level: the `hard` level bot plays pimc, too slow for 60 matches (below).
+  it.each(BOT_LEVELS)(`terminates ${MATCHES} complete matches of heuristic:%s bots with all invariants`, (level) => {
+    const bot = createBot(`heuristic:${level}`)
     let totalHands = 0
     const wins = [0, 0]
     for (let seed = 1; seed <= MATCHES; seed++) {
-      const { state, hands } = runMatch(seed, (s, seat, rand) => botAction(s, seat, rand, level))
+      const { state, hands } = runMatch(seed, (s, seat, rand) => bot.decide(s, seat, rand))
       totalHands += hands
       expect(state.winner).not.toBeNull()
       wins[state.winner!]++
@@ -82,12 +84,12 @@ describe('bot-vs-bot simulation', () => {
     expect(wins[1]).toBeGreaterThan(0)
   }, 120_000)
 
-  it('terminates complete matches of pimc card play against heuristic:hard with all invariants', () => {
-    // pimc plays cards only: it bids with heuristic:hard.
-    const pimc = createBot({ name: 'pimc-play', rules: [{ use: { id: 'pimc', samples: 2 } }, { use: 'heuristic:hard' }] })
+  it('terminates complete matches of the hard level bot (pimc card play) against heuristic:hard with all invariants', () => {
     const hard = createBot('heuristic:hard')
     for (const seed of [1, 2, 3]) {
-      const { state } = runMatch(seed, (s, seat, rand) => (seat % 2 === 0 ? pimc : hard).decide(s, seat, rand))
+      const { state } = runMatch(seed, (s, seat, rand) =>
+        seat % 2 === 0 ? botAction(s, seat, rand, 'hard') : hard.decide(s, seat, rand),
+      )
       expect(state.winner).not.toBeNull()
     }
   }, 120_000)

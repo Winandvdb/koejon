@@ -3,7 +3,7 @@ import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
-import { botAction, BOT_LEVELS, createBot } from '../src/bots/bot'
+import { botAction, BOT_LEVELS, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
@@ -51,6 +51,8 @@ describe('observe', () => {
 
 describe('heuristic reads only the observation', () => {
   it.each(BOT_LEVELS)('%s decides the same when the hidden cards change', (level) => {
+    // The heuristic of the level; tests/pimc.test.ts checks the pimc of the `hard` level bot.
+    const bot = createBot(`heuristic:${level}`)
     let changed = 0
     let n = 0
     for (const seed of [1, 2, 3]) {
@@ -58,12 +60,36 @@ describe('heuristic reads only the observation', () => {
         const hidden = hideOthers(s, seat, seededRandom(seed * 1000 + n))
         if (JSON.stringify(hidden.hands) !== JSON.stringify(s.hands)) changed++
         expect(observe(hidden, seat)).toEqual(observe(s, seat))
-        expect(botAction(hidden, seat, seededRandom(n), level)).toEqual(botAction(s, seat, seededRandom(n), level))
+        expect(bot.decide(hidden, seat, seededRandom(n))).toEqual(bot.decide(s, seat, seededRandom(n)))
         n++
       }
     }
     expect(n).toBeGreaterThan(100)
     expect(changed).toBeGreaterThan(n / 2)
+  }, 60_000)
+})
+
+describe('the hard level bot', () => {
+  const hard = createBot(LEVEL_CONFIGS.hard)
+  // Seat 1 bid with three trumps (a troefke hand); its partner 3 leads the first trick.
+  const hands = [
+    [C('C', 'J'), C('C', 'Q'), C('D', 'J'), C('D', 'Q'), C('S', 'J'), C('S', 'Q')],
+    [C('H', '9'), C('H', 'J'), C('H', 'K'), C('S', '9'), C('C', '9'), C('D', '9')],
+    [C('C', 'K'), C('C', 'A'), C('D', 'K'), C('D', 'A'), C('S', 'K'), C('S', 'A')],
+    [C('H', '10'), C('H', 'Q'), C('H', 'A'), C('S', '10'), C('C', '10'), C('D', '10')],
+  ]
+  const cases = [
+    { what: 'a card', s: playingState({ bidder: 1, turn: 3, leader: 3, hands }), seat: 3, algorithm: 'pimc' },
+    { what: 'the troefke', s: playingState({ bidder: 1, turn: 3, leader: 3, trickAcks: [3], hands }), seat: 1, algorithm: 'pimc' },
+    { what: 'a bid', s: dealtState(5, 0), seat: 1, algorithm: 'heuristic:hard' },
+  ]
+
+  it.each(cases)('decides $what with $algorithm, as botAction does for hard', ({ s, seat, algorithm }) => {
+    const tr = trace()
+    const a = hard.decide(s, seat, seededRandom(1), tr)
+    expect(tr.algorithm).toBe(algorithm)
+    expect(botAction(s, seat, seededRandom(1), 'hard')).toEqual(a)
+    // Two troefke searches: seconds on a loaded runner.
   }, 60_000)
 })
 
@@ -201,11 +227,12 @@ describe('heuristic trace', () => {
 describe('value of a hand', () => {
   it('matches the engine scoring on finished hands of simulated matches', () => {
     let hands = 0
+    const bot = createBot('heuristic:hard')
     for (const seed of [1, 2, 3, 4]) {
       let s = createMatch(seed)
       const rand = seededRandom(seed)
       while (s.phase !== 'GAME_OVER') {
-        const next = apply(s, botAction(s, pendingSeats(s)[0], rand, 'hard'))
+        const next = apply(s, bot.decide(s, pendingSeats(s)[0], rand))
         if (next.phase !== s.phase && (next.phase === 'SCORED' || next.phase === 'GAME_OVER')) {
           const r = next.lastResult!
           // Lines crossed per team as the engine describes it: the winner

@@ -86,13 +86,26 @@ export function createBot(config: BotConfig | AlgorithmSpec): Bot {
   }
 }
 
+/**
+ * Worlds per decision of the `hard` bot, and of its partner model in a
+ * troefke decision: few enough that a phone host decides within 2 s (#172).
+ */
+export const HARD_PIMC = { samples: 10, partnerSamples: 2 }
+
+/** The bot of each level: `hard` plays its cards and the troefke with pimc and bids with `heuristic:hard`. */
+export const LEVEL_CONFIGS: Record<BotLevel, BotConfig | AlgorithmSpec> = {
+  easy: 'heuristic:easy',
+  normal: 'heuristic:normal',
+  hard: { name: 'pimc-hard', rules: [{ use: { id: 'pimc', ...HARD_PIMC } }, { use: 'heuristic:hard' }] },
+}
+
 const LEVEL_BOTS = Object.fromEntries(
-  BOT_LEVELS.map((level) => [level, createBot(`heuristic:${level}`)]),
+  BOT_LEVELS.map((level) => [level, createBot(LEVEL_CONFIGS[level])]),
 ) as Record<BotLevel, Bot>
 
 /**
- * Pick an engine action for a bot seat with the heuristic of `level`. Uses
- * only legalActions, so the no-underbuy and follow rules are always respected.
+ * Pick an engine action for a bot seat with the bot of `level` (`LEVEL_CONFIGS`).
+ * Uses only legalActions, so the no-underbuy and follow rules are always respected.
  */
 export function botAction(
   s: State,
