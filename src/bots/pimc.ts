@@ -1,7 +1,8 @@
-import { partnerOf, RANK_ORDER, RANK_POINTS } from '../engine'
-import type { Action, Card, State, Suit } from '../engine'
+import { partnerOf, RANK_ORDER, RANK_POINTS, rngNext, sameCard } from '../engine'
+import type { Action, State, Suit } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
 import { playedCards, sampleWorld } from './determinize'
+import { troefkeHand } from './heuristic'
 import { decisionPhase, observe } from './observation'
 import type { Observation } from './observation'
 import { solve } from './solver'
@@ -22,27 +23,24 @@ function cost(a: Action, trump: Suit | null): number {
 }
 
 /**
- * What a troefke tells about the bidder's hand: 3 trumps, or 2 with the king
- * or ace. The rules leave it open; this is the heuristic's own reason to ask.
+ * Keep-chance of a world where the bidder asked a troefke without a troefke
+ * hand: unlikely, not impossible (a human asks as it likes). Not 0, so a
+ * deal where no such hand fits does not spend every try of `sampleWorld`.
  */
-export function troefkeHand(cards: Card[], trump: Suit): boolean {
-  const trumps = cards.filter((c) => c.s === trump)
-  return trumps.length >= 3 || (trumps.length >= 2 && trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER.K))
-}
+const WEAK_TROEFKE = 0.1
 
 /**
- * After a troefke, keep only the worlds where the bidder had a troefke hand:
- * the cards it holds there plus the ones it played this hand. Undefined when
- * there is nothing to learn (no troefke, or the seat is the bidder itself).
+ * After a troefke, every seat but the bidder reads it as a troefke hand
+ * (`troefkeHand`: the cards the bidder holds in the world plus the ones it
+ * played this hand) and keeps worlds without one only by `WEAK_TROEFKE`.
+ * Undefined when there is nothing to learn: no troefke, or the bidder itself.
  */
 export function troefkeWeight(obs: Observation): ((world: State) => number) | undefined {
   const bidder = obs.bidder
   if (!obs.troefkeAsked || bidder === null || bidder === obs.seat || !obs.trump) return undefined
   const trump = obs.trump
-  return (world) => {
-    const played = playedCards(world).flatMap((tc) => (tc.seat === bidder ? [tc.card] : []))
-    return troefkeHand([...world.hands[bidder], ...played], trump) ? 1 : 0
-  }
+  const played = playedCards(obs).flatMap((tc) => (tc.seat === bidder ? [tc.card] : []))
+  return (world) => (troefkeHand([...world.hands[bidder], ...played], trump) ? 1 : WEAK_TROEFKE)
 }
 
 /** The partner of the bidder leads the first trick after a troefke: it obeys and leads a trump. */
@@ -101,7 +99,10 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
   if (troefkeLead(obs)) {
     candidates = candidates.filter((a) => a.type === 'play' && a.card.s === obs.trump)
     trace?.notes.push('troefke asked: lead a trump')
-    if (candidates.length === 1) return candidates[0]
+    if (candidates.length === 1) {
+      trace?.candidates.push({ action: candidates[0], note: 'the only trump' })
+      return candidates[0]
+    }
   }
   const weight = troefkeWeight(obs)
   return best(obs, candidates, samples, () => solve(sampleWorld(obs, rand, weight), obs.seat, candidates).map((v) => v.value), trace)
@@ -114,9 +115,17 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
  * bidder's hand: per world, its lead comes from its own small PIMC — with
  * the troefke it obeys and samples troefke hands for the bidder (as
  * `playCard` does), without it it guesses — and the solver plays the rest.
+ *
+ * It asks only with a troefke hand, so the other seats read it right.
  */
 function askTroefke(obs: Observation, rand: () => number, samples: number, partnerSamples: number, trace?: BotTrace): Action {
   const candidates = obs.legal.filter((a) => a.type === 'ack' || a.type === 'troefke')
+  const ack = candidates.find((a) => a.type === 'ack')!
+  if (!troefkeHand(obs.hand, obs.trump!)) {
+    trace?.candidates.push({ action: ack, note: 'no troefke hand' })
+    trace?.notes.push('no troefke: no troefke hand')
+    return ack
+  }
   const partner = partnerOf(obs.seat)
   return best(
     obs,
@@ -124,16 +133,26 @@ function askTroefke(obs: Observation, rand: () => number, samples: number, partn
     samples,
     () => {
       const world = sampleWorld(obs, rand)
-      return candidates.map((a) => {
+      // Both choices get the same random numbers for the partner: the
+      // difference between them is the troefke, not sampling noise.
+      const seed = Math.floor(rand() * 0x100000000) | 0
+      const leads = candidates.map((a) => {
+        const holder = { rng: seed }
         // The partner's view of the same deal, ready to lead.
         const view = observe({ ...world, trickAcks: [0, 1, 2, 3], troefkeAsked: a.type === 'troefke' }, partner)
-        const lead = playCard(view, rand, partnerSamples)
-        return solve(world, obs.seat, [lead])[0].value
+        return playCard(view, () => rngNext(holder), partnerSamples)
       })
+      // One search for both leads, so they share its cache.
+      const unique = leads.filter((l, i) => leads.findIndex((m) => samePlay(l, m)) === i)
+      const values = solve(world, obs.seat, unique)
+      return leads.map((l) => values.find((v) => samePlay(v.action, l))!.value)
     },
     trace,
   )
 }
+
+const samePlay = (a: Action, b: Action): boolean =>
+  a.type === 'play' && b.type === 'play' && sameCard(a.card, b.card)
 
 /**
  * Perfect Information Monte Carlo, as GIB plays bridge: deal the cards the seat
@@ -143,8 +162,10 @@ function askTroefke(obs: Observation, rand: () => number, samples: number, partn
  * later; non-locality) are accepted.
  *
  * The troefke: the bidder decides it with a partner that cannot see its hand
- * (`askTroefke`); the partner obeys it and every seat but the bidder samples
- * only troefke hands for the bidder from then on.
+ * (`askTroefke`); the partner obeys it and every seat but the bidder reads it
+ * as a troefke hand from then on (`troefkeWeight`). The troefke counts as
+ * bidding in `decisionPhase`, but `supports` takes it: a bot rule with
+ * `when: { phase: 'play' }` leaves it to the next rule.
  *
  * No bids or dealer's choice: `supports` is false for them. `solve` can value
  * bids, but each world shows all hands, so PIMC bid far too often (25% on

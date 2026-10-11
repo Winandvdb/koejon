@@ -6,9 +6,10 @@ import type { AlgorithmSpec, BotTrace } from '../src/bots/algorithm'
 import { createBot } from '../src/bots/bot'
 import { sampleWorld } from '../src/bots/determinize'
 import { observe } from '../src/bots/observation'
-import { troefkeHand, troefkeWeight } from '../src/bots/pimc'
+import { troefkeHand } from '../src/bots/heuristic'
+import { troefkeWeight } from '../src/bots/pimc'
 import { seededRandom } from '../src/lib/seed'
-import { C, dealtState, playingState } from './helpers'
+import { C, dealtState, decisions, hideOthers, playingState } from './helpers'
 
 const SAMPLES = 3
 
@@ -54,8 +55,9 @@ describe('pimc', () => {
         expect(legalActions(s, a.seat)).toContainEqual(a)
         if (a.seat % 2 === 0 && trace.algorithm === 'pimc') {
           expect(['play', 'ack', 'troefke']).toContain(a.type)
-          const key = (x: Action) => JSON.stringify(x)
-          expect(trace.candidates.map((c) => key(c.action)).sort()).toEqual(legalActions(s, a.seat).map(key).sort())
+          // Every candidate is legal (after a troefke only the trumps are), the first is the choice.
+          for (const c of trace.candidates) expect(legalActions(s, a.seat)).toContainEqual(c.action)
+          expect(trace.candidates[0].action).toEqual(a)
           decided++
         }
       })
@@ -129,7 +131,12 @@ describe('pimc', () => {
       const hand = s.hands[1]
       if (!hand.some((c) => c.s === s.trump) || hand.every((c) => c.s === s.trump)) continue
       const asked = led(apply(s, { type: 'troefke', seat: 3 }))
-      expect(pimc.decide(observe(asked, 1), seededRandom(seed))).toMatchObject({ card: { s: s.trump } })
+      const trace: BotTrace = { candidates: [], notes: [] }
+      const card = pimc.decide(observe(asked, 1), seededRandom(seed), trace)
+      expect(card).toMatchObject({ card: { s: s.trump } })
+      // Only trumps are weighed, the one played first; a lone trump is still in the trace.
+      expect(trace.candidates.every((c) => c.action.type === 'play' && c.action.card.s === s.trump)).toBe(true)
+      expect(trace.candidates[0].action).toEqual(card)
       const free = pimc.decide(observe(led(s), 1), seededRandom(seed))
       if (free.type === 'play' && free.card.s !== s.trump) plainWithout++
       checked++
@@ -139,7 +146,7 @@ describe('pimc', () => {
     expect(plainWithout).toBeGreaterThan(0)
   }, 60_000)
 
-  it('samples only troefke hands for the bidder once a troefke is asked', () => {
+  it('samples troefke hands for the bidder once a troefke is asked', () => {
     const s = apply(troefkeState(4), { type: 'troefke', seat: 3 })
     const obs = observe(led(s), 0)
     const weight = troefkeWeight(obs)!
@@ -152,8 +159,11 @@ describe('pimc', () => {
       if (fits(sampleWorld(obs, rand, weight))) weighted++
       if (fits(sampleWorld(obs, rand))) plain++
     }
-    expect(weighted).toBe(100)
-    expect(plain).toBeLessThan(90)
+    // A world without one is kept by 0.1 only: with p of the plain worlds
+    // fitting, about p / (p + 0.1 (1 - p)) of the weighted ones fit.
+    expect(plain).toBeLessThan(50)
+    expect(weighted).toBeGreaterThan(plain + 30)
+    expect(weight({ ...led(s), hands: [[], [], [], [C(s.trump!, '9')]] })).toBe(0.1)
     // Nothing to learn for the bidder itself, or without a troefke.
     expect(troefkeWeight(observe(led(s), 3))).toBeUndefined()
     expect(troefkeWeight(observe(led(troefkeState(4)), 0))).toBeUndefined()
@@ -162,10 +172,18 @@ describe('pimc', () => {
   it('decides the troefke with a partner that cannot see the bidder', () => {
     const pimc = createAlgorithm({ id: 'pimc', samples: 3, partnerSamples: 2 })
     const chosen = { ack: 0, troefke: 0 }
+    let weak = 0
     for (let seed = 1; seed <= 30; seed++) {
       const s = troefkeState(seed)
       const trace: BotTrace = { candidates: [], notes: [] }
       const a = pimc.decide(observe(s, 3), seededRandom(seed), trace)
+      if (!troefkeHand(s.hands[3], s.trump!)) {
+        // Without a troefke hand it never asks: its troefke must mean what the other seats read.
+        expect(a.type).toBe('ack')
+        expect(trace.candidates).toHaveLength(1)
+        weak++
+        continue
+      }
       expect(['ack', 'troefke']).toContain(a.type)
       expect(trace.candidates.map((c) => c.action.type).sort()).toEqual(['ack', 'troefke'])
       expect(trace.candidates[0].action).toEqual(a)
@@ -174,9 +192,33 @@ describe('pimc', () => {
       expect(pimc.decide(observe(s, 3), seededRandom(seed))).toEqual(a)
       chosen[a.type as 'ack' | 'troefke']++
     }
-    // It asks in some deals and not in others.
+    // With a troefke hand it asks in some deals and not in others.
     expect(chosen.ack).toBeGreaterThan(0)
     expect(chosen.troefke).toBeGreaterThan(0)
+    expect(weak).toBeGreaterThan(0)
+  }, 120_000)
+
+  it('reads only the observation: the same choice when the hidden cards change', () => {
+    // The bot gets the full engine state, as on the host; pimc must see only its observation.
+    const bot = createBot({ id: 'pimc', samples: 2, partnerSamples: 1 })
+    const pimc = createAlgorithm({ id: 'pimc', samples: 2, partnerSamples: 1 })
+    let n = 0
+    let changed = 0
+    let troefke = 0
+    for (const seed of [1, 2]) {
+      for (const { s, seat } of decisions(seed, 'hard')) {
+        if (!pimc.supports(observe(s, seat))) continue
+        const hidden = hideOthers(s, seat, seededRandom(seed * 1000 + n))
+        if (JSON.stringify(hidden.hands) !== JSON.stringify(s.hands)) changed++
+        expect(observe(hidden, seat)).toEqual(observe(s, seat))
+        expect(bot.decide(hidden, seat, seededRandom(n))).toEqual(bot.decide(s, seat, seededRandom(n)))
+        if (legalActions(s, seat).some((a) => a.type === 'troefke')) troefke++
+        n++
+      }
+    }
+    expect(n).toBeGreaterThan(100)
+    expect(changed).toBeGreaterThan(n / 2)
+    expect(troefke).toBeGreaterThan(0)
   }, 120_000)
 
   it('takes the number of worlds as an option and rejects the rest', () => {
