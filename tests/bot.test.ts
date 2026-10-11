@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { botAction } from '../src/bots/bot'
+import { createAlgorithm } from '../src/bots/algorithm'
+import type { BotTrace } from '../src/bots/algorithm'
+import { observe } from '../src/bots/observation'
 import { seededRandom } from '../src/lib/seed'
 import { C, playingState } from './helpers'
 import { apply, createMatch } from '../src/engine'
@@ -296,6 +299,44 @@ describe('bot card play', () => {
     }
   })
 
+  it('follows suit, not trump, when every card overtakes the partner', () => {
+    // Partner seat3 leads S9, seat0 is void. SJ and H10 both beat the S9.
+    const partnerLeads = [
+      { seat: 3, card: C('S', '9') },
+      { seat: 0, card: C('D', '9') },
+    ]
+    const third = followState(partnerLeads, [C('S', 'J'), C('H', '10'), C('D', '10'), C('C', '10')], {
+      leader: 3,
+    })
+    // Seat2 still plays: the cheap point goes, the trump stays home.
+    for (const level of ['easy', 'normal', 'hard'] as const) {
+      expect(botAction(third, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'J') })
+    }
+    // No cheap card of the suit: the lowest one, still no trump and no ace.
+    const rich = followState(partnerLeads, [C('S', 'A'), C('S', 'K'), C('H', '10'), C('C', '10')], {
+      leader: 3,
+    })
+    expect(botAction(rich, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('S', 'K') })
+    // Our kapot run with an opponent still to play: the cheapest card, here the trump.
+    const sweep = followState(partnerLeads, [C('S', 'J'), C('H', '10'), C('D', '10'), C('C', '10')], {
+      leader: 3,
+      tricksPlayed: 2,
+      tricksWon: [0, 2],
+    })
+    expect(botAction(sweep, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('H', '10') })
+    // Last to play the trick is ours: feed the king, keep the ace.
+    const last = followState(
+      [
+        { seat: 2, card: C('S', '9') },
+        { seat: 3, card: C('S', '10') },
+        { seat: 0, card: C('D', '9') },
+      ],
+      [C('S', 'A'), C('S', 'K'), C('H', '10'), C('C', '10')],
+      { leader: 2 },
+    )
+    expect(botAction(last, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('S', 'K') })
+  })
+
   it('keeps an ace an opponent may trump; leads a low card instead', () => {
     // Four spades in hand: only 2 are out, so an opponent is likely void.
     const hands: Card[][] = [[], [], [], []]
@@ -464,6 +505,53 @@ describe('bot leads', () => {
       expect(botAction(bidding, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', '9') })
       expect(botAction(defending, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', '9') })
       expect(botAction(onlyAces, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+    }
+  })
+
+  it('keeps a side ace in a sweep while an opponent may still hold trump', () => {
+    const hand = [C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('D', '9')]
+    const sweep = { tricksPlayed: 1, tricksWon: [0, 1] as [number, number] }
+    for (const level of LEVELS) {
+      // Bidder, partner and short defender alike: the highest card that is no ace.
+      for (const bidder of [1, 3, 0]) {
+        expect(botAction(leadState(hand, bidder, sweep), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
+      }
+    }
+    // The trace says why the ace waits.
+    const trace: BotTrace = { candidates: [], notes: [] }
+    createAlgorithm('heuristic:normal').decide(observe(leadState(hand, 3, sweep), 1), smart, trace)
+    expect(trace.notes).toEqual(['sweep: highest card, keeps trump, the ace waits: an opponent may trump it'])
+    // Trick 1: seat1 led trump and both opponents showed out: now the ace is safe.
+    const noTrumpOut = leadState(hand, 1, {
+      ...sweep,
+      log: [
+        { t: 'card', seat: 1, card: C('H', 'Q') },
+        { t: 'card', seat: 2, card: C('C', '9') },
+        { t: 'card', seat: 3, card: C('H', 'J') },
+        { t: 'card', seat: 0, card: C('D', '10') },
+        { t: 'trick', seat: 1 },
+      ],
+    })
+    for (const level of ['normal', 'hard'] as const) {
+      expect(botAction(noTrumpOut, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'A') })
+    }
+    // Easy remembers no trumps: the ace still waits.
+    expect(botAction(noTrumpOut, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
+  })
+
+  it('leads a low trump before the last plain aces, also in a sweep', () => {
+    const open = { tricksPlayed: 3, tricksWon: [1, 2] as [number, number] }
+    const sweep = { tricksPlayed: 3, tricksWon: [0, 3] as [number, number] }
+    for (const level of LEVELS) {
+      for (const over of [open, sweep]) {
+        const lead = (hand: Card[], bidder: number) => botAction(leadState(hand, bidder, over), 1, smart, level)
+        expect(lead([C('H', '9'), C('S', 'A'), C('D', 'A')], 3)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+        // The bidder keeps its king for when the trump ace fell.
+        expect(lead([C('H', 'K'), C('H', 'Q'), C('S', 'A')], 1)).toEqual({ type: 'play', seat: 1, card: C('H', 'Q') })
+        expect(lead([C('H', 'A'), C('H', '9'), C('S', 'A')], 0)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+        // An ace goes only when no other card is legal: also the boss trump goes first.
+        expect(lead([C('H', 'A'), C('S', 'A')], 0)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+      }
     }
   })
 

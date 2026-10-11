@@ -1,9 +1,19 @@
+import type { BotLevel } from '../bots/bot'
+import type { HostGame } from './host'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
 import { readJson, type KeyValueStore } from './storage'
 import type { GuestEvents, GuestLink, HostLink } from './transport'
 
 /** Room code of the one offline solo room per browser. */
 export const SOLO_CODE = 'SOLO'
+
+/** The empty seats of a solo room: the partner (seat 2) always plays hard,
+ *  the two opponents at the chosen level. */
+export function addSoloBots(host: HostGame, level: BotLevel): void {
+  host.addBot(1, level)
+  host.addBot(2, 'hard')
+  host.addBot(3, level)
+}
 
 const KEY = 'koejon-solo'
 

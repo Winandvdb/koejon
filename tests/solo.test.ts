@@ -1,9 +1,9 @@
 import * as firestore from 'firebase/firestore'
 import { describe, expect, test, vi } from 'vitest'
-import { botAction } from '../src/bots/bot'
+import { botAction, BOT_LEVELS } from '../src/bots/bot'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
-import { localLinks, SOLO_CODE } from '../src/lib/link-local'
+import { addSoloBots, localLinks, SOLO_CODE } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import { seededRandom } from '../src/lib/seed'
 import { safeStorage, type KeyValueStore } from '../src/lib/storage'
@@ -71,6 +71,18 @@ async function open(
 }
 
 describe('offline solo', () => {
+  test.each(BOT_LEVELS)('addSoloBots: partner at hard, opponents at %s', async (level) => {
+    const g = await open(memoryStore(), true)
+    addSoloBots(g.host, level)
+    await until(() => g.view()?.room?.seats.filter(Boolean).length === 4)
+    const seats = g.view()!.room!.seats
+    expect(seats[1]?.botLevel).toBe(level)
+    expect(seats[2]?.botLevel).toBe('hard')
+    expect(seats[3]?.botLevel).toBe(level)
+    await g.host.destroyRoom()
+    g.close()
+  })
+
   test('plays a full match, survives a reload mid-game', async () => {
     const storage = memoryStore()
     const first = await open(storage, true)

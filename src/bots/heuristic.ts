@@ -65,8 +65,6 @@ export interface HeuristicOptions {
   cheapWin: number
   /** Max points to feed a trick the partner may still lose. */
   vetMaxRisk: number
-  /** A suit with fewer cards than this outside our hand likely has a void. */
-  shortSuit: number
 }
 
 /** Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93). */
@@ -88,7 +86,6 @@ export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   contestMin: 4,
   cheapWin: 10,
   vetMaxRisk: 1,
-  shortSuit: 3,
 }
 
 /**
@@ -115,7 +112,6 @@ const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
     contestMin: 5,
     cheapWin: 6,
     vetMaxRisk: 2,
-    shortSuit: 3,
   },
   normal: {},
   hard: {},
@@ -327,14 +323,6 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   const oppVoid = (suit: Suit) => oppSeatsOf(seat).some((o) => read.voids.has(`${o}:${suit}`))
   // Cards of a suit the other three may still hold (counts need 'full' memory).
   const outside = (suit: Suit) => 6 - s.hand.filter((c) => c.s === suit).length - read.suitSeen[suit]
-  // An opponent can trump a suit when they may still hold trump and either
-  // showed out of it or the suit ran short outside our hand.
-  const trumpable = (suit: Suit) =>
-    oppSeatsOf(seat).some(
-      (o) =>
-        mayHoldTrump(read, o, trump) &&
-        (read.voids.has(`${o}:${suit}`) || outside(suit) < opt.shortSuit),
-    )
 
   // Honour the partner's troefke request: open with the best trump.
   if (
@@ -354,19 +342,30 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   const shortDefender = !isBidder && !partner && trumps.length <= read.trumpsOut
   // The bidder pulls; the partner leaves that to the bidder.
   const leadsBoss = isBidder || (!partner && !shortDefender)
-  // Protect a live sweep: lead the surest winner first.
-  if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
-    if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
-    const ace = legal.find((c) => c.r === 'A' && c.s !== trump && !trumpable(c.s))
-    if (ace) return because(why, 'sweep: safe ace', ace)
-    const keep = partner || shortDefender ? trumps : []
-    const rest = legal.filter((c) => !keep.includes(c))
-    if (keep.length && rest.length) return because(why, 'sweep: highest card, keeps trump', highest(rest))
-    return because(why, 'sweep: highest card', highest(legal))
-  }
   // Both opponents showed out of trump: whatever trumps are left belong to the
   // partner, and pulling only strips our own side.
   const oppMayTrump = oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump))
+  const aces = plain.filter((c) => c.r === 'A')
+  const lowTrumps = trumps.filter((c) => c !== boss)
+  // Only aces as plain cards while an opponent may trump them: a low trump
+  // goes first from every seat (#163), even a short defender's boss trump.
+  const beforeAces =
+    oppMayTrump && aces.length && aces.length === plain.length && trumps.length ? lowest(trumps) : null
+  const acesWait = 'the ace waits: an opponent may trump it'
+  // Protect a live sweep: lead the surest winner first. Trump is always
+  // allowed, so a side ace is sure only once no opponent may hold trump.
+  if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
+    if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
+    if (aces.length && !oppMayTrump) return because(why, 'sweep: safe ace, opponents hold no trump', aces[0])
+    if (beforeAces) return because(why, `sweep: only aces left: low trump, ${acesWait}`, beforeAces)
+    // From here on any ace waits.
+    const keep = partner || shortDefender ? trumps : []
+    const rest = legal.filter((c) => !keep.includes(c) && !aces.includes(c))
+    const note = aces.length ? `, ${acesWait}` : ''
+    if (keep.length && rest.length) return because(why, `sweep: highest card, keeps trump${note}`, highest(rest))
+    if (rest.length) return because(why, `sweep: highest card${note}`, highest(rest))
+    return because(why, 'sweep: highest card', highest(legal))
+  }
   // Pull trumps when we hold the boss and others still hold trumps. Defenders
   // pull only when they hold the majority of what is left.
   if (boss && leadsBoss && read.trumpsOut > 0 && oppMayTrump)
@@ -389,12 +388,10 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
     return because(why, 'low trump to draw the trump ace', lowest(trumps))
   // A short defender with side aces pulls with a low trump, so the bidders'
   // trumps fall before the aces go.
-  const lowTrumps = trumps.filter((c) => c !== boss)
-  if (shortDefender && oppMayTrump && lowTrumps.length && plain.some((c) => c.r === 'A'))
+  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length)
     return because(why, 'defender pull: low trump, keeps the boss', lowest(lowTrumps))
   // Trump is always allowed, also on a suit an opponent can follow: cash an
   // ace only once no opponent may hold trump.
-  const aces = plain.filter((c) => c.r === 'A')
   if (aces.length && !oppMayTrump) return because(why, 'cash an ace: opponents hold no trump', highest(aces))
   // A suit nobody else holds wins once no opponent may trump. The count
   // needs 'full' memory: other levels see no suit fall.
@@ -403,11 +400,9 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
     if (unfollowed.length) return because(why, 'suit nobody else holds', highest(unfollowed))
   }
   // Otherwise a low card from a suit nobody is known void in. An ace goes
-  // only when nothing else may: the bidder or a long defender leads a low
-  // trump first.
+  // only when nothing else may.
+  if (beforeAces) return because(why, `only aces left: low trump, ${acesWait}`, beforeAces)
   const nonAce = plain.filter((c) => c.r !== 'A')
-  if (!nonAce.length && aces.length && trumps.length && !partner && !shortDefender)
-    return because(why, 'only aces left: low trump', lowest(trumps))
   const pool = nonAce.length ? nonAce : plain.length ? plain : legal
   const safe = pool.filter((c) => !oppVoid(c.s) && !read.voids.has(`${partnerOf(seat)}:${c.s}`))
   const ok = safe.length ? safe : pool.filter((c) => !oppVoid(c.s))
@@ -465,7 +460,24 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       legal.filter((c) => !wouldWin(s.trick, seat, c, trump)),
       trump,
     )
-    if (safe.length === 0) return because(why, 'forced to overtake partner', cheapest(legal, trump))
+    if (safe.length === 0) {
+      // Our team already holds the trick: follow suit to keep the trump, and
+      // the card's points go to our side. In a kapot run with an opponent
+      // still to play, the trick is worth the cheapest card, also a trump.
+      const follow = legal.filter((c) => c.s !== trump)
+      const kapotRun = (sweep || antiKapot) && oppToAct.length > 0
+      if (follow.length && !kapotRun) {
+        if (oppToAct.length === 0) {
+          // Nobody can beat it: feed points, but keep an ace for a trick of its own.
+          const nonAce = follow.filter((c) => c.r !== 'A')
+          return because(why, 'overtake partner, last to play: follow suit with points', highestPoint(nonAce.length ? nonAce : follow))
+        }
+        // An opponent can still beat it: feed only cheap points.
+        const cheap = follow.filter((c) => RANK_POINTS[c.r] <= opt.vetMaxRisk)
+        return because(why, 'overtake partner, opponent to play: follow suit, cheap points', cheap.length ? highestPoint(cheap) : lowest(follow))
+      }
+      return because(why, 'forced to overtake partner', cheapest(legal, trump))
+    }
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
     if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
     const partnerSafe =
