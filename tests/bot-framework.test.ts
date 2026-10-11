@@ -201,9 +201,15 @@ describe('heuristic trace', () => {
     expect(tr.algorithm).toBe('heuristic:normal')
     expect(tr.notes.join('\n')).toMatch(/^bid: (no trump|lone trump|rating [\d.]+ vs threshold \d+)/)
 
-    // An opponent leads the ace of clubs (4 points); a low trump wins it cheaply.
+    // An opponent leads the ace of clubs (4 points) and the partner cannot
+    // beat it; a low trump wins it cheaply as the last card.
     const s = playingState({
-      trick: [{ seat: 1, card: C('C', 'A') }],
+      trick: [
+        { seat: 3, card: C('C', 'A') },
+        { seat: 0, card: C('C', '9') },
+        { seat: 1, card: C('C', '10') },
+      ],
+      leader: 3,
       turn: 2,
       bidder: 1,
       hands: [[], [], [C('H', '9'), C('S', '9')], []],
