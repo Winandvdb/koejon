@@ -11,7 +11,7 @@
     type SessionView,
   } from './lib/room'
   import { saveGame } from './lib/games'
-  import { localLinks, SOLO_CODE } from './lib/link-local'
+  import { addSoloBots, localLinks, SOLO_CODE } from './lib/link-local'
   import { appUrl } from './lib/url'
   import { DEFAULT_ROOM_OPTS, type RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
@@ -253,9 +253,7 @@
       attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
       soloStarting = true
       const h = await ensureHost()
-      h.addBot(1, level)
-      h.addBot(2, level)
-      h.addBot(3, level)
+      addSoloBots(h, level)
       h.startGame()
     } catch (e) {
       soloStarting = false
