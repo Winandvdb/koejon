@@ -412,7 +412,23 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       legal.filter((c) => !wouldWin(s.trick, seat, c, trump)),
       trump,
     )
-    if (safe.length === 0) return because(why, 'forced to overtake partner', cheapest(legal, trump))
+    if (safe.length === 0) {
+      // The trick stays ours: follow suit to keep the trump, and the card's
+      // points go to our side. A kapot run keeps the old rule.
+      const follow = legal.filter((c) => c.s !== trump)
+      const kapotRun = (sweep || antiKapot) && oppToAct.length > 0
+      if (follow.length && !kapotRun) {
+        if (oppToAct.length === 0) {
+          // Nobody can beat it: feed points, but keep an ace for a trick of its own.
+          const nonAce = follow.filter((c) => c.r !== 'A')
+          return because(why, 'overtake partner, last to play: follow suit with points', highestPoint(nonAce.length ? nonAce : follow))
+        }
+        // An opponent can still beat it: feed only cheap points.
+        const cheap = follow.filter((c) => RANK_POINTS[c.r] <= opt.vetMaxRisk)
+        return because(why, 'overtake partner, opponent to play: follow suit, cheap points', cheap.length ? highestPoint(cheap) : lowest(follow))
+      }
+      return because(why, 'forced to overtake partner', cheapest(legal, trump))
+    }
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
     if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
     const pc = s.trick[winnerIdx].card

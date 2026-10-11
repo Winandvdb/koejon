@@ -295,6 +295,31 @@ describe('bot card play', () => {
     }
   })
 
+  it('follows suit, not trump, when every card overtakes the partner', () => {
+    // Partner seat3 leads S9, seat0 is void. SJ and H9 both beat the S9.
+    const third = followState(
+      [
+        { seat: 3, card: C('S', '9') },
+        { seat: 0, card: C('D', '9') },
+      ],
+      [C('S', 'J'), C('H', '9'), C('D', '10'), C('C', '10')],
+    )
+    // Seat2 still plays: the cheap point goes, the trump stays home.
+    for (const level of ['easy', 'normal', 'hard'] as const) {
+      expect(botAction(third, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'J') })
+    }
+    // Last to play the trick is ours: feed the king, keep the ace.
+    const last = followState(
+      [
+        { seat: 2, card: C('S', '9') },
+        { seat: 3, card: C('S', '10') },
+        { seat: 0, card: C('D', '9') },
+      ],
+      [C('S', 'A'), C('S', 'K'), C('H', '9'), C('C', '10')],
+    )
+    expect(botAction(last, 1, smart)).toEqual({ type: 'play', seat: 1, card: C('S', 'K') })
+  })
+
   it('keeps an ace an opponent may trump; leads a low card instead', () => {
     // Four spades in hand: only 2 are out, so an opponent is likely void.
     const hands: Card[][] = [[], [], [], []]
