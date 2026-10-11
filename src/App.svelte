@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { signIn } from './lib/firebase'
   import {
     createRoom,
     joinRoom,
@@ -54,11 +53,12 @@
 
   let authed = false
 
-  // Multiplayer needs a Firebase uid; solo does not. Retried on the
-  // multiplayer buttons when startup was offline.
+  // Multiplayer needs a Firebase uid; solo does not. Signing in loads the
+  // Firebase chunk, so it happens only on a multiplayer action or a resume.
   async function ensureAuth(): Promise<boolean> {
     if (authed) return true
     try {
+      const { signIn } = await import('./lib/firebase')
       uid = await signIn()
       authed = true
       safeStorage.setItem('koejon-uid', uid)
@@ -78,8 +78,12 @@
     return id
   }
 
+  // Until the first mount finishes a multiplayer resume may still be loading:
+  // the connecting view covers that, like the startup sign-in did before.
+  let starting = $state(true)
+
   onMount(async () => {
-    if (!(await ensureAuth())) uid = offlineUid()
+    uid = offlineUid()
     const name = get(playerName)
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
@@ -93,7 +97,7 @@
         const links = localLinks(uid, safeStorage)
         if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
         else forgetRoom()
-      } else if (code && authed) {
+      } else if (code && (await ensureAuth())) {
         // Return to a room in progress only when our seat is still ours.
         const resumed = await resumeRoom(code, uid, name)
         if (resumed) attach(resumed)
@@ -102,6 +106,8 @@
       }
     } catch {
       forgetRoom()
+    } finally {
+      starting = false
     }
   })
 
@@ -188,10 +194,11 @@
       soloRand = undefined
       // Dev settings exist only in dev builds; elsewhere the host uses its defaults.
       // Solo and multiplayer both upload the finished match (solo plays offline, so only then).
+      // The lazy import keeps Firebase out of the start bundle until the upload needs it.
       hostPromise = HostGame.attach(s.code, uid, s.hostLink!, {
         rand,
         dev: DEV ? () => get(devSettings) : undefined,
-        saveGame,
+        saveGame: (id, game) => import('./lib/games').then((m) => m.saveGame(id, game)),
       })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
@@ -421,7 +428,7 @@
 </header>
 
 <main class="main">
-  {#if !uid}
+  {#if !uid || starting}
     <div class="connecting">
       {#if err}{err}{:else}<span class="spinner"></span>{$t.connection}{/if}
     </div>
