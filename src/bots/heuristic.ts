@@ -22,7 +22,7 @@ export const BOT_LEVELS: BotLevel[] = ['easy', 'normal', 'hard']
 export interface BotProfile {
   /** Share of card decisions that use the smart rule; the rest dump low. */
   skill: number
-  /** What the bot remembers: nothing, trumps only, or trumps plus voids. */
+  /** What the bot remembers: nothing, trumps only, or trumps plus voids, suit counts and fallen aces. */
   memory: 'none' | 'trumps' | 'full'
   /** Knijpen, troefke and dealer-choice weighing — beginners lack these. */
   tactics: boolean
@@ -165,19 +165,22 @@ interface HandRead {
   voids: Set<string>
   /** Cards of each suit played this hand ('full' memory only, else 0). */
   suitSeen: Record<Suit, number>
+  /** Suits whose ace fell this hand ('full' memory only, else empty). */
+  acesGone: Set<Suit>
 }
 
 /**
  * Human-like memory rebuilt from the public log: which trumps are gone and who
  * has shown out of a suit. Side-suit ranks are deliberately not counted (only
- * how many of a suit fell), so the bot still misjudges some tricks — like a
- * human does.
+ * how many of a suit fell, and which aces), so the bot still misjudges some
+ * tricks — like a human does.
  */
 function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
   const trump = s.trump!
   const trumpsGone = new Set<Rank>()
   const voids = new Set<string>()
   const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
+  const acesGone = new Set<Suit>()
   if (memory !== 'none') {
     // Cards played this hand: 4 per finished trick plus the open one.
     const want = s.tricksPlayed * 4 + s.trick.length
@@ -200,7 +203,10 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
       }
     }
     if (memory === 'full') {
-      for (const tc of played) suitSeen[tc.card.s]++
+      for (const tc of played) {
+        suitSeen[tc.card.s]++
+        if (tc.card.r === 'A') acesGone.add(tc.card.s)
+      }
       // A sluff of a third suit, a trump under an existing trump, or any
       // non-trump under a trump lead means the led suit was missing.
       for (let t = 0; t + 1 < played.length; t += 4) {
@@ -228,7 +234,7 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
       break
     }
   }
-  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen }
+  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone }
 }
 
 /** Highest trump of `cards` that still tops everything left outside our hand. */
@@ -283,16 +289,16 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   const myTeam = teamOf(seat)
   const trumps = legal.filter((c) => c.s === trump)
   const oppVoid = (suit: Suit) => oppSeatsOf(seat).some((o) => read.voids.has(`${o}:${suit}`))
+  // Cards of a suit the other three may still hold (counts need 'full' memory).
+  const outside = (suit: Suit) => 6 - s.hand.filter((c) => c.s === suit).length - read.suitSeen[suit]
   // An opponent can trump a suit when they may still hold trump and either
   // showed out of it or the suit ran short outside our hand.
-  const trumpable = (suit: Suit) => {
-    const outside = 6 - s.hand.filter((c) => c.s === suit).length - read.suitSeen[suit]
-    return oppSeatsOf(seat).some(
+  const trumpable = (suit: Suit) =>
+    oppSeatsOf(seat).some(
       (o) =>
         mayHoldTrump(read, o, trump) &&
-        (read.voids.has(`${o}:${suit}`) || outside < opt.shortSuit),
+        (read.voids.has(`${o}:${suit}`) || outside(suit) < opt.shortSuit),
     )
-  }
 
   // Honour the partner's troefke request: open with the best trump.
   if (
@@ -332,6 +338,19 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   // Length pull: with enough trumps a low one still draws enemy trumps.
   if (isBidder && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2)
     return because(why, 'length pull: low trump', lowest(trumps))
+  // Low trump against the trump ace: once it falls, our top trump is the boss.
+  // A short defender keeps its trumps, as for the boss pull.
+  const top = trumps.length >= 2 && leadsBoss ? highest(trumps) : null
+  const nextOut = RANKS.filter(
+    (r) => r !== 'A' && !read.trumpsGone.has(r) && !trumps.some((c) => c.r === r),
+  ).pop()
+  if (
+    top &&
+    oppMayTrump &&
+    read.bossOut === 'A' &&
+    (nextOut === undefined || RANK_ORDER[top.r] > RANK_ORDER[nextOut])
+  )
+    return because(why, 'low trump to draw the trump ace', lowest(trumps))
   // A short defender with side aces pulls with a low trump, so the bidders'
   // trumps fall before the aces go.
   const lowTrumps = trumps.filter((c) => c !== boss)
@@ -341,6 +360,12 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   // ace only once no opponent may hold trump.
   const aces = plain.filter((c) => c.r === 'A')
   if (aces.length && !oppMayTrump) return because(why, 'cash an ace: opponents hold no trump', highest(aces))
+  // A suit nobody else holds wins once no opponent may trump. The count
+  // needs 'full' memory: other levels see no suit fall.
+  if (!oppMayTrump) {
+    const unfollowed = plain.filter((c) => read.suitSeen[c.s] > 0 && outside(c.s) === 0)
+    if (unfollowed.length) return because(why, 'suit nobody else holds', highest(unfollowed))
+  }
   // Otherwise a low card from a suit nobody is known void in. An ace goes
   // only when nothing else may: the bidder or a long defender leads a low
   // trump first.
@@ -350,7 +375,20 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   const pool = nonAce.length ? nonAce : plain.length ? plain : legal
   const safe = pool.filter((c) => !oppVoid(c.s) && !read.voids.has(`${partnerOf(seat)}:${c.s}`))
   const ok = safe.length ? safe : pool.filter((c) => !oppVoid(c.s))
-  return because(why, 'low lead', lowest(ok.length ? ok : pool))
+  const leads = ok.length ? ok : pool
+  // Draw out the ace: a card without points under our king, so the king tops
+  // the suit once the ace falls. Only 'full' memory knows the ace already fell.
+  const has = (suit: Suit, r: Rank) => s.hand.some((c) => c.s === suit && c.r === r)
+  const underKing = leads.filter(
+    (c) =>
+      c.s !== trump &&
+      RANK_POINTS[c.r] === 0 &&
+      has(c.s, 'K') &&
+      !has(c.s, 'A') &&
+      !read.acesGone.has(c.s),
+  )
+  if (underKing.length) return because(why, 'draw out the ace: low card under the king', lowest(underKing))
+  return because(why, 'low lead', lowest(leads))
 }
 
 function followCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicOptions, why: string[]): Card {
