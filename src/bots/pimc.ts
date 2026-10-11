@@ -1,5 +1,5 @@
 import { RANK_ORDER, RANK_POINTS } from '../engine'
-import type { Action } from '../engine'
+import type { Action, Suit } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
 import { sampleWorld } from './determinize'
 import { decisionPhase } from './observation'
@@ -9,9 +9,10 @@ import { solve } from './solver'
 /** Worlds per decision when the spec names no `samples`. */
 export const PIMC_SAMPLES = 20
 
-/** Between equal values: the cheaper card (fewer points, then lower). */
-function cost(a: Action): number {
-  return a.type === 'play' ? RANK_POINTS[a.card.r] * 10 + RANK_ORDER[a.card.r] : 0
+/** Between equal values: the cheaper card — a side card before a trump, then fewer points, then lower. */
+function cost(a: Action, trump: Suit | null): number {
+  if (a.type !== 'play') return 0
+  return (a.card.s === trump ? 100 : 0) + RANK_POINTS[a.card.r] * 10 + RANK_ORDER[a.card.r]
 }
 
 /**
@@ -52,19 +53,20 @@ export function createPimc(variant: string | undefined, options: Record<string, 
           max[i] = Math.max(max[i], value)
         })
       }
-      let best = 0
-      for (let i = 1; i < legal.length; i++) {
-        if (sum[i] > sum[best] || (sum[i] === sum[best] && cost(legal[i]) < cost(legal[best]))) best = i
-      }
+      // Best first; the trace keeps this order, so its first candidate is the card played.
+      const order = legal
+        .map((_, i) => i)
+        .sort((i, j) => sum[j] - sum[i] || cost(legal[i], obs.trump) - cost(legal[j], obs.trump) || i - j)
+      const best = order[0]
       if (trace) {
-        legal.forEach((action, i) =>
+        for (const i of order) {
           trace.candidates.push({
-            action,
+            action: legal[i],
             score: sum[i] / samples,
             visits: samples,
             note: `min ${min[i]} max ${max[i]}`,
-          }),
-        )
+          })
+        }
         trace.notes.push(`pimc: ${samples} worlds, best average ${(sum[best] / samples).toFixed(2)}`)
       }
       return legal[best]

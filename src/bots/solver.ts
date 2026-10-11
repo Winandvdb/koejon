@@ -1,4 +1,4 @@
-import { choiceSuits, leftOf, legalActions, RANK_POINTS, RANKS, SUITS, teamOf } from '../engine'
+import { choiceSuits, leftOf, legalActions, RANK_POINTS, RANKS, sameCard, SUITS, teamOf } from '../engine'
 import type { Action, Card, State, Suit } from '../engine'
 import { handValue } from './value'
 
@@ -9,7 +9,7 @@ export interface ActionValue {
 }
 
 // Cards are numbers 0..23: suit * 6 + rank, rank 0 (9) to 5 (ace). A hand is a
-// 24-bit mask, so a search step needs no allocation.
+// 24-bit mask, so a card is played and taken back with one XOR.
 const cardIndex = (c: Card): number => SUITS.indexOf(c.s) * 6 + RANKS.indexOf(c.r)
 const SUIT_OF = Array.from({ length: 24 }, (_, i) => Math.floor(i / 6))
 const RANK_OF = Array.from({ length: 24 }, (_, i) => i % 6)
@@ -373,10 +373,13 @@ export function solve(s: State, seat: number, actions: Action[] = legalActions(s
   switch (s.phase) {
     case 'PLAYING': {
       const search = playSearch(s, teamOf(seat))
-      return actions.map((action) => ({
-        action,
-        value: action.type === 'play' ? search.after(cardIndex(action.card)) : search.value(),
-      }))
+      return actions.map((action) => {
+        if (action.type !== 'play') return { action, value: search.value() }
+        // The search flips the card's bit: a card from outside the hand would make one up.
+        if (action.seat !== s.turn || !s.hands[s.turn].some((c) => sameCard(c, action.card)))
+          throw new Error(`solver: seat ${action.seat} cannot play ${action.card.r}${action.card.s} now`)
+        return { action, value: search.after(cardIndex(action.card)) }
+      })
     }
     case 'BIDDING_R1':
     case 'BIDDING_R2':

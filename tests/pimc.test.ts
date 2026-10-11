@@ -39,7 +39,8 @@ describe('pimc', () => {
         expect(legalActions(s, a.seat)).toContainEqual(a)
         if (a.seat % 2 === 0 && trace.algorithm === 'pimc') {
           expect(a.type).toBe('play')
-          expect(trace.candidates.map((c) => c.action)).toEqual(legalActions(s, a.seat))
+          const key = (x: Action) => JSON.stringify(x)
+          expect(trace.candidates.map((c) => key(c.action)).sort()).toEqual(legalActions(s, a.seat).map(key).sort())
           decided++
         }
       })
@@ -71,16 +72,24 @@ describe('pimc', () => {
     }
   }, 120_000)
 
-  it('plays the action with the best average', () => {
+  it('plays the card with the best average, and lists it first in the trace', () => {
     let n = 0
+    let ties = 0
     play(4, 300, { id: 'pimc', samples: SAMPLES }, (s, a, trace) => {
       if (a.seat % 2 !== 0 || trace.algorithm !== 'pimc' || trace.candidates.length < 2) return
       const best = Math.max(...trace.candidates.map((c) => c.score!))
-      const chosen = trace.candidates.find((c) => JSON.stringify(c.action) === JSON.stringify(a))!
-      expect(chosen.score).toBe(best)
+      expect(trace.candidates[0].action).toEqual(a)
+      expect(trace.candidates[0].score).toBe(best)
+      if (trace.candidates[1].score === best) {
+        // A tie: a trump goes first only when the other tied card is a trump too.
+        const [x, y] = trace.candidates.map((c) => (c.action.type === 'play' ? c.action.card : null))
+        if (x!.s === s.trump) expect(y!.s).toBe(s.trump)
+        ties++
+      }
       n++
     })
     expect(n).toBeGreaterThan(20)
+    expect(ties).toBeGreaterThan(0)
   }, 120_000)
 
   it('supports card play only: no bids, troefke or dealer choice', () => {

@@ -204,6 +204,7 @@ function randomPosition(seed: number, fallen: number): State {
 }
 
 describe('solver against plain minimax', () => {
+  // The plain minimax clones the engine state at every node: over 5 s on CI.
   it.each([0, 1, 2, 3])('matches the engine on random positions, %i cards in the trick', (fallen) => {
     for (let seed = 1; seed <= 25; seed++) {
       const s = randomPosition(seed * 10 + fallen, fallen)
@@ -213,6 +214,14 @@ describe('solver against plain minimax', () => {
         expect(value, `seed ${seed}, ${JSON.stringify(action)}`).toBe(minimax(apply(s, action), s.turn % 2, s.lines))
       }
     }
+  }, 60_000)
+
+  it('rejects a card that is not in the hand of the seat to move', () => {
+    const s = randomPosition(1, 0)
+    const missing = fullDeck().find((c) => !s.hands[s.turn].some((h) => h.s === c.s && h.r === c.r))!
+    expect(() => solve(s, s.turn, [{ type: 'play', seat: s.turn, card: missing }])).toThrow(/cannot play/)
+    const other = (s.turn + 1) % 4
+    expect(() => solve(s, s.turn, [{ type: 'play', seat: other, card: s.hands[other][0] }])).toThrow(/cannot play/)
   })
 })
 
@@ -242,7 +251,7 @@ describe('solver, bidding', () => {
     expect(go.action).toEqual({ type: 'bid', seat: 1, play: true })
     expect(go.value).toBe(played(apply(s, go.action), 1))
     expect(go.value).toBeGreaterThan(0)
-  })
+  }, 60_000)
 
   it('values pass as the choice the next seat makes for the other team', () => {
     const s = strongSeat1()
@@ -250,7 +259,7 @@ describe('solver, bidding', () => {
     expect(pass.action).toEqual({ type: 'bid', seat: 1, play: false })
     const next = solve(apply(s, pass.action), 2)
     expect(pass.value).toBe(-Math.max(...next.map((v) => v.value)))
-  })
+  }, 60_000)
 
   it('values every pass as the best choice of the seat after it, in random deals', () => {
     let checked = 0
@@ -284,5 +293,5 @@ describe('solver, bidding', () => {
     for (const v of solved) {
       if (v.action.type === 'choose' && v.action.suit) expect(v.value).toBe(played(apply(s, v.action), 0))
     }
-  })
+  }, 60_000)
 })
