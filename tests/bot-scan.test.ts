@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { legalActions, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
+import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
+import { createBot } from '../src/bots/bot'
+import { troefkeHand } from '../src/bots/conventions'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
+import { seededRandom } from '../src/lib/seed'
 import { scanMatches } from './helpers'
 
 // Seed scans: rules checked in every match where the situation occurs, in
@@ -123,6 +126,32 @@ describe('bot seed scans', () => {
       expect(a.card.s, `overtake partner on a plain lead, seed scan at ${level}`).not.toBe(trump)
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it.each(['mcts', 'ismcts'])('%s asks a troefke only with a troefke hand, and its partner leads a trump', (id) => {
+    // All four seats play the search bot, at a small budget.
+    const bot = createBot({ id, iterations: 20 })
+    const found = { asked: 0, led: 0 }
+    for (let seed = 1; seed <= 20; seed++) {
+      let s = createMatch(seed)
+      const rand = seededRandom(seed * 7919 + 13)
+      while (s.phase !== 'GAME_OVER') {
+        const seat = pendingSeats(s)[0]
+        const a = bot.decide(s, seat, rand)
+        if (a.type === 'troefke') {
+          found.asked++
+          expect(troefkeHand(s.hands[seat], s.trump!), `troefke without a troefke hand, seed ${seed}`).toBe(true)
+        }
+        const obeys = s.troefkeAsked && s.tricksPlayed === 0 && s.trick.length === 0 && seat === partnerOf(s.bidder!)
+        if (a.type === 'play' && obeys && s.hands[seat].some((c) => c.s === s.trump)) {
+          found.led++
+          expect(a.card.s, `troefke not obeyed, seed ${seed}`).toBe(s.trump)
+        }
+        s = apply(s, a)
+      }
+    }
+    expect(found.asked).toBeGreaterThanOrEqual(MIN_FOUND)
+    expect(found.led).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 
   it.each(LEVELS)('%s: the dealer goes blind on two weak suits only with the hand-set chance', (level) => {

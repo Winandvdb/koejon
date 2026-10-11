@@ -1,5 +1,6 @@
 import type { Action } from '../engine'
 import { createHeuristic } from './heuristic'
+import { createIsmcts, createMcts } from './mcts'
 import type { Observation } from './observation'
 import { createPimc } from './pimc'
 
@@ -53,6 +54,8 @@ export type AlgorithmFactory = (
 const ALGORITHMS = new Map<string, AlgorithmFactory>([
   ['heuristic', createHeuristic],
   ['pimc', createPimc],
+  ['mcts', createMcts],
+  ['ismcts', createIsmcts],
 ])
 
 /** Add an algorithm under `name`. A name can be taken only once. */
