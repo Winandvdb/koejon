@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { TROEFKE_CHANCE } from '../src/bots/bot'
 import { toPublic } from '../src/engine'
+import { DEV_DEFAULTS } from '../src/lib/devsettings'
 import { HostGame } from '../src/lib/host'
 import { localLinks, SOLO_CODE } from '../src/lib/link-local'
 import type { RoomDoc } from '../src/lib/net-types'
@@ -54,6 +55,8 @@ async function bidderAsks(): Promise<boolean> {
     bidLingerMs: 0,
     dealLingerMs: 0,
     quoteRand: () => 1,
+    // No paint pause before the bidder's decision: 1000 hands.
+    dev: () => ({ ...DEV_DEFAULTS, speed: 'instant' }),
   })
   try {
     // The bidder is done once it confirmed, by ack or by troefke.

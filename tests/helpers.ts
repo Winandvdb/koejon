@@ -46,8 +46,9 @@ export function scanMatches(
   }
 }
 
-/** Real decisions of a bot match: more than one legal action, not a lift or the first dealer. */
+/** Real decisions of a `heuristic:<level>` match: more than one legal action, not a lift or the first dealer. */
 export function decisions(seed: number, level: BotLevel): { s: State; seat: number }[] {
+  const bot = createBot(`heuristic:${level}`)
   const out: { s: State; seat: number }[] = []
   let s = createMatch(seed)
   const rand = seededRandom(seed * 7919 + 13)
@@ -55,7 +56,7 @@ export function decisions(seed: number, level: BotLevel): { s: State; seat: numb
     const seat = pendingSeats(s)[0]
     const legal = legalActions(s, seat)
     if (legal.length > 1 && !['draw', 'cut', 'chooseDealer'].includes(legal[0].type)) out.push({ s, seat })
-    s = apply(s, botAction(s, seat, rand, level))
+    s = apply(s, bot.decide(s, seat, rand))
   }
   return out
 }
