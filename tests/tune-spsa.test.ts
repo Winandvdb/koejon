@@ -5,7 +5,7 @@ import type { BotConfig } from '../src/bots/bot'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
 import { legalActions, pendingSeats } from '../src/engine'
 import { seededRandom } from '../src/lib/seed'
-import { CARD_PLAY_KEYS, PARAMS, spsa, toOptions, toPoint, tuneBot } from '../scripts/tune-spsa.mjs'
+import { CARD_PLAY_KEYS, PARAMS, fixedKeys, spsa, toOptions, toPoint, tuneBot } from '../scripts/tune-spsa.mjs'
 import { C, dealtState, decisions, playingState } from './helpers'
 
 const defaults = { ...HEURISTIC_DEFAULTS } as Record<string, number>
@@ -132,5 +132,19 @@ describe('tune-spsa', () => {
       }
     expect(hits.bid).toBeGreaterThan(100)
     expect(hits.choose).toBeGreaterThan(5)
+  })
+
+  it('keeps the values set by hand unless --free names them', async () => {
+    expect(fixedKeys([])).toEqual(['dealerKing', 'dealerWeak'])
+    expect(fixedKeys(['bidThreshold1'])).toEqual(['bidThreshold1', 'dealerKing', 'dealerWeak'])
+    expect(fixedKeys([], ['dealerWeak'])).toEqual(['dealerKing'])
+    expect(() => fixedKeys([], ['nope'])).toThrow(/--free/)
+    expect(() => fixedKeys([], ['bidThreshold1'])).toThrow(/not set by hand/)
+    expect(() => fixedKeys(['dealerWeak'], ['dealerWeak'])).toThrow(/both/)
+    // The score pulls both up, as a tuning run would on noise.
+    const { best } = await run(1, (o) => o.dealerKing + o.dealerWeak + 0.02 * o.dealerAce, 50, fixedKeys([]))
+    expect(best.dealerKing).toBe(defaults.dealerKing)
+    expect(best.dealerWeak).toBe(defaults.dealerWeak)
+    expect(best.dealerAce).toBeGreaterThan(defaults.dealerAce)
   })
 })

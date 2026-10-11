@@ -67,7 +67,10 @@ export interface HeuristicOptions {
   vetMaxRisk: number
 }
 
-/** Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93). */
+/**
+ * Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93),
+ * except the values marked as set by hand (`fixed` in `PARAMS`).
+ */
 export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   bidThreshold1: 14.5,
   bidThreshold2: 11.5,
@@ -81,8 +84,11 @@ export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   dealerSameSuit: 0.98,
   dealerLowSame: 0.31,
   dealerAce: 0.65,
-  dealerKing: 0.3,
-  dealerWeak: 0.25,
+  // Set by hand, not tuned (#175): people almost never go blind on two suits
+  // without an ace. Tuned, these drifted to 0.3 and 0.25 on noise; the low
+  // values play as well against bots.
+  dealerKing: 0.1,
+  dealerWeak: 0.05,
   contestMin: 4,
   cheapWin: 10,
   vetMaxRisk: 1,

@@ -4,7 +4,10 @@
 // see below), each seed played twice with the sides swapped.
 //
 //   npm run tune -- [--generations 50] [--matches 200] [--seed 1] [--jobs 4] [--out tune-heuristic.json]
-//                   [--fixed bidThreshold1,bidThreshold2] [--play heuristic|pimc] [--samples 10]
+//                   [--fixed bidThreshold1,bidThreshold2] [--free dealerWeak] [--play heuristic|pimc] [--samples 10]
+//
+// Constants marked `fixed` in PARAMS are set by hand and keep their default,
+// as if named in --fixed; --free tunes them anyway.
 //
 // --matches is the number of seeds per candidate and generation. The result
 // is the same for the same --seed, --generations and --matches, whatever
@@ -25,7 +28,7 @@ import { writeFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { parseArgs } from 'node:util'
 import { Worker } from 'node:worker_threads'
-import { CARD_PLAY_KEYS, PARAMS, spsa, tuneBot } from './tune-spsa.mjs'
+import { CARD_PLAY_KEYS, PARAMS, fixedKeys, spsa, tuneBot } from './tune-spsa.mjs'
 
 const { values: opt } = parseArgs({
   options: {
@@ -35,6 +38,7 @@ const { values: opt } = parseArgs({
     jobs: { type: 'string', default: '1' },
     out: { type: 'string', default: 'tune-heuristic.json' },
     fixed: { type: 'string', default: '' },
+    free: { type: 'string', default: '' },
     play: { type: 'string', default: 'heuristic' },
     samples: { type: 'string' },
   },
@@ -42,11 +46,15 @@ const { values: opt } = parseArgs({
 if (opt.play !== 'heuristic' && opt.play !== 'pimc') throw new Error(`--play must be heuristic or pimc, got '${opt.play}'`)
 const PIMC = opt.play === 'pimc'
 if (opt.samples != null && !PIMC) throw new Error('--samples needs --play pimc')
-// Constants that keep their default, for example the bid thresholds to keep
-// today's bid rate: tuned freely, they move the most.
-const FIXED = [...new Set([...opt.fixed.split(',').filter(Boolean), ...(PIMC ? CARD_PLAY_KEYS : [])])]
-for (const k of FIXED)
-  if (!PARAMS.some((p) => p.key === k)) throw new Error(`--fixed: unknown constant '${k}'`)
+// Constants that keep their default: the ones set by hand (`fixed` in PARAMS)
+// unless --free names them, plus --fixed, for example the bid thresholds to
+// keep today's bid rate: tuned freely, they move the most.
+const FIXED = [
+  ...new Set([
+    ...fixedKeys(opt.fixed.split(',').filter(Boolean), opt.free.split(',').filter(Boolean)),
+    ...(PIMC ? CARD_PLAY_KEYS : []),
+  ]),
+]
 /** @param {string} name */
 function positiveInt(name) {
   const v = Number(opt[/** @type {keyof typeof opt} */ (name)])
