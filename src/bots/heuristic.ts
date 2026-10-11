@@ -405,6 +405,23 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   const decided = s.points[0] >= 21 || s.points[1] >= 21
   if (decided && !sweep && !antiKapot) return because(why, 'hand decided: dump', dump(s.trick, seat, legal, trump))
 
+  // Troefke: the partner opens trump and the bidder pulls. An opponent still
+  // plays after the bidder, so take the trick with a trump nobody left can
+  // beat, unless the partner's trump already is one.
+  const pc = s.trick[winnerIdx].card
+  const sealed = partnerWinning && (read.bossOut === null || RANK_ORDER[pc.r] >= RANK_ORDER[read.bossOut])
+  const troefkeLead =
+    s.troefkeAsked && s.tricksPlayed === 0 && seat === s.bidder && s.trick[0].card.s === trump
+  if (troefkeLead && oppToAct.length > 0 && !sealed) {
+    const boss = legal.filter(
+      (c) =>
+        c.s === trump &&
+        (read.bossOut === null || RANK_ORDER[c.r] > RANK_ORDER[read.bossOut]) &&
+        wouldWin(s.trick, seat, c, trump),
+    )
+    if (boss.length) return because(why, 'troefke: take the trump lead with the boss trump', lowest(boss))
+  }
+
   if (partnerWinning) {
     // Vet the trick — never overtake, and mind who can still beat partner.
     const safe = noUndertrump(
@@ -415,7 +432,6 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
     if (safe.length === 0) return because(why, 'forced to overtake partner', cheapest(legal, trump))
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
     if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
-    const pc = s.trick[winnerIdx].card
     const partnerSafe =
       oppToAct.length === 0 ||
       (pc.s === trump &&
@@ -433,8 +449,19 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   }
 
   // Opponent winning: fight for rich tricks, duck the rest.
-  const winners = legal.filter((c) => wouldWin(s.trick, seat, c, trump))
+  let winners = legal.filter((c) => wouldWin(s.trick, seat, c, trump))
   if (winners.length === 0) return because(why, 'cannot win: dump', dump(s.trick, seat, legal, trump))
+  // A plain dump can still be a low trump that buys the trick: duck with a plain card.
+  const plain = legal.filter((c) => c.s !== trump)
+  const duck = (reason: string) =>
+    because(why, reason, dump(s.trick, seat, plain.length ? plain : legal, trump))
+  const partnerToAct = !s.trick.some((tc) => tc.seat === partnerOf(seat))
+  // A trick with no points is worth no trump, unless the partner already played
+  // and only our card can still stop their kapot.
+  if (tPts === 0 && plain.length && !(antiKapot && !partnerToAct)) {
+    winners = winners.filter((c) => c.s !== trump)
+    if (winners.length === 0) return duck('no points: no trump')
+  }
   const cheapestWin = winners.reduce((a, b) =>
     winCost(a, trump) <= winCost(b, trump) ? a : b,
   )
@@ -446,17 +473,26 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
     oppSeatsOf(seat).some((o) => mayHoldTrump(read, o, trump)) &&
     !bossTrump(myTrumps, read) &&
     read.trumpsOut >= myTrumps.length
+  // A lone trump with points falls to the first trump lead: buy a trick with it
+  // first, also when the partner still plays.
+  if (doomed && tPts > 0 && s.trick[winnerIdx].card.s !== trump && myTrumps.length === 1 && RANK_POINTS[cheapestWin.r] >= 2)
+    return because(why, `lone high trump: buy ${tPts} points before it is pulled`, cheapestWin)
+  const decisive =
+    s.points[myTeam] + tPts >= 21 || // win the hand outright
+    s.points[1 - myTeam] + tPts >= 21 // deny them the hand
+  // The partner plays 4th: count on them for a trick below the cheap-steal
+  // floor, also to keep or stop a kapot.
+  if (partnerToAct && !decisive && tPts < 3) return duck(`partner plays 4th: duck ${tPts} points`)
   const worthIt =
     (tPts > 0 && doomed) ||
-    s.points[myTeam] + tPts >= 21 || // win the hand outright
-    s.points[1 - myTeam] + tPts >= 21 || // deny them the hand
+    decisive ||
     sweep ||
     antiKapot ||
     tPts >= opt.contestMin ||
     (tPts >= 3 && winCost(cheapestWin, trump) <= opt.cheapWin)
   return worthIt
     ? because(why, `contest: ${tPts} points in the trick`, cheapestWin)
-    : because(why, 'not worth it: dump', dump(s.trick, seat, legal, trump))
+    : duck('not worth it: duck')
 }
 
 function choosePlayCard(
