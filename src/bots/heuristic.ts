@@ -9,6 +9,7 @@ import {
 } from '../engine'
 import type { Action, Card, Rank, Suit, TrickCard } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
+import { troefkeHand, troefkeLead } from './conventions'
 import type { Observation } from './observation'
 
 const partnerOf = (seat: number) => (seat + 2) % 4
@@ -304,15 +305,8 @@ function rateHand(hand: Card[], trump: Suit): number {
   return score
 }
 
-/**
- * A hand that may ask a troefke: our trumps can take over after the trump
- * lead — 3 trumps, or 2 with the king or ace. Search bots read a troefke as
- * this hand.
- */
-export function troefkeHand(cards: Card[], trump: Suit): boolean {
-  const trumps = cards.filter((c) => c.s === trump)
-  return trumps.length >= 3 || (trumps.length >= 2 && trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K']))
-}
+// Moved to the shared conventions; still exported here for older imports.
+export { troefkeHand }
 
 /** Ask for the trump lead only when our trumps can take over afterwards. */
 function wantsTroefke(s: Observation, rand: () => number, opt: HeuristicOptions): boolean {
@@ -331,14 +325,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   const outside = (suit: Suit) => 6 - s.hand.filter((c) => c.s === suit).length - read.suitSeen[suit]
 
   // Honour the partner's troefke request: open with the best trump.
-  if (
-    s.troefkeAsked &&
-    s.tricksPlayed === 0 &&
-    seat === partnerOf(s.bidder!) &&
-    trumps.length > 0
-  ) {
-    return because(why, 'troefke: lead the best trump', highest(trumps))
-  }
+  if (troefkeLead(s)) return because(why, 'troefke: lead the best trump', highest(trumps))
   const isBidder = seat === s.bidder
   const partner = seat === partnerOf(s.bidder!)
   const boss = bossTrump(trumps, read)
