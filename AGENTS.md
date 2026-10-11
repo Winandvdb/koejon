@@ -72,6 +72,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
 | `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | Prod, dev and PR previews share one database, and CI deploys the rules only from `main`. A rules change must accept every write of every build that is still in use. Keep the rules to auth, ownership, write-once and size limits. Check the exact data shape in tests, not in the rules. To make a rule stricter, first release a build that already writes the new shape, then tighten the rule in a later release. |
 | `docs/spikes/` | Spike write-ups (issues with label `question`), one file per issue: `<issue>-<slug>.md`. | The result of a spike is a write-up here, not code. |
+| `docs/bots/` | Bot write-ups: measurements and the choices made from them. `search-bots.md`: `pimc` against `mcts` and `ismcts` (strength, time, bidding, human-like play) and why the `hard` level uses `pimc`. | Read it before you change the algorithm of a level. Add new bench results to it when they change a choice. |
 | `IMPLEMENTATION_PROMPT.md` | The original build spec. Historical. | Where it differs from the code or README, the code and README are correct. |
 
 ## Game words (Dutch → meaning)
