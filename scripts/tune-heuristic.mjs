@@ -3,7 +3,10 @@
 // checkout's heuristic:hard, each seed played twice with the sides swapped.
 //
 //   npm run tune -- [--generations 50] [--matches 200] [--seed 1] [--jobs 4] [--out tune-heuristic.json]
-//                   [--fixed bidThreshold1,bidThreshold2]
+//                   [--fixed bidThreshold1,bidThreshold2] [--free dealerWeak]
+//
+// Constants marked `fixed` in PARAMS are set by hand and keep their default,
+// as if named in --fixed; --free tunes them anyway.
 //
 // --matches is the number of seeds per candidate and generation. The result
 // is the same for the same --seed, --generations and --matches, whatever
@@ -15,7 +18,7 @@ import { writeFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
 import { parseArgs } from 'node:util'
 import { Worker } from 'node:worker_threads'
-import { PARAMS, spsa } from './tune-spsa.mjs'
+import { PARAMS, fixedKeys, spsa } from './tune-spsa.mjs'
 
 const { values: opt } = parseArgs({
   options: {
@@ -25,13 +28,12 @@ const { values: opt } = parseArgs({
     jobs: { type: 'string', default: '1' },
     out: { type: 'string', default: 'tune-heuristic.json' },
     fixed: { type: 'string', default: '' },
+    free: { type: 'string', default: '' },
   },
 })
 // Constants that keep their default, for example the bid thresholds to keep
 // today's bid rate: tuned freely, they move the most.
-const FIXED = opt.fixed.split(',').filter(Boolean)
-for (const k of FIXED)
-  if (!PARAMS.some((p) => p.key === k)) throw new Error(`--fixed: unknown constant '${k}'`)
+const FIXED = fixedKeys(opt.fixed.split(',').filter(Boolean), opt.free.split(',').filter(Boolean))
 /** @param {string} name */
 function positiveInt(name) {
   const v = Number(opt[/** @type {keyof typeof opt} */ (name)])

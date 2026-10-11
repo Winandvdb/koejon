@@ -10,7 +10,8 @@
 /**
  * Search space per constant: bounds and the step a value is rounded to (a
  * hand rating moves in halves, trick points and costs in whole numbers).
- * @typedef {{ key: string, lo: number, hi: number, step: number }} Param
+ * `fixed`: a value set by hand, which the tuner keeps unless `--free` names it.
+ * @typedef {{ key: string, lo: number, hi: number, step: number, fixed?: boolean }} Param
  * @type {Param[]}
  */
 export const PARAMS = [
@@ -27,7 +28,8 @@ export const PARAMS = [
   { key: 'dealerLowSame', lo: 0, hi: 1, step: 0.01 },
   { key: 'dealerAce', lo: 0, hi: 1, step: 0.01 },
   { key: 'dealerKing', lo: 0, hi: 1, step: 0.01 },
-  { key: 'dealerWeak', lo: 0, hi: 1, step: 0.01 },
+  // Close to how people play (#175); bot self-play cannot tell it from noise.
+  { key: 'dealerWeak', lo: 0, hi: 1, step: 0.01, fixed: true },
   { key: 'contestMin', lo: 1, hi: 12, step: 1 },
   { key: 'cheapWin', lo: 2, hi: 14, step: 1 },
   { key: 'vetMaxRisk', lo: 0, hi: 4, step: 1 },
@@ -79,6 +81,20 @@ export function toOptions(u) {
  */
 export function toPoint(options) {
   return PARAMS.map((p) => clamp01((options[p.key] - p.lo) / (p.hi - p.lo)))
+}
+
+/**
+ * The constants a run keeps at their start value: `fixed` plus the ones set
+ * by hand (`Param.fixed`), unless `free` names them.
+ * @param {string[]} fixed
+ * @param {string[]} [free]
+ */
+export function fixedKeys(fixed, free = []) {
+  for (const [flag, keys] of /** @type {const} */ ([['fixed', fixed], ['free', free]]))
+    for (const k of keys)
+      if (!PARAMS.some((p) => p.key === k)) throw new Error(`--${flag}: unknown constant '${k}'`)
+  const byHand = PARAMS.filter((p) => p.fixed && !free.includes(p.key)).map((p) => p.key)
+  return [...new Set([...fixed, ...byHand])]
 }
 
 /**

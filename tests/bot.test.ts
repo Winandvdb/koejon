@@ -701,6 +701,20 @@ describe('bot dealer choice', () => {
     expect(botAction(s, 0, () => 0.5)).toEqual({ type: 'choose', seat: 0, suit: null })
   })
 
+  it('different suits with a top card of Q or lower → go only below the hand-set 5%', () => {
+    for (const [first, second, suit] of [
+      [C('H', 'Q'), C('S', '10'), 'H'],
+      [C('H', '10'), C('S', 'J'), 'S'],
+    ] as const) {
+      const s = chooseState(first, second)
+      for (const level of ['normal', 'hard'] as const) {
+        expect(botAction(s, 0, () => 0.04, level)).toEqual({ type: 'choose', seat: 0, suit })
+        expect(botAction(s, 0, () => 0.05, level)).toEqual({ type: 'choose', seat: 0, suit: null })
+        expect(botAction(s, 0, () => 0.1, level)).toEqual({ type: 'choose', seat: 0, suit: null })
+      }
+    }
+  })
+
   it('always goes when a level-2 win ends the match', () => {
     const s = chooseState(C('H', 'Q'), C('S', '10'), { lines: [2, 13] })
     expect(botAction(s, 0, never)).toEqual({ type: 'choose', seat: 0, suit: 'H' })
