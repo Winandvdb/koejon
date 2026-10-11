@@ -2,8 +2,8 @@
 // candidates until the tuner sends `{ close: true }`. A task is
 // `{ id, options, seeds }`; each seed is played twice with the sides swapped,
 // `heuristic:hard` with `options` against this checkout's `heuristic:hard`.
-// Replies `{ id, wins, n }`. `{ id, defaults: true }` replies with this
-// checkout's HEURISTIC_DEFAULTS.
+// Replies `{ id, wins, n }`. `{ id, defaults: true }` replies with the options
+// that this checkout's heuristic:hard plays.
 import { resolve } from 'node:path'
 import { parentPort } from 'node:worker_threads'
 import { createServer } from 'vite'
@@ -24,7 +24,7 @@ try {
   const { apply, createMatch, pendingSeats } = await server.ssrLoadModule('/src/engine/index.ts')
   const { seededRandom } = await server.ssrLoadModule('/src/lib/seed.ts')
   const { createBot } = await server.ssrLoadModule('/src/bots/bot.ts')
-  const { HEURISTIC_DEFAULTS } = await server.ssrLoadModule('/src/bots/heuristic.ts')
+  const { levelOptions } = await server.ssrLoadModule('/src/bots/heuristic.ts')
   const engine = { apply, createMatch, pendingSeats, seededRandom }
   const base = createBot('heuristic:hard')
 
@@ -37,7 +37,7 @@ try {
         return
       }
       if (task.defaults) {
-        port.postMessage({ id: task.id, defaults: HEURISTIC_DEFAULTS })
+        port.postMessage({ id: task.id, defaults: levelOptions('hard') })
         return
       }
       const cand = createBot({ id: 'heuristic:hard', ...task.options })

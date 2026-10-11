@@ -37,9 +37,9 @@ export const PARAMS = [
 // Standard SPSA gain decay (Spall). The search runs in [0, 1] per constant.
 const ALPHA = 0.602
 const GAMMA = 0.101
-/** Perturbation: 10% of each range at the start. */
+/** Perturbation: 10% of each range at the start, and never less than one step. */
 const C = 0.1
-/** First step ≈ 2% of a range for a typical gradient estimate of 0.25. */
+/** First step ≈ 8% of a range for a typical gradient estimate of 0.25. */
 const STEP0 = 0.08 / 0.25
 
 /**
@@ -104,23 +104,28 @@ export async function spsa({ start, generations, seed, seedsPerGen, evaluate, on
   const rand = mulberry32(seed)
   const A = Math.max(1, Math.round(0.1 * generations))
   const a = STEP0 * (A + 1) ** ALPHA
+  // Fixed constants keep their start value exactly, unrounded.
+  const pinned = Object.fromEntries(fixed.map((k) => [k, start[k]]))
+  const options = (/** @type {number[]} */ v) => ({ ...toOptions(v), ...pinned })
   let u = toPoint(start)
   for (let k = 0; k < generations; k++) {
     const ak = a / (k + 1 + A) ** ALPHA
     const ck = C / (k + 1) ** GAMMA
+    // At least one step: a smaller perturbation rounds + and − to the same
+    // value, and the update of that constant would be noise.
+    const c = PARAMS.map((p) => Math.max(ck, p.step / (p.hi - p.lo)))
     // A fixed constant gets no perturbation, so it never moves. Draw for it
     // anyway: the other constants then see the same draws as without --fixed.
     const delta = u.map((_, i) => (rand() < 0.5 ? -1 : 1) * (fixed.includes(PARAMS[i].key) ? 0 : 1))
     // Match seeds far above the bench's 1..N, so `npm run bench` checks on new seeds.
     const seeds = Array.from({ length: seedsPerGen }, () => 1_000_000 + Math.floor(rand() * 1e9))
     const [plus, minus] = await evaluate(
-      toOptions(u.map((x, i) => x + ck * delta[i])),
-      toOptions(u.map((x, i) => x - ck * delta[i])),
+      options(u.map((x, i) => x + c[i] * delta[i])),
+      options(u.map((x, i) => x - c[i] * delta[i])),
       seeds,
     )
-    const g = (plus - minus) / (2 * ck)
-    u = u.map((x, i) => clamp01(x + ak * g * delta[i]))
-    onStep?.({ gen: k + 1, plus, minus, options: toOptions(u) })
+    u = u.map((x, i) => clamp01(x + (ak * (plus - minus) * delta[i]) / (2 * c[i])))
+    onStep?.({ gen: k + 1, plus, minus, options: options(u) })
   }
-  return toOptions(u)
+  return options(u)
 }

@@ -279,20 +279,19 @@ describe('bot card play', () => {
         { seat: 3, card: C('S', 'A') },
         { seat: 0, card: C('S', '9') },
       ],
-      [C('H', '9'), C('D', 'Q'), C('C', 'J')],
+      [C('H', '9'), C('D', 'J'), C('C', '9')],
       { tricksPlayed: 3, tricksWon: [1, 2] },
     )
     for (const level of ['easy', 'normal', 'hard'] as const) {
-      // Smart path vets cheap points (vetMaxRisk: 2 for easy, 1 tuned); lazy
-      // dump and a decided hand dump low.
-      const cheap = level === 'easy' ? C('D', 'Q') : C('C', 'J')
-      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: cheap })
-      expect(botAction(s, 1, never, level)).toEqual({ type: 'play', seat: 1, card: C('C', 'J') })
+      // Smart path vets cheap points (the jack is under every level's
+      // vetMaxRisk); lazy dump and a decided hand dump the pointless nine.
+      expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'J') })
+      expect(botAction(s, 1, never, level)).toEqual({ type: 'play', seat: 1, card: C('C', '9') })
       const decided = { ...s, points: [5, 21] as [number, number] }
       expect(botAction(decided, 1, smart, level)).toEqual({
         type: 'play',
         seat: 1,
-        card: C('C', 'J'),
+        card: C('C', '9'),
       })
     }
   })

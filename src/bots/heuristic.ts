@@ -121,6 +121,11 @@ const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
   hard: {},
 }
 
+/** The options a level plays without spec options. */
+export function levelOptions(level: BotLevel): HeuristicOptions {
+  return { ...HEURISTIC_DEFAULTS, ...LEVEL_OPTIONS[level] }
+}
+
 export const TROEFKE_CHANCE = HEURISTIC_DEFAULTS.troefkeChance
 
 // ---- Small helpers -----------------------------------------------------------
@@ -657,7 +662,7 @@ export function createHeuristic(variant: string | undefined, options: Record<str
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`heuristic option ${k} must be a number`)
   }
   const profile = BOT_PROFILES[variant as BotLevel]
-  const opt: HeuristicOptions = { ...HEURISTIC_DEFAULTS, ...LEVEL_OPTIONS[variant as BotLevel], ...options }
+  const opt: HeuristicOptions = { ...levelOptions(variant as BotLevel), ...options }
   return {
     id: `heuristic:${variant}`,
     supports: () => true,

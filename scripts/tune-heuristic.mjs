@@ -27,8 +27,8 @@ const { values: opt } = parseArgs({
     fixed: { type: 'string', default: '' },
   },
 })
-// Constants that keep their default, for example the bid thresholds: a
-// bot that bids far less can win more but plays a duller game.
+// Constants that keep their default, for example the bid thresholds to keep
+// today's bid rate: tuned freely, they move the most.
 const FIXED = opt.fixed.split(',').filter(Boolean)
 for (const k of FIXED)
   if (!PARAMS.some((p) => p.key === k)) throw new Error(`--fixed: unknown constant '${k}'`)
@@ -93,10 +93,12 @@ function ask(w, task) {
   })
 }
 
-// The start point: this checkout's defaults, read through a worker's vite server.
+// The start point: the options heuristic:hard plays today, read through a worker's vite server.
 const start = /** @type {Record<string, number>} */ ((await ask(workers[0], { defaults: true })).defaults)
 const missing = Object.keys(start).filter((k) => !PARAMS.some((p) => p.key === k))
 if (missing.length) die(new Error(`no search range in tune-spsa.mjs for: ${missing.join(', ')}`))
+const stale = PARAMS.filter((p) => !Object.hasOwn(start, p.key)).map((p) => p.key)
+if (stale.length) die(new Error(`search range in tune-spsa.mjs for a constant that is gone: ${stale.join(', ')}`))
 
 const pct = (/** @type {number} */ x) => `${(100 * x).toFixed(1)}%`
 const write = (/** @type {Record<string, number>} */ options) =>
