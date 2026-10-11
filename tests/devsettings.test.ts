@@ -105,11 +105,11 @@ describe('dev settings', () => {
     const spy = vi.spyOn(globalThis, 'setTimeout')
     // The host deals, as in the app: no table sends `deal` itself.
     const g = await solo({}, (a) => a.type !== 'deal', { dealLingerMs: undefined })
-    await until(() => (g.pub()?.handNumber ?? 0) >= 2)
-    g.close()
     // The bot thinks PAINT_MS after the deal, then waits the rest of the pause.
+    // Only a bot that bids first waits: wait for that timer, not for a hand count.
     const rest = DEAL_MS + 300 - PAINT_MS
-    expect(spy.mock.calls.some((c) => (c[1] ?? 0) <= rest && (c[1] ?? 0) > rest - 50)).toBe(true)
+    await until(() => spy.mock.calls.some((c) => (c[1] ?? 0) <= rest && (c[1] ?? 0) > rest - 50))
+    g.close()
   }, 30_000)
 
   test('instant bot speed waits 0 ms', async () => {
