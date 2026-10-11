@@ -2,12 +2,16 @@
 // candidates until the tuner sends `{ close: true }`. A task is
 // `{ id, options, seeds }`; each seed is played twice with the sides swapped,
 // `heuristic:hard` with `options` against this checkout's `heuristic:hard`.
+// With `workerData.play` 'pimc' both sides play their cards and the troefke
+// with pimc (`HARD_PIMC`, `workerData.samples` worlds when set), see tuneBot.
 // Replies `{ id, wins, n }`. `{ id, defaults: true }` replies with the options
-// that this checkout's heuristic:hard plays.
+// that this checkout's heuristic:hard plays and the pimc options of the
+// `hard` level (`levelPimc`).
 import { resolve } from 'node:path'
-import { parentPort } from 'node:worker_threads'
+import { parentPort, workerData } from 'node:worker_threads'
 import { createServer } from 'vite'
 import { playMatch } from './play-match.mjs'
+import { tuneBot } from './tune-spsa.mjs'
 
 const port = /** @type {import('node:worker_threads').MessagePort} */ (parentPort)
 
@@ -23,10 +27,12 @@ try {
   })
   const { apply, createMatch, pendingSeats } = await server.ssrLoadModule('/src/engine/index.ts')
   const { seededRandom } = await server.ssrLoadModule('/src/lib/seed.ts')
-  const { createBot } = await server.ssrLoadModule('/src/bots/bot.ts')
+  const { createBot, HARD_PIMC } = await server.ssrLoadModule('/src/bots/bot.ts')
   const { levelOptions } = await server.ssrLoadModule('/src/bots/heuristic.ts')
   const engine = { apply, createMatch, pendingSeats, seededRandom }
-  const base = createBot('heuristic:hard')
+  const pimc =
+    workerData?.play === 'pimc' ? { ...HARD_PIMC, ...(workerData.samples ? { samples: workerData.samples } : {}) } : null
+  const base = createBot(tuneBot({}, pimc))
 
   port.on('message', async (/** @type {TuneTask} */ task) => {
     try {
@@ -37,10 +43,10 @@ try {
         return
       }
       if (task.defaults) {
-        port.postMessage({ id: task.id, defaults: levelOptions('hard') })
+        port.postMessage({ id: task.id, defaults: levelOptions('hard'), levelPimc: HARD_PIMC })
         return
       }
-      const cand = createBot({ id: 'heuristic:hard', ...task.options })
+      const cand = createBot(tuneBot(task.options, pimc))
       let wins = 0
       for (const seed of task.seeds) {
         if (playMatch(engine, seed, [cand.decide, base.decide]) === 0) wins++
