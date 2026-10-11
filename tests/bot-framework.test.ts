@@ -89,7 +89,8 @@ describe('the hard level bot', () => {
     const a = hard.decide(s, seat, seededRandom(1), tr)
     expect(tr.algorithm).toBe(algorithm)
     expect(botAction(s, seat, seededRandom(1), 'hard')).toEqual(a)
-  })
+    // Two troefke searches: seconds on a loaded runner.
+  }, 60_000)
 })
 
 // Small fake algorithms for the registry and the bot rules.
