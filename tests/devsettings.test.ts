@@ -4,7 +4,7 @@ import type { Action } from '../src/engine'
 import { get } from 'svelte/store'
 import { DEAL_MS } from '../src/lib/deckstack'
 import { DEV_DEFAULTS, devSettings, parseDev, setDev, type BotSpeed, type DevSettings } from '../src/lib/devsettings'
-import { HostGame, type HostOptions } from '../src/lib/host'
+import { HostGame, PAINT_MS, type HostOptions } from '../src/lib/host'
 import type { GameDoc } from '../src/lib/kjn'
 import { localLinks, SOLO_CODE } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
@@ -107,7 +107,9 @@ describe('dev settings', () => {
     const g = await solo({}, (a) => a.type !== 'deal', { dealLingerMs: undefined })
     await until(() => (g.pub()?.handNumber ?? 0) >= 2)
     g.close()
-    expect(spy.mock.calls.map((c) => c[1])).toContain(DEAL_MS + 300)
+    // The bot thinks PAINT_MS after the deal, then waits the rest of the pause.
+    const rest = DEAL_MS + 300 - PAINT_MS
+    expect(spy.mock.calls.some((c) => (c[1] ?? 0) <= rest && (c[1] ?? 0) > rest - 50)).toBe(true)
   }, 30_000)
 
   test('instant bot speed waits 0 ms', async () => {

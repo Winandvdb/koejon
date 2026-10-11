@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { botAction } from '../src/bots/bot'
+import { BOT_LEVELS, createBot } from '../src/bots/bot'
+import type { BotLevel } from '../src/bots/bot'
 import { createAlgorithm } from '../src/bots/algorithm'
 import type { BotTrace } from '../src/bots/algorithm'
 import { observe } from '../src/bots/observation'
@@ -10,6 +11,11 @@ import type { Card, State } from '../src/engine'
 
 const smart = () => 0 // rand < any threshold → deterministic smart path
 const never = () => 0.99 // rand > all thresholds
+
+// These are rules of the heuristic: the `hard` level bot plays its cards with pimc.
+const HEURISTIC = Object.fromEntries(BOT_LEVELS.map((l) => [l, createBot(`heuristic:${l}`)]))
+const botAction = (s: State, seat: number, rand: () => number = Math.random, level: BotLevel = 'normal') =>
+  HEURISTIC[level].decide(s, seat, rand)
 
 /** BIDDING_R1 with seat 1 to speak; `hand` is seat 1's cards. */
 function bidState(hand: Card[], over: Partial<State> = {}): State {

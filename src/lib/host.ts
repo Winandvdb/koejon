@@ -77,6 +77,9 @@ const ROOM_KEYS = [engineKey, seqKey, quotesKey, seatsKey, kjnKey, finalKey]
 const PENDING_KEY = 'koejon-games-pending'
 const PENDING_MAX = 20
 
+/** Time for the browser to paint a commit before a bot search blocks the page. */
+export const PAINT_MS = 40
+
 /** A player name from the wire: text, at most 20 characters. */
 const cleanName = (name: unknown): string => String(name ?? '').slice(0, 20)
 
@@ -116,6 +119,9 @@ export class HostGame {
   private quoteBook = new QuoteBook()
   /** Quotes fired this match, newest last — published on every update. */
   private quoteLog: QuoteEvent[] = []
+  /** The last log event (JSON) and when it was first published: a linger counts from then. */
+  private lastEvent = ''
+  private eventAt = 0
   /** The seat the table is waiting on, for the hurry nag; -1 = nobody. */
   private waitSeat = -1
   private waitTimer: ReturnType<typeof setTimeout> | null = null
@@ -591,6 +597,12 @@ export class HostGame {
 
   private async commit(): Promise<void> {
     this.drainBotAcks()
+    // The log keeps its last 60 events, so its length cannot tell a new one.
+    const ev = JSON.stringify(this.state.log[this.state.log.length - 1] ?? null)
+    if (ev !== this.lastEvent) {
+      this.lastEvent = ev
+      this.eventAt = Date.now()
+    }
     const seq = ++this.seq
     if (this.kjn) this.markMixed()
     try {
@@ -657,8 +669,8 @@ export class HostGame {
   }
 
   /** The "seen it" pause exists for humans — bots confirm instantly, inside
-   *  the commit that caused the pause instead of one commit per bot. A
-   *  troefke confirms too: dropping it would make the bot roll again later. */
+   *  the commit that caused the pause instead of one commit per bot. Not the
+   *  bidder while it can ask troefke: that is a real decision (scheduleBots). */
   private drainBotAcks(): void {
     while (this.state.phase === 'PLAYING') {
       // Dev "skip Gezien": a plain ack for each waiting human. Troefke stays
@@ -669,13 +681,18 @@ export class HostGame {
         )
         if (human !== undefined && this.tryApply({ type: 'ack', seat: human })) continue
       }
-      const seat = this.autoSeat()
-      if (seat === undefined || !this.isBot(seat)) return
       // Ask the bot only when it can ack: a move thrown away would still draw
       // from this.rand, and a seeded game would then depend on extra commits.
-      if (!legalActions(this.state, seat).some((x) => x.type === 'ack' || x.type === 'troefke')) return
+      // A bidder that can ask troefke is left to scheduleBots: its search can
+      // take long, and the table must show the bid first.
+      const seat = pendingSeats(this.state).find((i) => {
+        if (!this.isBot(i)) return false
+        const legal = legalActions(this.state, i)
+        return legal.some((x) => x.type === 'ack') && !legal.some((x) => x.type === 'troefke')
+      })
+      if (seat === undefined) return
       const a = this.botMove(seat)
-      if ((a.type !== 'ack' && a.type !== 'troefke') || !this.tryApply(a)) return
+      if (a.type !== 'ack' || !this.tryApply(a)) return
     }
   }
 
@@ -699,22 +716,47 @@ export class HostGame {
       lastEv === 'draw-win'
     // The cards just went out: every table deals them per two first.
     const dealLinger = lastEv === 'deal'
-    const speed = this.dev().speed
-    const base = Math.max(
-      this.botDelay(),
+    const linger = Math.max(
       drawLinger ? this.drawLingerMs : 0,
       bidLinger ? this.bidLingerMs : 0,
       dealLinger ? this.dealLingerMs : 0,
     )
-    const wait = speed === 'instant' ? 0 : base / speed
-    this.botTimer = setTimeout(() => {
-      this.botTimer = null
+    // A bidder's "seen it" (with its troefke) needs no pause of its own, like
+    // the acks drainBotAcks confirms: the pause comes before the first lead.
+    const acking = this.state.phase === 'PLAYING' && this.state.trickAcks.length < 4
+    const speed = this.dev().speed
+    // A linger counts from when its event was published: a commit without a
+    // new event (an ack) does not start it again.
+    const wait =
+      speed === 'instant'
+        ? 0
+        : acking
+          ? PAINT_MS
+          : Math.max(this.botDelay() / speed, linger / speed - (Date.now() - this.eventAt))
+    const due = Date.now() + wait
+    // The bot thinks first and then waits only what is left: a slow search
+    // must not add to the pause. A moment later, so the table shows the last
+    // commit before a long search blocks this page.
+    const think = setTimeout(() => {
       this.enqueue(async () => {
+        // Cleared or replaced while queued (devChanged, dispose): not ours anymore.
+        if (this.disposed || this.botTimer !== think) return
+        // Null at once: if the bot throws, the watchdog can schedule again.
+        this.botTimer = null
         const seat = this.autoSeat()
         if (seat === undefined) return
-        if (this.tryApply(this.botMove(seat))) await this.commit()
+        const move = this.botMove(seat)
+        this.botTimer = setTimeout(() => {
+          this.botTimer = null
+          this.enqueue(async () => {
+            // Another seat to act now, or a move that no longer fits: think again.
+            if (this.autoSeat() === seat && this.tryApply(move)) await this.commit()
+            else this.scheduleBots()
+          })
+        }, Math.max(0, due - Date.now()))
       })
-    }, wait)
+    }, Math.min(wait, PAINT_MS))
+    this.botTimer = think
   }
 
   // ---- table talk ----
