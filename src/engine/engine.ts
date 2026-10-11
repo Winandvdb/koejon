@@ -28,11 +28,9 @@ export const partnerOf = (seat: number) => (seat + 2) % 4
 /** The dealer's right neighbour cuts. */
 export const cutterOf = (dealer: number) => (dealer + 3) % 4
 
-/** The bidding phases, the dealer's choice included. */
 export const isBidding = (phase: Phase) =>
   phase === 'BIDDING_R1' || phase === 'BIDDING_R2' || phase === 'DEALER_CHOICE'
 
-/** The seats in the order they get their cards: the dealer's left neighbour first, the dealer last. */
 export const dealOrder = (dealer: number): number[] => {
   const first = leftOf(dealer)
   const second = leftOf(first)
@@ -57,10 +55,9 @@ export function liftRange(s: State, seat: number): number[] {
 }
 
 /**
- * Create a fresh match in phase LOBBY.
- * `drawers` optionally fixes which seat draws for each team
- * (default: lowest seat of each team). `startLines` is the boomke length
- * per team; the line marks keep it for the whole match.
+ * `drawers` fixes which seat draws for each team (default: the lowest seat of
+ * each team). `startLines` is the boomke length per team; the line marks keep
+ * it for the whole match.
  */
 export function createMatch(seed: number, drawers?: [number, number], startLines = START_LINES): State {
   return {
@@ -141,7 +138,6 @@ export function pendingSeats(s: State): number[] {
   }
 }
 
-/** Cards of `seat`'s hand that may legally be played right now. */
 export function legalCards(s: State, seat: number): Card[] {
   if (s.phase !== 'PLAYING' || s.turn !== seat) return []
   const hand = s.hands[seat]
@@ -165,7 +161,7 @@ export function legalCards(s: State, seat: number): Card[] {
   return [...follow, ...overTrumps]
 }
 
-/** Suits the dealer may pick in DEALER_CHOICE (distinct suits of the shown cards). */
+/** Suits the dealer may pick in DEALER_CHOICE. */
 export function choiceSuits(s: State): Suit[] {
   const t = s.turned!
   const suits: Suit[] = [t.first.s]
@@ -537,7 +533,6 @@ export function apply(state: State, action: Action): State {
   return s
 }
 
-/** True when `seat` may not look at their cards (dealer during bidding). */
 function handMasked(s: State, seat: number): boolean {
   return seat === s.dealer && isBidding(s.phase)
 }

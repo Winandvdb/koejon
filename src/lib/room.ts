@@ -179,7 +179,6 @@ export class RoomSession {
  *  play, the home screen and the replay never pull in the Firebase SDK. */
 const links = () => Promise.all([import('firebase/firestore'), import('./link-p2p'), import('./link-firestore')])
 
-/** One read of a room doc. */
 async function readRoom(code: string) {
   const [{ getDoc }, , { roomRef }] = await links()
   return getDoc(roomRef(code))
@@ -197,7 +196,7 @@ async function guestSession(code: string, uid: string): Promise<RoomSession> {
   return new RoomSession(code, uid, link)
 }
 
-/** Create a room and return a session. The caller becomes host seat 0. */
+/** The caller becomes host seat 0. */
 export async function createRoom(uid: string, name: string): Promise<RoomSession> {
   const [{ getDoc, setDoc }, , { roomRef }] = await links()
   for (let tries = 0; tries < 10; tries++) {
@@ -211,7 +210,6 @@ export async function createRoom(uid: string, name: string): Promise<RoomSession
   throw new Error('could not allocate a room code')
 }
 
-/** Join an existing room by code. */
 export async function joinRoom(code: string, uid: string, name: string): Promise<RoomSession> {
   code = code.trim().toUpperCase()
   const snap = await readRoom(code)

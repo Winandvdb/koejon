@@ -3,7 +3,6 @@ import type { Card, Rank, Suit, TrickCard } from './types'
 export const SUITS: Suit[] = ['S', 'H', 'D', 'C']
 export const RANKS: Rank[] = ['9', '10', 'J', 'Q', 'K', 'A']
 
-/** Trick rank strength, low to high: 9=1 .. A=6. */
 export const RANK_ORDER: Record<Rank, number> = {
   '9': 1,
   '10': 2,

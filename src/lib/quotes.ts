@@ -171,7 +171,6 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
       const h = hash(hand, 5)
       out.push({ key: `a${hand}`, seat: others[h % 3], text: QUOTES.ace[0] })
     }
-    // A defender — not the playing team — opens with trump.
     if (lead.card.s === trump && teamOf(lead.seat) !== teamOf(pub.bidder)) {
       const h = hash(hand, 6)
       out.push({ key: `d${hand}`, seat: teamSeat(teamOf(pub.bidder), h), text: QUOTES.showEm[0] })
@@ -271,7 +270,6 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.gouwe[(h >> 4) % QUOTES.gouwe.length],
       })
     }
-    // The defenders take their first trick: kapot is off the table.
     if (
       pub.bidder !== null &&
       wt !== teamOf(pub.bidder) &&
@@ -284,7 +282,6 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.noKapot[0],
       })
     }
-    // Same seat led trump two tricks running — pulling trump twice.
     const prev = pub.prevTrick
     if (
       trump !== null &&
@@ -300,7 +297,6 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.easy[0],
       })
     }
-    // A fat trick: more than 10 card points.
     if (trickPoints(last) > 10) {
       const h = hash(hand, pub.tricksPlayed, 9)
       out.push({
@@ -318,7 +314,6 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.trickLost[(h >> 4) % QUOTES.trickLost.length],
       })
     }
-    // The points pile reaches 21 mid-hand.
     for (const t of [0, 1]) {
       if (pub.points[t] >= 21) {
         const h = hash(hand, t, 10)

@@ -32,7 +32,6 @@ const KEY = 'koejon-dev'
 
 /** A stored value, with every unknown or out-of-range field at its default. */
 export function parseDev(json: string | null): DevSettings {
-  // Broken value: defaults.
   const v = parseJson<Partial<DevSettings> | null>(json, null) ?? {}
   const len = Number(v.treeLength)
   return {

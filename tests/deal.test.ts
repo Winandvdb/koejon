@@ -63,7 +63,6 @@ describe('deal', () => {
 
 describe('dealer rotation', () => {
   it('moves to the left neighbour after a scored hand', () => {
-    // Craft a scored state directly.
     let s: State = {
       ...dealtState(5, 0),
       phase: 'SCORED',

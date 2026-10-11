@@ -147,7 +147,6 @@ function highest(cards: Card[]): Card {
   return cards.reduce((a, b) => (RANK_ORDER[a.r] >= RANK_ORDER[b.r] ? a : b))
 }
 
-/** Highest point value among cards (A=4 .. J=1, else 0). */
 function highestPoint(cards: Card[]): Card {
   return cards.reduce((a, b) =>
     RANK_POINTS[a.r] > RANK_POINTS[b.r] ||
@@ -221,10 +220,9 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
   const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
   const acesGone = new Set<Suit>()
   if (memory !== 'none') {
-    // Cards played this hand: 4 per finished trick plus the open one.
-    const want = s.tricksPlayed * 4 + s.trick.length
+    const playedThisHand = s.tricksPlayed * 4 + s.trick.length
     const played: TrickCard[] = []
-    for (let i = s.log.length - 1; i >= 0 && played.length < want; i--) {
+    for (let i = s.log.length - 1; i >= 0 && played.length < playedThisHand; i--) {
       const ev = s.log[i]
       if (ev.t === 'card' && ev.card && ev.seat !== undefined) {
         played.unshift({ seat: ev.seat, card: ev.card })
@@ -314,7 +312,6 @@ function rateHand(hand: Card[], trump: Suit): number {
 // Moved to the shared conventions; still exported here for older imports.
 export { troefkeHand }
 
-/** Ask for the trump lead only when our trumps can take over afterwards. */
 function wantsTroefke(s: Observation, rand: () => number, opt: HeuristicOptions): boolean {
   return troefkeHand(s.hand, s.trump!) && rand() < opt.troefkeChance
 }
@@ -330,7 +327,6 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   // Cards of a suit the other three may still hold (counts need 'full' memory).
   const outside = (suit: Suit) => 6 - s.hand.filter((c) => c.s === suit).length - read.suitSeen[suit]
 
-  // Honour the partner's troefke request: open with the best trump.
   if (troefkeLead(s)) return because(why, 'troefke: lead the best trump', highest(trumps))
   const isBidder = seat === s.bidder
   const partner = seat === partnerOf(s.bidder!)
@@ -490,7 +486,6 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       const nonAce = pts.filter((c) => c.r !== 'A')
       return because(why, 'partner safe: feed points', highestPoint(nonAce.length ? nonAce : pts))
     }
-    // Partner's win is not sealed: feed only cheap points.
     const cheap = pts.filter((c) => RANK_POINTS[c.r] <= opt.vetMaxRisk)
     return because(why, 'partner not safe: feed cheap points', cheap.length ? highestPoint(cheap) : lowest(safe))
   }
