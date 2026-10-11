@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { apply, createMatch, legalActions, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
+import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
 import type { BotTrace } from '../src/bots/algorithm'
 import { createBot, HARD_ANCHOR_MARGIN, LEVEL_CONFIGS } from '../src/bots/bot'
+import { troefkeHand } from '../src/bots/conventions'
+import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
 import { seededRandom } from '../src/lib/seed'
 import { scanMatches } from './helpers'
 
@@ -123,6 +125,44 @@ describe('bot seed scans', () => {
       if (run && oppAfter) return
       found++
       expect(a.card.s, `overtake partner on a plain lead, seed scan at ${level}`).not.toBe(trump)
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it.each(['mcts', 'ismcts'])('%s asks a troefke only with a troefke hand, and its partner leads a trump', (id) => {
+    // All four seats play the search bot, at a small budget.
+    const bot = createBot({ id, iterations: 20 })
+    const found = { asked: 0, led: 0 }
+    for (let seed = 1; seed <= 20; seed++) {
+      let s = createMatch(seed)
+      const rand = seededRandom(seed * 7919 + 13)
+      while (s.phase !== 'GAME_OVER') {
+        const seat = pendingSeats(s)[0]
+        const a = bot.decide(s, seat, rand)
+        if (a.type === 'troefke') {
+          found.asked++
+          expect(troefkeHand(s.hands[seat], s.trump!), `troefke without a troefke hand, seed ${seed}`).toBe(true)
+        }
+        const obeys = s.troefkeAsked && s.tricksPlayed === 0 && s.trick.length === 0 && seat === partnerOf(s.bidder!)
+        if (a.type === 'play' && obeys && s.hands[seat].some((c) => c.s === s.trump)) {
+          found.led++
+          expect(a.card.s, `troefke not obeyed, seed ${seed}`).toBe(s.trump)
+        }
+        s = apply(s, a)
+      }
+    }
+    expect(found.asked).toBeGreaterThanOrEqual(MIN_FOUND)
+    expect(found.led).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it.each(LEVELS)('%s: the dealer goes blind on two weak suits only with the hand-set chance', (level) => {
+    let found = 0
+    scanMatches(level, SEEDS, (s, a, notes) => {
+      if (a.type !== 'choose' || s.lines[a.seat % 2] <= 2) return
+      const t = s.turned!
+      if (t.first.s === t.second!.s || Math.max(RANK_ORDER[t.first.r], RANK_ORDER[t.second!.r]) > RANK_ORDER['Q']) return
+      found++
+      expect(notes, `weak dealer choice, seed scan at ${level}`).toContain(`choose: go with chance ${HEURISTIC_DEFAULTS.dealerWeak}`)
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)

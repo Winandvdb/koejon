@@ -294,7 +294,6 @@
   }
 
   const send = (a: Action) => {
-    // The host applies its own actions in place: no intent doc round trip.
     if (host) return host.submit({ kind: 'act', action: a })
     err = ''
     session?.act(a).catch((e) => {

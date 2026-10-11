@@ -1,8 +1,8 @@
 import { partnerOf, RANK_ORDER, RANK_POINTS, rngNext, sameCard } from '../engine'
-import type { Action, State, Suit } from '../engine'
+import type { Action, Suit } from '../engine'
 import type { Algorithm, AlgorithmSpec, BotTrace } from './algorithm'
-import { playedCards, sampleWorld } from './determinize'
-import { troefkeHand } from './heuristic'
+import { troefkeHand, troefkeLead, troefkeWeight } from './conventions'
+import { sampleWorld } from './determinize'
 import { decisionPhase, observe } from './observation'
 import type { Observation } from './observation'
 import { solve } from './solver'
@@ -22,38 +22,8 @@ function cost(a: Action, trump: Suit | null): number {
   return (a.card.s === trump ? 100 : 0) + RANK_POINTS[a.card.r] * 10 + RANK_ORDER[a.card.r]
 }
 
-/**
- * Keep-chance of a world where the bidder asked a troefke without a troefke
- * hand: unlikely, not impossible (a human asks as it likes). Not 0, so a
- * deal where no such hand fits does not spend every try of `sampleWorld`.
- */
-const WEAK_TROEFKE = 0.1
-
-/**
- * After a troefke, every seat but the bidder reads it as a troefke hand
- * (`troefkeHand`: the cards the bidder holds in the world plus the ones it
- * played this hand) and keeps worlds without one only by `WEAK_TROEFKE`.
- * Undefined when there is nothing to learn: no troefke, or the bidder itself.
- */
-export function troefkeWeight(obs: Observation): ((world: State) => number) | undefined {
-  const bidder = obs.bidder
-  if (!obs.troefkeAsked || bidder === null || bidder === obs.seat || !obs.trump) return undefined
-  const trump = obs.trump
-  const played = playedCards(obs).flatMap((tc) => (tc.seat === bidder ? [tc.card] : []))
-  return (world) => (troefkeHand([...world.hands[bidder], ...played], trump) ? 1 : WEAK_TROEFKE)
-}
-
-/** The partner of the bidder leads the first trick after a troefke: it obeys and leads a trump. */
-function troefkeLead(obs: Observation): boolean {
-  return (
-    obs.troefkeAsked &&
-    obs.tricksPlayed === 0 &&
-    obs.trick.length === 0 &&
-    obs.bidder !== null &&
-    obs.seat === partnerOf(obs.bidder) &&
-    obs.hand.some((c) => c.s === obs.trump)
-  )
-}
+// Moved to the shared conventions; still exported here for older imports.
+export { troefkeWeight } from './conventions'
 
 /** The card of another algorithm that pimc keeps unless its best card is more than `margin` lines better on average. */
 interface Anchor {

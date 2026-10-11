@@ -93,4 +93,14 @@ describe('bot-vs-bot simulation', () => {
       expect(state.winner).not.toBeNull()
     }
   }, 120_000)
+
+  it.each(['mcts', 'ismcts'])('terminates complete matches of %s against heuristic:hard with all invariants', (id) => {
+    // Bids and cards: the whole hand is in the tree.
+    const search = createBot({ id, iterations: 20 })
+    const hard = createBot('heuristic:hard')
+    for (const seed of [1, 2]) {
+      const { state } = runMatch(seed, (s, seat, rand) => (seat % 2 === 0 ? search : hard).decide(s, seat, rand))
+      expect(state.winner).not.toBeNull()
+    }
+  }, 120_000)
 })

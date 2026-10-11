@@ -90,7 +90,6 @@ export function arrangeHand(hand: Card[], mode: SortMode | null, order: string[]
   )
 }
 
-/** Move the item at `from` to index `to`. */
 export function moveCard(order: string[], from: number, to: number): string[] {
   const next = [...order]
   next.splice(to, 0, ...next.splice(from, 1))

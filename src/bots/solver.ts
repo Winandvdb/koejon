@@ -9,13 +9,14 @@ export interface ActionValue {
 }
 
 // Cards are numbers 0..23: suit * 6 + rank, rank 0 (9) to 5 (ace). A hand is a
-// 24-bit mask, so a card is played and taken back with one XOR.
-const cardIndex = (c: Card): number => SUITS.indexOf(c.s) * 6 + RANKS.indexOf(c.r)
-const SUIT_OF = Array.from({ length: 24 }, (_, i) => Math.floor(i / 6))
-const RANK_OF = Array.from({ length: 24 }, (_, i) => i % 6)
-const POINTS_OF = RANK_OF.map((r) => RANK_POINTS[RANKS[r]])
-const SUIT_MASK = [0, 1, 2, 3].map((s) => 0x3f << (6 * s))
-const maskOf = (cards: Card[]): number => cards.reduce((m, c) => m | (1 << cardIndex(c)), 0)
+// 24-bit mask, so a card is played and taken back with one XOR. `mcts` plays
+// hands on the same cards.
+export const cardIndex = (c: Card): number => SUITS.indexOf(c.s) * 6 + RANKS.indexOf(c.r)
+export const SUIT_OF = Array.from({ length: 24 }, (_, i) => Math.floor(i / 6))
+export const RANK_OF = Array.from({ length: 24 }, (_, i) => i % 6)
+export const POINTS_OF = RANK_OF.map((r) => RANK_POINTS[RANKS[r]])
+export const SUIT_MASK = [0, 1, 2, 3].map((s) => 0x3f << (6 * s))
+export const maskOf = (cards: Card[]): number => cards.reduce((m, c) => m | (1 << cardIndex(c)), 0)
 
 const INF = 1000
 
@@ -122,7 +123,6 @@ function createSearch(ct: Contract, team: number, pos: Position) {
     return [lo, hi]
   }
 
-  /** Does `c` beat `best` in the running trick? */
   function beats(c: number, best: number): boolean {
     if (SUIT_OF[c] === trump) return SUIT_OF[best] !== trump || RANK_OF[c] > RANK_OF[best]
     return SUIT_OF[best] !== trump && SUIT_OF[c] === SUIT_OF[best] && RANK_OF[c] > RANK_OF[best]

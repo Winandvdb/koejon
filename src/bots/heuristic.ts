@@ -9,6 +9,7 @@ import {
 } from '../engine'
 import type { Action, Card, Rank, Suit, TrickCard } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
+import { troefkeHand, troefkeLead } from './conventions'
 import type { Observation } from './observation'
 
 const partnerOf = (seat: number) => (seat + 2) % 4
@@ -67,7 +68,10 @@ export interface HeuristicOptions {
   vetMaxRisk: number
 }
 
-/** Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93). */
+/**
+ * Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93),
+ * except the values marked as set by hand (`fixed` in `PARAMS`).
+ */
 export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   bidThreshold1: 14.5,
   bidThreshold2: 11.5,
@@ -81,8 +85,11 @@ export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   dealerSameSuit: 0.98,
   dealerLowSame: 0.31,
   dealerAce: 0.65,
-  dealerKing: 0.3,
-  dealerWeak: 0.25,
+  // Set by hand, not tuned (#175): people almost never go blind on two suits
+  // without an ace. Tuned, these drifted to 0.3 and 0.25 on noise; the low
+  // values play as well against bots.
+  dealerKing: 0.1,
+  dealerWeak: 0.05,
   contestMin: 4,
   cheapWin: 10,
   vetMaxRisk: 1,
@@ -140,7 +147,6 @@ function highest(cards: Card[]): Card {
   return cards.reduce((a, b) => (RANK_ORDER[a.r] >= RANK_ORDER[b.r] ? a : b))
 }
 
-/** Highest point value among cards (A=4 .. J=1, else 0). */
 function highestPoint(cards: Card[]): Card {
   return cards.reduce((a, b) =>
     RANK_POINTS[a.r] > RANK_POINTS[b.r] ||
@@ -214,10 +220,9 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
   const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
   const acesGone = new Set<Suit>()
   if (memory !== 'none') {
-    // Cards played this hand: 4 per finished trick plus the open one.
-    const want = s.tricksPlayed * 4 + s.trick.length
+    const playedThisHand = s.tricksPlayed * 4 + s.trick.length
     const played: TrickCard[] = []
-    for (let i = s.log.length - 1; i >= 0 && played.length < want; i--) {
+    for (let i = s.log.length - 1; i >= 0 && played.length < playedThisHand; i--) {
       const ev = s.log[i]
       if (ev.t === 'card' && ev.card && ev.seat !== undefined) {
         played.unshift({ seat: ev.seat, card: ev.card })
@@ -304,17 +309,9 @@ function rateHand(hand: Card[], trump: Suit): number {
   return score
 }
 
-/**
- * A hand that may ask a troefke: our trumps can take over after the trump
- * lead — 3 trumps, or 2 with the king or ace. Search bots read a troefke as
- * this hand.
- */
-export function troefkeHand(cards: Card[], trump: Suit): boolean {
-  const trumps = cards.filter((c) => c.s === trump)
-  return trumps.length >= 3 || (trumps.length >= 2 && trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K']))
-}
+// Moved to the shared conventions; still exported here for older imports.
+export { troefkeHand }
 
-/** Ask for the trump lead only when our trumps can take over afterwards. */
 function wantsTroefke(s: Observation, rand: () => number, opt: HeuristicOptions): boolean {
   return troefkeHand(s.hand, s.trump!) && rand() < opt.troefkeChance
 }
@@ -330,15 +327,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   // Cards of a suit the other three may still hold (counts need 'full' memory).
   const outside = (suit: Suit) => 6 - s.hand.filter((c) => c.s === suit).length - read.suitSeen[suit]
 
-  // Honour the partner's troefke request: open with the best trump.
-  if (
-    s.troefkeAsked &&
-    s.tricksPlayed === 0 &&
-    seat === partnerOf(s.bidder!) &&
-    trumps.length > 0
-  ) {
-    return because(why, 'troefke: lead the best trump', highest(trumps))
-  }
+  if (troefkeLead(s)) return because(why, 'troefke: lead the best trump', highest(trumps))
   const isBidder = seat === s.bidder
   const partner = seat === partnerOf(s.bidder!)
   const boss = bossTrump(trumps, read)
@@ -447,9 +436,9 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   // beat, unless the partner's trump already is one.
   const pc = s.trick[winnerIdx].card
   const sealed = partnerWinning && (read.bossOut === null || RANK_ORDER[pc.r] >= RANK_ORDER[read.bossOut])
-  const troefkeLead =
+  const trumpLedOnTroefke =
     s.troefkeAsked && s.tricksPlayed === 0 && seat === s.bidder && s.trick[0].card.s === trump
-  if (troefkeLead && oppToAct.length > 0 && !sealed) {
+  if (trumpLedOnTroefke && oppToAct.length > 0 && !sealed) {
     const boss = legal.filter(
       (c) =>
         c.s === trump &&
@@ -497,7 +486,6 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       const nonAce = pts.filter((c) => c.r !== 'A')
       return because(why, 'partner safe: feed points', highestPoint(nonAce.length ? nonAce : pts))
     }
-    // Partner's win is not sealed: feed only cheap points.
     const cheap = pts.filter((c) => RANK_POINTS[c.r] <= opt.vetMaxRisk)
     return because(why, 'partner not safe: feed cheap points', cheap.length ? highestPoint(cheap) : lowest(safe))
   }

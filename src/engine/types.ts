@@ -83,7 +83,7 @@ export interface State {
   /** mulberry32 internal counter. */
   rng: number
   seed: number
-  /** Completed hands counter. */
+  /** Hands dealt so far: the number of the current hand. */
   handNumber: number
   dealer: number
   dealerDraw: DealerDraw | null
