@@ -35,6 +35,34 @@ npm run build     # svelte-check + production build
 `npm test` also picks up `tests/e2e.emulator.test.ts` when the Firestore emulator is
 reachable on `127.0.0.1:8180`; it skips cleanly when no emulator is running.
 
+## See why a bot chose an action
+
+```bash
+npm run bot:trace -- --seed 5                          # whole match, all seats, heuristic:normal
+npm run bot:trace -- --seed 5 --seats 0 --hand 2       # only seat 0, only hand 2
+npm run bot:trace -- --seed 5 --bot bots/mine.json --others heuristic:easy --from 40 --to 90
+npm run bot:trace -- --seed 5 --json > trace.jsonl     # one JSON object per decision
+```
+
+It plays the seeded match that `npm run bench` plays for that seed and prints each real
+decision: own hand, trick, trump, turned cards, lines, legal actions, the bot rule and
+algorithm that decided, its trace (candidates best first, notes) and the chosen action,
+with a summary line after each trick and hand. The same seed and options give the same
+output.
+
+- `--bot <spec>`: an algorithm id (`heuristic:hard`), inline JSON or the path of a bot
+  configuration file. Default `heuristic:normal`.
+- `--seats 0,1`: the seats that play `--bot` and print. The other seats play `--others`
+  (default: `--bot`). Without `--seats` all four seats play `--bot`; with `--others` only
+  seats 0 and 2 do.
+- `--from` / `--to`: first and last step to show. A step is one engine action of the
+  match, counted from 1 (lifts, deals and confirmations included).
+- `--hand <n>`: only that hand (the engine's hand counter; a redeal after all passed is a
+  hand of its own).
+- `--json`: decisions only, as JSON lines.
+
+Colour is used only when stdout is a terminal (and `NO_COLOR` is not set).
+
 ## Local development (Firebase Emulator Suite, no credentials needed)
 
 Terminal 1 — start the emulators:
