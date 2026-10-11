@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "e2e": "vitest run tests/e2e.emulator.test.ts",
     "bench": "node scripts/bot-benchmark.mjs",
+    "tune": "node scripts/tune-heuristic.mjs",
     "emulators": "firebase emulators:start"
   },
   "dependencies": {

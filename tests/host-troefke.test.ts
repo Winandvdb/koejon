@@ -70,7 +70,7 @@ describe('host troefke decision', () => {
     vi.spyOn(Math, 'random').mockImplementation(seededRandom(41))
     let asked = 0
     for (let i = 0; i < TRIALS; i++) if (await bidderAsks()) asked++
-    // Two rolls would give TROEFKE_CHANCE squared (0.81), far outside this margin.
+    // Two rolls would give TROEFKE_CHANCE squared (0.53), far outside this margin.
     expect(Math.abs(asked / TRIALS - TROEFKE_CHANCE)).toBeLessThan(0.03)
   }, 60_000)
 })
