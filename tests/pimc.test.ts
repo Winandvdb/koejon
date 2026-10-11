@@ -238,9 +238,11 @@ describe('pimc', () => {
         const own = trace.candidates.find((c) => JSON.stringify(c.action) === JSON.stringify(anchor))
         // After a troefke the partner weighs only trumps: then the anchor card may be out.
         if (!own) {
-          expect(trace.notes.some((n) => n.startsWith('anchor'))).toBe(false)
+          expect(trace.notes).toContain(`anchor last-card: ${anchor.type === 'play' ? anchor.card.r + anchor.card.s : ''} not a candidate, pimc decides`)
           return
         }
+        // The trace marks the anchor's card.
+        expect(trace.candidates.filter((c) => c.note?.endsWith(', anchor'))).toEqual([own])
         const gain = trace.candidates[0].score! - own.score!
         // The trace still lists the actions best first.
         expect(trace.candidates[0].score).toBe(Math.max(...trace.candidates.map((c) => c.score!)))
@@ -290,5 +292,14 @@ describe('pimc', () => {
     expect(() => createAlgorithm({ id: 'pimc', anchor: 'heuristic:hard', margin: -0.1 })).toThrow(/margin must be a number >= 0/)
     expect(() => createAlgorithm({ id: 'pimc', anchor: 'heuristic:hard', margin: '1' })).toThrow(/margin must be a number >= 0/)
     expect(() => createAlgorithm({ id: 'pimc', anchor: 'nope' })).toThrow(/unknown algorithm/)
+    expect(() => createAlgorithm({ id: 'pimc', anchor: null, margin: 0.25 })).toThrow(/anchor must be an algorithm spec/)
+    expect(() => createAlgorithm({ id: 'pimc', anchor: 5 })).toThrow(/anchor must be an algorithm spec/)
+    // An anchor that does not support the decision leaves it to pimc.
+    const lastCard = createAlgorithm({ id: 'pimc', samples: 1, anchor: 'last-card' })
+    const obs = observe(led(troefkeState(1)), 1)
+    const trace: BotTrace = { candidates: [], notes: [] }
+    const unsupported = { ...obs, legal: [...obs.legal, { type: 'ack', seat: 1 } as Action] }
+    expect(() => lastCard.decide(unsupported, seededRandom(1), trace)).not.toThrow()
+    expect(trace.notes).toContain('anchor last-card: no card, pimc decides')
   })
 })

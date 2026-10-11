@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
-import type { BotTrace } from '../src/bots/algorithm'
 import { createBot, HARD_ANCHOR_MARGIN, LEVEL_CONFIGS } from '../src/bots/bot'
 import { troefkeHand } from '../src/bots/conventions'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
@@ -169,32 +168,23 @@ describe('bot seed scans', () => {
 
   it('hard level: a card other than the anchor card beats it by more than the margin', () => {
     // pimc is slow: few seeds, but every card decision counts.
-    const hard = createBot(LEVEL_CONFIGS.hard)
     let found = 0
     let kept = 0
-    for (let seed = 1; seed <= 2; seed++) {
-      let s = createMatch(seed)
-      const rand = seededRandom(seed * 7919 + 13)
-      while (s.phase !== 'GAME_OVER') {
-        const trace: BotTrace = { candidates: [], notes: [] }
-        const a = hard.decide(s, pendingSeats(s)[0], rand, trace)
-        const note = trace.notes.find((n) => n.startsWith('anchor heuristic:hard '))
-        if (a.type === 'play' && note) {
-          const text = note.split(' ')[2].replace(/:$/, '')
-          const anchor = trace.candidates.find((c) => c.action.type === 'play' && `${c.action.card.r}${c.action.card.s}` === text)!
-          const gain = trace.candidates[0].score! - anchor.score!
-          if (anchor.action.type === 'play' && anchor.action.card.r === a.card.r && anchor.action.card.s === a.card.s) {
-            expect(gain, note).toBeLessThanOrEqual(HARD_ANCHOR_MARGIN + 1e-9)
-            kept++
-          } else {
-            found++
-            expect(a, note).toEqual(trace.candidates[0].action)
-            expect(gain, note).toBeGreaterThan(HARD_ANCHOR_MARGIN)
-          }
-        }
-        s = apply(s, a)
+    const hard = createBot(LEVEL_CONFIGS.hard)
+    scanMatches('hard', 2, (s, a, notes, trace) => {
+      const anchor = trace.candidates.find((c) => c.note?.endsWith(', anchor'))
+      if (a.type !== 'play' || !anchor) return
+      const note = notes.find((n) => n.startsWith('anchor heuristic:hard '))
+      const gain = trace.candidates[0].score! - anchor.score!
+      if (JSON.stringify(anchor.action) === JSON.stringify(a)) {
+        expect(gain, note).toBeLessThanOrEqual(HARD_ANCHOR_MARGIN)
+        kept++
+      } else {
+        found++
+        expect(a, note).toEqual(trace.candidates[0].action)
+        expect(gain, note).toBeGreaterThan(HARD_ANCHOR_MARGIN)
       }
-    }
+    }, hard)
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
     expect(kept).toBeGreaterThan(found)
   }, 300_000)

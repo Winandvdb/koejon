@@ -34,7 +34,8 @@ interface Anchor {
 /**
  * Score `candidates` over `samples` worlds with `valueOf` and pick the best
  * average; the trace lists them best first, so its first one is the choice,
- * except when `anchored` (an index into `candidates`) is kept: then a note says so.
+ * except when `anchored` (an index into `candidates`, its candidate note
+ * ending in `, anchor`) is kept: then a note says so.
  */
 function best(
   obs: Observation,
@@ -63,7 +64,7 @@ function best(
         action: candidates[i],
         score: sum[i] / samples,
         visits: samples,
-        note: `min ${min[i]} max ${max[i]}`,
+        note: `min ${min[i]} max ${max[i]}${anchored?.index === i ? ', anchor' : ''}`,
       })
     }
     trace.notes.push(`pimc: ${samples} worlds, best average ${(sum[order[0]] / samples).toFixed(2)}`)
@@ -92,9 +93,10 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
     }
   }
   // The anchor sees only this observation and draws from the same `rand`, so a seed still repeats.
-  const card = anchor?.algorithm.decide(obs, rand)
+  const card = anchor?.algorithm.supports(obs) ? anchor.algorithm.decide(obs, rand) : undefined
   const index = card ? candidates.findIndex((a) => samePlay(a, card)) : -1
   const anchored = anchor && index >= 0 ? { id: anchor.algorithm.id, index, margin: anchor.margin } : undefined
+  if (anchor && !anchored) trace?.notes.push(`anchor ${anchor.algorithm.id}: ${card ? `${cardText(card)} not a candidate` : 'no card'}, pimc decides`)
   const weight = troefkeWeight(obs)
   return best(
     obs,
@@ -186,7 +188,10 @@ export function createPimc(
 ): Algorithm {
   if (variant !== undefined) throw new Error(`unknown pimc variant: ${variant}`)
   for (const [k, v] of Object.entries(options)) {
-    if (k === 'anchor') continue
+    if (k === 'anchor') {
+      if (typeof v !== 'string' && (typeof v !== 'object' || v === null)) throw new Error('pimc option anchor must be an algorithm spec')
+      continue
+    }
     if (k === 'margin') {
       if (typeof v !== 'number' || !(v >= 0)) throw new Error('pimc option margin must be a number >= 0')
       if (options.anchor === undefined) throw new Error('pimc option margin needs an anchor')
