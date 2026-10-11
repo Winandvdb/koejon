@@ -153,14 +153,17 @@
         <button class="btn big" disabled={!name.trim()} onclick={() => onsolo(name.trim(), $botLevel)}>
           <span>🤖 {$t.playSolo}</span>
         </button>
-        <div class="lvl-seg" role="group" aria-label={$t.botLevel}>
-          {#each BOT_LEVELS as l (l)}
-            <button
-              class="lvl-opt"
-              class:on={$botLevel === l}
-              onclick={() => ($botLevel = l)}>{lvlName[l]}</button
-            >
-          {/each}
+        <div class="field">
+          <span>{$t.opponentLevel}</span>
+          <div class="lvl-seg" role="group" aria-label={$t.opponentLevel}>
+            {#each BOT_LEVELS as l (l)}
+              <button
+                class="lvl-opt"
+                class:on={$botLevel === l}
+                onclick={() => ($botLevel = l)}>{lvlName[l]}</button
+              >
+            {/each}
+          </div>
         </div>
       </div>
       <div class="divider"><span>{$t.or}</span></div>

@@ -41,7 +41,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | `src/lib/transport.ts` | `HostLink` / `GuestLink` interfaces and `HEARTBEAT_MS`. | Transport only: no game records, no URLs. |
 | `src/lib/games.ts` | `saveGame`: writes one finished match as `games/{id}` (write-once, the host keeps `id` across retries). `App.svelte` gives it to `HostGame`. | |
 | `src/lib/url.ts` | `appUrl(room?)`: this page's path with `?room=`. Used by `App.svelte`, `Home.svelte` and `Lobby.svelte`. | |
-| `src/lib/link-local.ts` | Solo mode: host and guest in one tab, state in `localStorage`. No network. | |
+| `src/lib/link-local.ts` | Solo mode: host and guest in one tab, state in `localStorage`. No network. `addSoloBots` fills the seats: the partner bot plays `hard`, the opponents the chosen level. | |
 | `src/lib/link-p2p.ts` | Multiplayer over WebRTC (on when the browser has WebRTC). Firestore only for lobby and signaling. | |
 | `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
 | `src/lib/net-types.ts` | Wire types: `RoomDoc`, `HandDoc`, `SeatInfo`, `Intent`, `IntentDoc`, `RtcDoc`, `PeerMsg`, plus `DEFAULT_ROOM_OPTS` and `BOT_UID_PREFIX`. | Types shared by host, guests and all links. A change must stay readable by builds still in use (shared database). |
