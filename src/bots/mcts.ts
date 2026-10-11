@@ -1,9 +1,10 @@
-import { RANK_POINTS, RANKS, SUITS, teamOf } from '../engine'
-import type { Action, Card, State } from '../engine'
+import { RANKS, SUITS, teamOf } from '../engine'
+import type { Action, Card, Phase, State, Turned } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
-import { troefkeLead, troefkeWeight } from './conventions'
+import { troefkeHand, troefkeLead, troefkeWeight } from './conventions'
 import { sampleWorld } from './determinize'
 import type { Observation } from './observation'
+import { cardIndex, maskOf, POINTS_OF, RANK_OF, SUIT_MASK, SUIT_OF } from './solver'
 import { handValue } from './value'
 
 /** Iterations per decision when the spec names no `iterations`. */
@@ -24,15 +25,17 @@ const MAST_TAU = 0.1
 // The tree and the playouts roll a hand forward thousands of times per
 // decision: the engine's `apply` (a structured clone and a legality check per
 // action) is far too slow for that. `Hand` plays the same rules on bitmasks:
-// cards 0..23 = suit * 6 + rank as in the solver, a hand is a 24-bit mask.
-// `tests/mcts.test.ts` plays random hands on both and compares them.
+// the solver's cards, a hand is a 24-bit mask. `tests/mcts.test.ts` plays
+// random hands on both and compares them.
 
-const cardIndex = (c: Card): number => SUITS.indexOf(c.s) * 6 + RANKS.indexOf(c.r)
-const maskOf = (cards: Card[]): number => cards.reduce((m, c) => m | (1 << cardIndex(c)), 0)
-const SUIT_OF = Array.from({ length: 24 }, (_, i) => Math.floor(i / 6))
-const RANK_OF = Array.from({ length: 24 }, (_, i) => i % 6)
-const POINTS_OF = RANK_OF.map((r) => RANK_POINTS[RANKS[r]])
-const SUIT_MASK = [0, 1, 2, 3].map((s) => 0x3f << (6 * s))
+const cardsOf = (mask: number): Card[] => {
+  const out: Card[] = []
+  for (let m = mask; m; m &= m - 1) {
+    const c = 31 - Math.clz32(m & -m)
+    out.push({ s: SUITS[SUIT_OF[c]], r: RANKS[RANK_OF[c]] })
+  }
+  return out
+}
 
 // Moves: a card is its index; the other moves follow the cards.
 export const PASS = 24
@@ -43,7 +46,14 @@ export const CHOOSE_NONE = 26
 export const CHOOSE = 27
 export const ACK = 31
 export const TROEFKE = 32
-const MOVES = 33
+/**
+ * The bids of round 2 carry the suit of the second card: in a tree over
+ * worlds where it was still face down at the root, a pass or a bid on
+ * hearts and one on diamonds are different moves, as at the table.
+ */
+export const PASS_R2 = 33
+export const GO_R2 = 37
+const MOVES = 41
 
 const R1 = 0
 const R2 = 1
@@ -95,6 +105,7 @@ export function handOf(world: State): Hand {
   // dealer's cards yet: a bot only acts while it is pending.
   if (
     phase === PLAY &&
+    troefkeHand(world.hands[bidder], world.trump!) &&
     !world.troefkeAsked &&
     world.tricksPlayed === 0 &&
     world.trick.length === 0 &&
@@ -181,8 +192,10 @@ export function movesOf(h: Hand, out: number[]): number[] {
   out.length = 0
   switch (h.phase) {
     case R1:
-    case R2:
       out.push(GO, PASS)
+      break
+    case R2:
+      out.push(GO_R2 + SUIT_OF[h.second], PASS_R2 + SUIT_OF[h.second])
       break
     case CHOICE:
       out.push(CHOOSE + SUIT_OF[h.first])
@@ -205,8 +218,10 @@ function startPlaying(h: Hand, trump: number, level: number, bidder: number): vo
   h.level = level
   h.bidder = bidder
   h.turn = (h.dealer + 1) & 3
-  // Only a bidder whose partner leads may ask a troefke.
-  h.phase = h.turn === ((bidder + 2) & 3) ? ASK : PLAY
+  // Only a bidder whose partner leads may ask a troefke, and it asks only
+  // with a troefke hand: the other seats read it as one (`troefkeWeight`).
+  const ask = h.turn === ((bidder + 2) & 3) && troefkeHand(cardsOf(h.hands[bidder]), SUITS[trump])
+  h.phase = ask ? ASK : PLAY
 }
 
 /** The engine's `scoreHand`, as a value for team 0. */
@@ -228,7 +243,7 @@ export function step(h: Hand, move: number): void {
   switch (h.phase) {
     case R1:
     case R2:
-      if (move === GO) {
+      if (move === GO || move >= GO_R2) {
         const r1 = h.phase === R1
         startPlaying(h, SUIT_OF[r1 ? h.first : h.second], r1 ? 1 : 2, moverOf(h))
       } else if (++h.bidIndex === 3) {
@@ -379,12 +394,13 @@ function iterate(root: Node, h: Hand, s: Search): void {
   }
 }
 
-/** The move code of an engine action. */
-export function moveOf(a: Action): number {
+/** The move code of an engine action in `s` (a state or an observation). */
+export function moveOf(a: Action, s: { phase: Phase; turned: { second: Turned['second'] | null } | null }): number {
   switch (a.type) {
     case 'play':
       return cardIndex(a.card)
     case 'bid':
+      if (s.phase === 'BIDDING_R2') return (a.play ? GO_R2 : PASS_R2) + SUITS.indexOf(s.turned!.second!.s)
       return a.play ? GO : PASS
     case 'choose':
       return a.suit ? CHOOSE + SUITS.indexOf(a.suit) : CHOOSE_NONE
@@ -425,6 +441,11 @@ function choose(stats: RootStats[], note: string, trace?: BotTrace): Action {
   if (trace) {
     for (const i of order) {
       const r = stats[i]
+      // An action the budget never reached has no value yet.
+      if (!r.visits) {
+        trace.candidates.push({ action: r.action, visits: 0, note: 'untried' })
+        continue
+      }
       trace.candidates.push({
         action: r.action,
         score: mean(r) * 2 * MAX_VALUE - MAX_VALUE,
@@ -446,6 +467,13 @@ function decideWith(
   run: (s: Search) => { roots: Node[]; note: string },
 ): Action {
   let candidates = obs.legal
+  const ack = candidates.find((a) => a.type === 'ack')
+  if (ack && !troefkeHand(obs.hand, obs.trump!)) {
+    // As in the tree: no troefke without a troefke hand, so the others read it right.
+    trace?.candidates.push({ action: ack, note: 'no troefke hand' })
+    trace?.notes.push('no troefke: no troefke hand')
+    return ack
+  }
   if (troefkeLead(obs)) {
     candidates = candidates.filter((a) => a.type === 'play' && a.card.s === obs.trump)
     trace?.notes.push('troefke asked: lead a trump')
@@ -463,7 +491,7 @@ function decideWith(
   const stats = candidates.map((action) => {
     const r: RootStats = { action, visits: 0, reward: 0, avail: 0 }
     for (const root of roots) {
-      const child = root.children.get(moveOf(action))
+      const child = root.children.get(moveOf(action, obs))
       if (!child) continue
       r.visits += child.visits
       r.reward += child.reward

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { apply, createMatch, isBidding, legalActions, pendingSeats } from '../src/engine'
-import type { Action, State } from '../src/engine'
+import type { Action, Card, State } from '../src/engine'
 import { createAlgorithm } from '../src/bots/algorithm'
 import type { AlgorithmSpec, BotTrace } from '../src/bots/algorithm'
 import { createBot } from '../src/bots/bot'
-import { troefkeLead } from '../src/bots/conventions'
-import { handOf, isDone, moveOf, moverOf, movesOf, step } from '../src/bots/mcts'
+import { troefkeHand, troefkeLead } from '../src/bots/conventions'
+import { handOf, isDone, moveOf, moverOf, movesOf, PASS, step } from '../src/bots/mcts'
 import { observe } from '../src/bots/observation'
 import { handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
-import { C, dealtState, playingState } from './helpers'
+import { biddingState, C, dealtState, playingState } from './helpers'
 
 const ALGORITHMS = ['mcts', 'ismcts'] as const
 
@@ -62,20 +62,22 @@ describe('the hand model of mcts', () => {
       while (isBidding(s.phase) || s.phase === 'PLAYING') {
         const seat = pendingSeats(s)[0]
         let legal = legalActions(s, seat)
-        // Another seat's confirmation is no decision: the model skips it.
-        if (legal.length === 1 && legal[0].type === 'ack') {
-          s = apply(s, legal[0])
+        // Another seat's confirmation is no decision, nor a troefke without a
+        // troefke hand (the convention): the model skips them.
+        const weak = legal.some((a) => a.type === 'troefke') && !troefkeHand(s.hands[seat], s.trump!)
+        if ((legal.length === 1 && legal[0].type === 'ack') || weak) {
+          s = apply(s, legal.find((a) => a.type === 'ack')!)
           continue
         }
         // The partner obeys the troefke: the model leaves it only the trumps.
         if (troefkeLead(observe(s, seat))) legal = legal.filter((a) => a.type === 'play' && a.card.s === s.trump)
         expect(moverOf(h)).toBe(seat)
-        expect(sorted(movesOf(h, []))).toEqual(sorted(legal.map(moveOf)))
+        expect(sorted(movesOf(h, []))).toEqual(sorted(legal.map((a) => moveOf(a, s))))
         // Go now and then, so that all seats pass at times too.
         const a = legal[0].type === 'bid' ? legal[rand() < 0.15 ? 0 : 1] : legal[Math.floor(rand() * legal.length)]
         if (a.type === 'troefke') counts.troefke++
         if (a.type === 'choose') counts.choice++
-        step(h, moveOf(a))
+        step(h, moveOf(a, s))
         s = apply(s, a)
       }
       expect(isDone(h)).toBe(true)
@@ -94,13 +96,28 @@ describe('the hand model of mcts', () => {
   })
 
   it('starts from a played trick and a troefke still to decide', () => {
-    const s = troefkeState(1)
-    // The bidder has not confirmed yet: it decides the troefke.
-    expect(movesOf(handOf(s), [])).toEqual([moveOf({ type: 'ack', seat: 3 }), moveOf({ type: 'troefke', seat: 3 })])
-    // Once it confirmed, the partner leads.
-    const lead = handOf(apply(s, { type: 'ack', seat: 3 }))
-    expect(moverOf(lead)).toBe(1)
-    expect(sorted(movesOf(lead, []))).toEqual(sorted(s.hands[1].map((card) => moveOf({ type: 'play', seat: 1, card }))))
+    const states = Array.from({ length: 30 }, (_, i) => troefkeState(i + 1))
+    const strong = states.find((s) => troefkeHand(s.hands[3], s.trump!))!
+    // The bidder has not confirmed yet: with a troefke hand it decides the troefke.
+    expect(movesOf(handOf(strong), [])).toEqual([moveOf({ type: 'ack', seat: 3 }, strong), moveOf({ type: 'troefke', seat: 3 }, strong)])
+    // Once it confirmed, or without a troefke hand, the partner leads.
+    const weak = states.find((s) => !troefkeHand(s.hands[3], s.trump!))!
+    for (const s of [apply(strong, { type: 'ack', seat: 3 }), weak]) {
+      const lead = handOf(s)
+      expect(moverOf(lead)).toBe(1)
+      expect(sorted(movesOf(lead, []))).toEqual(sorted(s.hands[1].map((card) => moveOf({ type: 'play', seat: 1, card }, s))))
+    }
+  })
+
+  it('tells the bids of round 2 apart by the suit of the second card', () => {
+    // From round 1, where the second card is still face down, worlds differ in it.
+    const r2 = (second: Card) => {
+      const h = handOf(biddingState(C('S', 'Q'), second))
+      for (let i = 0; i < 3; i++) step(h, PASS)
+      return movesOf(h, [])
+    }
+    expect(r2(C('H', 'K'))).not.toEqual(r2(C('D', 'K')))
+    expect(r2(C('H', 'K'))).toEqual(r2(C('H', '10')))
   })
 })
 
@@ -116,6 +133,11 @@ describe.each(ALGORITHMS)('%s', (id) => {
       types.add(a.type)
       for (const c of trace.candidates) {
         expect(legalActions(s, a.seat)).toContainEqual(c.action)
+        if (c.note === 'untried') {
+          expect(c.visits).toBe(0)
+          expect(c.score).toBeUndefined()
+          continue
+        }
         expect(c.score).toBeGreaterThanOrEqual(-4)
         expect(c.score).toBeLessThanOrEqual(4)
         expect(c.note).toMatch(/^avail \d+$/)
@@ -186,14 +208,26 @@ describe.each(ALGORITHMS)('%s', (id) => {
     expect(checked).toBeGreaterThan(5)
   })
 
-  it('decides the troefke as a move of the tree', () => {
+  it('decides the troefke as a move of the tree, only with a troefke hand', () => {
     const algo = createAlgorithm({ id, iterations: 30 })
-    for (let seed = 1; seed <= 10; seed++) {
+    const seen = { strong: 0, weak: 0 }
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = troefkeState(seed)
       const trace: BotTrace = { candidates: [], notes: [] }
-      const a = algo.decide(observe(troefkeState(seed), 3), seededRandom(seed), trace)
-      expect(['ack', 'troefke']).toContain(a.type)
-      expect(trace.candidates.map((c) => c.action.type).sort()).toEqual(['ack', 'troefke'])
+      const a = algo.decide(observe(s, 3), seededRandom(seed), trace)
+      if (troefkeHand(s.hands[3], s.trump!)) {
+        expect(['ack', 'troefke']).toContain(a.type)
+        expect(trace.candidates.map((c) => c.action.type).sort()).toEqual(['ack', 'troefke'])
+        seen.strong++
+      } else {
+        // Its troefke must mean what the other seats read.
+        expect(a.type).toBe('ack')
+        expect(trace.candidates).toHaveLength(1)
+        seen.weak++
+      }
     }
+    expect(seen.strong).toBeGreaterThan(0)
+    expect(seen.weak).toBeGreaterThan(0)
   })
 
   it('plays out with MAST as an option', () => {

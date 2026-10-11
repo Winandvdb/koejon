@@ -434,9 +434,9 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
   // beat, unless the partner's trump already is one.
   const pc = s.trick[winnerIdx].card
   const sealed = partnerWinning && (read.bossOut === null || RANK_ORDER[pc.r] >= RANK_ORDER[read.bossOut])
-  const troefkeLead =
+  const trumpLedOnTroefke =
     s.troefkeAsked && s.tricksPlayed === 0 && seat === s.bidder && s.trick[0].card.s === trump
-  if (troefkeLead && oppToAct.length > 0 && !sealed) {
+  if (trumpLedOnTroefke && oppToAct.length > 0 && !sealed) {
     const boss = legal.filter(
       (c) =>
         c.s === trump &&
