@@ -21,18 +21,20 @@ export type BotLevel = 'easy' | 'normal' | 'hard'
 export const BOT_LEVELS: BotLevel[] = ['easy', 'normal', 'hard']
 
 export interface BotProfile {
-  /** Share of card decisions that use the smart rule; the rest dump low. */
+  /** Share of card decisions that use the smart rule; the rest are lazy. */
   skill: number
+  /** A lazy card: the cheapest dump, or any legal card, a beginner's slip that can give an ace away. */
+  lazy: 'dump' | 'random'
   /** What the bot remembers: nothing, trumps only, or trumps plus voids, suit counts and fallen aces. */
   memory: 'none' | 'trumps' | 'full'
-  /** Knijpen, troefke and dealer-choice weighing — beginners lack these. */
+  /** Knijpen, troefke, dealer-choice weighing and lead tactics — beginners lack these. */
   tactics: boolean
 }
 
 export const BOT_PROFILES: Record<BotLevel, BotProfile> = {
-  easy: { skill: 0.55, memory: 'none', tactics: false },
-  normal: { skill: 0.8, memory: 'trumps', tactics: true },
-  hard: { skill: 0.95, memory: 'full', tactics: true },
+  easy: { skill: 0.55, lazy: 'random', memory: 'none', tactics: false },
+  normal: { skill: 0.8, lazy: 'dump', memory: 'trumps', tactics: true },
+  hard: { skill: 0.95, lazy: 'dump', memory: 'full', tactics: true },
 }
 
 /** Tuning constants; the options of `heuristic:<level>` override them. */
@@ -318,7 +320,7 @@ function wantsTroefke(s: Observation, rand: () => number, opt: HeuristicOptions)
 
 // ---- Card play -----------------------------------------------------------------
 
-function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicOptions, why: string[]): Card {
+function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolean, why: string[]): Card {
   const seat = s.seat
   const trump = s.trump!
   const myTeam = teamOf(seat)
@@ -352,6 +354,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
     if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
     if (aces.length && !oppMayTrump) return because(why, 'sweep: safe ace, opponents hold no trump', aces[0])
+    if (aces.length && !tactics) return because(why, 'sweep: beginner cashes an ace', aces[0])
     if (beforeAces) return because(why, `sweep: only aces left: low trump, ${acesWait}`, beforeAces)
     // From here on any ace waits.
     const keep = partner || shortDefender ? trumps : []
@@ -365,12 +368,14 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   // pull only when they hold the majority of what is left.
   if (boss && leadsBoss && read.trumpsOut > 0 && oppMayTrump)
     return because(why, 'pull trumps with the boss', boss)
+  // A beginner cashes its aces at once, also where an opponent may trump them.
+  if (aces.length && !tactics) return because(why, 'beginner: cash an ace', aces[0])
   // Length pull: with enough trumps a low one still draws enemy trumps.
-  if (isBidder && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2)
+  if (tactics && isBidder && oppMayTrump && trumps.length >= 3 && read.trumpsOut >= 2)
     return because(why, 'length pull: low trump', lowest(trumps))
   // Low trump against the trump ace: once it falls, our top trump is the boss.
   // A short defender keeps its trumps, as for the boss pull.
-  const top = trumps.length >= 2 && leadsBoss ? highest(trumps) : null
+  const top = tactics && trumps.length >= 2 && leadsBoss ? highest(trumps) : null
   const nextOut = RANKS.filter(
     (r) => r !== 'A' && !read.trumpsGone.has(r) && !trumps.some((c) => c.r === r),
   ).pop()
@@ -383,7 +388,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
     return because(why, 'low trump to draw the trump ace', lowest(trumps))
   // A short defender with side aces pulls with a low trump, so the bidders'
   // trumps fall before the aces go.
-  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length)
+  if (tactics && shortDefender && oppMayTrump && lowTrumps.length && aces.length)
     return because(why, 'defender pull: low trump, keeps the boss', lowest(lowTrumps))
   // Trump is always allowed, also on a suit an opponent can follow: cash an
   // ace only once no opponent may hold trump.
@@ -407,6 +412,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicO
   const has = (suit: Suit, r: Rank) => s.hand.some((c) => c.s === suit && c.r === r)
   const underKing = leads.filter(
     (c) =>
+      tactics &&
       c.s !== trump &&
       RANK_POINTS[c.r] === 0 &&
       has(c.s, 'K') &&
@@ -548,12 +554,14 @@ function choosePlayCard(
   if (legal.length === 1) return because(why, 'only legal card', legal[0])
   const read = readHand(s, profile.memory)
   const smart =
-    s.trick.length === 0 ? leadCard(s, legal, read, opt, why) : followCard(s, legal, read, opt, why)
+    s.trick.length === 0 ? leadCard(s, legal, read, profile.tactics, why) : followCard(s, legal, read, opt, why)
   // Imperfect on purpose: sometimes fall back to a lazy dump.
   if (rand() < profile.skill) return smart
   // The smart rule did not decide, so its reason stays out of the trace.
   why.length = 0
-  return because(why, 'lazy dump', dump(s.trick, s.seat, legal, s.trump!))
+  why.push('lazy dump')
+  if (profile.lazy === 'random') return because(why, 'random card', legal[Math.floor(rand() * legal.length)])
+  return dump(s.trick, s.seat, legal, s.trump!)
 }
 
 // ---- Decisions -------------------------------------------------------------------
