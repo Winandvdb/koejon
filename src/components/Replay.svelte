@@ -105,12 +105,14 @@
   let analysis = $state(false)
   let analyzer: Analyzer | null = null
   let rated = $state.raw(new Map<number, Rating[]>())
+  let failed = $state(false)
   function toggleAnalysis() {
     analysis = !analysis
     if (analysis && !analyzer) {
       const worker = new Worker(new URL('../lib/analysis-worker.ts', import.meta.url), { type: 'module' })
       analyzer = new Analyzer(worker, kjn)
       analyzer.results.subscribe((m) => (rated = new Map(m)))
+      analyzer.failed.subscribe((f) => (failed = f))
     }
   }
   $effect(() => () => analyzer?.stop())
@@ -124,7 +126,8 @@
     ...(i === last ? [{ title: $t.wholeMatch, steps: range(0, steps.length) }] : []),
   ])
   $effect(() => {
-    if (analysis) analyzer?.want([i, ...summaries.flatMap((x) => x.steps)])
+    // Off stops the work too: the queue can hold every step of the match.
+    analyzer?.want(analysis ? [i, ...summaries.flatMap((x) => x.steps)] : [])
   })
   const ratings = $derived(analysis ? rated.get(i) : undefined)
   const ratingOf = (seat: number): RatingClass | undefined => ratings?.find((r) => r.seat === seat)?.rating
@@ -234,7 +237,9 @@
   {#if error}<div class="alert replay-alert">{error}</div>{/if}
   {#if analysis}
     <div class="panel analysis-panel" aria-live="polite">
-      {#if !ratings}
+      {#if failed}
+        <div class="an-muted">{$t.analysisFailed}</div>
+      {:else if !ratings}
         <div class="an-muted"><span class="spinner"></span> {$t.analysing}</div>
       {:else if ratings.length === 0}
         <div class="an-muted">{$t.noChoice}</div>
@@ -268,7 +273,9 @@
               {/each}
             </tbody>
           </table>
-          <div class="an-muted">{$t.breakEven} ({r.stake}): {pct(r.breakEven ?? 0)}</div>
+          {#if r.breakEven !== undefined}
+            <div class="an-muted">{$t.breakEven} ({r.stake}): {pct(r.breakEven)}</div>
+          {/if}
         {/if}
         {#if !sameAction(r.values[0].action, r.played)}
           <div class="an-muted">{$t.bestChoice}: {actionLabel(r.values[0].action)}</div>
@@ -280,7 +287,7 @@
         <table class="an-sum">
           <caption>
             {sum.title}
-            {#if done.length < sum.steps.length}<span class="an-muted"><span class="spinner"></span> {done.length}/{sum.steps.length}</span>{/if}
+            {#if done.length < sum.steps.length && !failed}<span class="an-muted"><span class="spinner"></span> {done.length}/{sum.steps.length}</span>{/if}
           </caption>
           <thead>
             <tr>

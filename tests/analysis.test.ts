@@ -5,14 +5,14 @@ import { LOSS_LIMITS, rateDecision, ratingClass, summarize } from '../src/bots/a
 import type { Rating } from '../src/bots/analysis'
 import { Analyzer, matchSeed, rateStep, stepDecisions } from '../src/lib/analysis'
 import type { AnalysisPort, AnalysisRequest, AnalysisResult } from '../src/lib/analysis'
-import { parseKjn, replayMoves, replaySteps } from '../src/lib/kjn'
+import { loadKjn, parseKjn, replayMoves, replaySteps } from '../src/lib/kjn'
 import { seededRandom } from '../src/lib/seed'
 import { biddingState, C, finishedMatch, hideOthers, lastTrickState, playingState } from './helpers'
 
 function replay(seed: number) {
   const { kjn } = finishedMatch(seed)
   const m = parseKjn(kjn)
-  return { kjn, steps: replaySteps(m), moves: replayMoves(m) }
+  return { kjn, m, ...replayMoves(m) }
 }
 
 /** The first replay step after step `from` whose decision `pick` accepts. */
@@ -93,13 +93,14 @@ describe('rateDecision', () => {
   it('gives the same rating for the same match and step', () => {
     const a = replay(5)
     const b = replay(5)
-    expect(matchSeed(a.kjn)).toBe(matchSeed(b.kjn))
+    expect(matchSeed(a.m)).toBe(matchSeed(b.m))
     const k = a.steps.findIndex((_, i) => stepDecisions(a.steps, a.moves, i)[0]?.played.type === 'play' && i > 40)
-    const one = rateStep(a.steps, a.moves, k, matchSeed(a.kjn))
+    const one = rateStep(a.steps, a.moves, k, matchSeed(a.m))
     expect(one.length).toBeGreaterThan(0)
-    expect(rateStep(b.steps, b.moves, k, matchSeed(b.kjn))).toEqual(one)
-    // Another match gets another seed.
-    expect(matchSeed(a.kjn)).not.toBe(matchSeed(replay(6).kjn))
+    expect(rateStep(b.steps, b.moves, k, matchSeed(b.m))).toEqual(one)
+    // The same match from a file with other line endings; another match gets another seed.
+    expect(matchSeed(loadKjn(a.kjn.replace(/\n/g, '\r\n') + '\n').match)).toBe(matchSeed(a.m))
+    expect(matchSeed(a.m)).not.toBe(matchSeed(replay(6).m))
   })
 
   it('rates the winning card of an end position Best and the losing one a blunder', () => {
@@ -145,6 +146,12 @@ describe('rateDecision', () => {
 })
 
 describe('replay decisions', () => {
+  it('come with the same steps as replaySteps', () => {
+    const r = replay(1)
+    expect(r.steps).toEqual(replaySteps(r.m))
+    expect(r.moves).toHaveLength(r.steps.length)
+  })
+
   it("also rate the bidder's choice not to ask a troefke, at the partner's first lead", () => {
     let seen = 0
     for (let seed = 1; seed <= 8; seed++) {
@@ -157,7 +164,10 @@ describe('replay decisions', () => {
         expect(ack.played).toEqual({ type: 'ack', seat: lead.state.bidder })
         expect(lead.played.type).toBe('play')
         expect(lead.state.tricksPlayed).toBe(0)
-        expect(rateDecision(ack.state, ack.seat, { played: ack.played, seed: 1, samples: 5 })?.kind).toBe('bidding')
+        const rating = rateDecision(ack.state, ack.seat, { played: ack.played, seed: 1, samples: 5 })!
+        expect(rating.kind).toBe('bidding')
+        // The contract stands: no break-even of a bid.
+        expect(rating.breakEven).toBeUndefined()
       })
     }
     expect(seen).toBeGreaterThan(0)
@@ -185,11 +195,14 @@ describe('rating classes', () => {
 describe('Analyzer', () => {
   function fakePort() {
     const sent: AnalysisRequest[] = []
-    const port: AnalysisPort & { sent: AnalysisRequest[]; reply(step: number): void } = {
+    let stopped = false
+    const port: AnalysisPort & { sent: AnalysisRequest[]; stopped(): boolean; reply(step: number): void } = {
       sent,
       onmessage: null,
+      onerror: null,
       postMessage: (m) => sent.push(m),
-      terminate: () => {},
+      terminate: () => (stopped = true),
+      stopped: () => stopped,
       reply: (step) => port.onmessage!({ data: { step, ratings: [] } } as unknown as MessageEvent<AnalysisResult>),
     }
     return port
@@ -210,6 +223,26 @@ describe('Analyzer', () => {
     let results = new Map<number, Rating[]>()
     a.results.subscribe((m) => (results = m))
     expect([...results.keys()]).toEqual([3, 9])
+  })
+
+  it('turned off, sends no more steps', () => {
+    const port = fakePort()
+    const a = new Analyzer(port, 'KJN')
+    a.want([1, 2, 3])
+    a.want([])
+    port.reply(1)
+    expect(steps(port.sent)).toEqual([1])
+  })
+
+  it('reports a failed worker and stops it', () => {
+    const port = fakePort()
+    const a = new Analyzer(port, 'KJN')
+    let failed = false
+    a.failed.subscribe((f) => (failed = f))
+    a.want([1])
+    port.onerror!(new Event('error') as ErrorEvent)
+    expect(failed).toBe(true)
+    expect(port.stopped()).toBe(true)
   })
 
   it('never rates a step twice', () => {

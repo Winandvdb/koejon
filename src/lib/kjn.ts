@@ -366,13 +366,17 @@ export function replaySteps(m: KjnMatch): State[] {
 export type ReplayMove = { before: State; action: Action } | null
 
 /**
- * Per step of `replaySteps`, the action that made it. `before` already has
+ * `replaySteps`, and per step the action that made it. `before` already has
  * the trick acknowledgements, so the action is legal there. Throws like `replayKjn`.
  */
-export function replayMoves(m: KjnMatch): ReplayMove[] {
+export function replayMoves(m: KjnMatch): { steps: State[]; moves: ReplayMove[] } {
+  const steps: State[] = []
   const moves: ReplayMove[] = []
-  runKjn(m, (_, move) => moves.push(move))
-  return moves
+  runKjn(m, (s, move) => {
+    steps.push(s)
+    moves.push(move)
+  })
+  return { steps, moves }
 }
 
 function runKjn(m: KjnMatch, step: (s: State, move: ReplayMove) => void): State {

@@ -1,4 +1,4 @@
-import { apply, pendingSeats, rngNext, sameCard, teamOf } from '../engine'
+import { apply, isBidding, pendingSeats, rngNext, sameCard, teamOf } from '../engine'
 import type { Action, State } from '../engine'
 import { createBot } from './bot'
 import type { Bot } from './bot'
@@ -58,9 +58,12 @@ export interface Rating {
   /** Best value minus the played value, in lines; never below 0. */
   loss: number
   rating: RatingClass
-  /** Bids only: the stake in lines of the contract this choice is about. */
+  /**
+   * Go / pass and the dealer's choice only, not the troefke (the contract
+   * already stands): the stake in lines of the bid, kapot not counted.
+   */
   stake?: number
-  /** Bids only: the win chance a bid at `stake` needs (`breakEven`). */
+  /** With `stake`: the win chance a bid at `stake` needs (`breakEven`). */
   breakEven?: number
 }
 
@@ -86,8 +89,7 @@ function cardValues(obs: Observation, rand: () => number, samples: number): Rate
   return obs.legal.map((action, i) => ({ action, value: sum[i] / samples }))
 }
 
-const handOpen = (s: State): boolean =>
-  s.phase === 'BIDDING_R1' || s.phase === 'BIDDING_R2' || s.phase === 'DEALER_CHOICE' || s.phase === 'PLAYING'
+const handOpen = (s: State): boolean => isBidding(s.phase) || s.phase === 'PLAYING'
 
 /** The hand after `first`, played to its end by `bot` on every seat. */
 function rollout(world: State, first: Action, bot: Bot, rand: () => number): State {
@@ -122,12 +124,6 @@ function bidValues(obs: Observation, rand: () => number, rollouts: number): Rate
   return obs.legal.map((action, i) => ({ action, value: sum[i] / rollouts, win: wins[i] / rollouts }))
 }
 
-/** Stake in lines of the contract a bidding decision is about; kapot is not counted. */
-function stakeOf(s: State): number {
-  if (s.phase === 'BIDDING_R1') return s.multiplier
-  if (s.phase === 'PLAYING') return s.level === 1 ? s.multiplier : 2
-  return 2
-}
 
 export interface RateOptions {
   /** The action the seat took. */
@@ -165,8 +161,8 @@ export function rateDecision(state: State, seat: number, options: RateOptions): 
   const mine = values.find((v) => sameAction(v.action, played))!
   const loss = Math.max(0, values[0].value - mine.value)
   const rating: Rating = { seat, kind, played, values, loss, rating: ratingClass(loss, kind) }
-  if (kind === 'bidding') {
-    rating.stake = stakeOf(state)
+  if (isBidding(obs.phase)) {
+    rating.stake = obs.phase === 'BIDDING_R1' ? obs.multiplier : 2
     rating.breakEven = breakEven(rating.stake)
   }
   return rating

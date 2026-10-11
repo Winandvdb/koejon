@@ -172,6 +172,7 @@ const dict = {
     cardsLabel: 'Kaarten',
     thisHand: 'Deze hand',
     wholeMatch: 'Hele potje',
+    analysisFailed: 'De analyse is mislukt',
   },
   en: {
     title: 'Koejonnen',
@@ -338,6 +339,7 @@ const dict = {
     cardsLabel: 'Cards',
     thisHand: 'This hand',
     wholeMatch: 'Whole match',
+    analysisFailed: 'The analysis failed',
   },
 } as const
 
@@ -364,7 +366,7 @@ export const SUIT_GLYPH: Record<Suit, string> = { S: '♠', H: '♥', D: '♦', 
 
 /** Chess-style marks of the replay analysis classes. */
 export const RATING_GLYPH: Record<RatingClass, string> = {
-  best: '★',
+  best: '✦',
   good: '✓',
   inaccuracy: '?!',
   mistake: '?',

@@ -4,7 +4,8 @@ import { legalActions, partnerOf } from '../engine'
 import type { Action, State } from '../engine'
 import { rateDecision } from '../bots/analysis'
 import type { Rating } from '../bots/analysis'
-import type { ReplayMove } from './kjn'
+import { serializeKjn } from './kjn'
+import type { KjnMatch, ReplayMove } from './kjn'
 
 /** A decision a replay step shows: the state, the seat and what it did. */
 interface Decision {
@@ -34,8 +35,9 @@ export function stepDecisions(steps: State[], moves: ReplayMove[], k: number): D
   return out
 }
 
-/** FNV-1a of the record: the same match always gets the same ratings. */
-export function matchSeed(kjn: string): number {
+/** FNV-1a of the record as this build writes it: the same match always gets the same ratings, whatever line endings its file has. */
+export function matchSeed(match: KjnMatch): number {
+  const kjn = serializeKjn(match)
   let h = 0x811c9dc5
   for (let i = 0; i < kjn.length; i++) h = Math.imul(h ^ kjn.charCodeAt(i), 0x01000193)
   return h | 0
@@ -60,6 +62,8 @@ export interface AnalysisResult {
 export interface AnalysisPort {
   postMessage(msg: AnalysisRequest): void
   onmessage: ((e: MessageEvent<AnalysisResult>) => void) | null
+  /** The worker did not load, or a rating threw. */
+  onerror: ((e: ErrorEvent) => void) | null
   terminate(): void
 }
 
@@ -71,9 +75,12 @@ export interface AnalysisPort {
 export class Analyzer {
   private readonly cache = new Map<number, Rating[]>()
   private readonly store = writable(this.cache)
+  private readonly failure = writable(false)
   private queue: number[] = []
   private busy: number | null = null
   readonly results: Readable<Map<number, Rating[]>> = { subscribe: this.store.subscribe }
+  /** True once the worker failed: then nothing more is rated, so no spinner may wait for it. */
+  readonly failed: Readable<boolean> = { subscribe: this.failure.subscribe }
 
   constructor(
     private readonly port: AnalysisPort,
@@ -84,6 +91,10 @@ export class Analyzer {
       this.busy = null
       this.store.set(this.cache)
       this.next()
+    }
+    port.onerror = () => {
+      this.failure.set(true)
+      this.port.terminate()
     }
     port.postMessage({ kjn })
   }
