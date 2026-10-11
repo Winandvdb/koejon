@@ -501,15 +501,18 @@ describe('bot leads', () => {
     expect(botAction(noTrumpOut, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
   })
 
-  it('the partner and a short defender lead a trump before their last plain aces', () => {
-    const partnerHand = [C('H', '9'), C('S', 'A'), C('D', 'A')]
-    const defenderHand = [C('H', 'A'), C('S', 'A'), C('D', 'A')]
+  it('leads a low trump before the last plain aces, also in a sweep', () => {
     const open = { tricksPlayed: 3, tricksWon: [1, 2] as [number, number] }
     const sweep = { tricksPlayed: 3, tricksWon: [0, 3] as [number, number] }
     for (const level of LEVELS) {
       for (const over of [open, sweep]) {
-        expect(botAction(leadState(partnerHand, 3, over), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
-        expect(botAction(leadState(defenderHand, 0, over), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+        const lead = (hand: Card[], bidder: number) => botAction(leadState(hand, bidder, over), 1, smart, level)
+        expect(lead([C('H', '9'), C('S', 'A'), C('D', 'A')], 3)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+        // The bidder keeps its king for when the trump ace fell.
+        expect(lead([C('H', 'K'), C('H', 'Q'), C('S', 'A')], 1)).toEqual({ type: 'play', seat: 1, card: C('H', 'Q') })
+        expect(lead([C('H', 'A'), C('H', '9'), C('S', 'A')], 0)).toEqual({ type: 'play', seat: 1, card: C('H', '9') })
+        // An ace goes only when no other card is legal: also the boss trump goes first.
+        expect(lead([C('H', 'A'), C('S', 'A')], 0)).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
       }
     }
   })

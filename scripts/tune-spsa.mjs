@@ -5,7 +5,7 @@
 // constants, the + and − candidates play the same seeds (common random
 // numbers make their difference far less noisy than either score), and it is
 // 40 lines without a library. CMA-ES needs ~12 candidates per generation for
-// 18 constants and a covariance update.
+// 17 constants and a covariance update.
 
 /**
  * Search space per constant: bounds and the step a value is rounded to (a
