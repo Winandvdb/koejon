@@ -1,8 +1,8 @@
 // Worker of the heuristic tuner: boots one vite server, then scores
 // candidates until the tuner sends `{ close: true }`. A task is
 // `{ id, options, seeds }`; each seed is played twice with the sides swapped,
-// `heuristic:hard` with `options` against this checkout's `heuristic:hard`.
-// With `workerData.play` 'pimc' both sides play their cards and the troefke
+// `heuristic:hard` with `options` against this checkout's `heuristic:hard`;
+// with `workerData.play` 'pimc' both sides play their cards and the troefke
 // with pimc (`HARD_PIMC`, `workerData.samples` worlds when set), see tuneBot.
 // Replies `{ id, wins, n }`. `{ id, defaults: true }` replies with the options
 // that this checkout's heuristic:hard plays and the pimc options of the

@@ -3,10 +3,10 @@ import type { BotTrace } from '../src/bots/algorithm'
 import { createBot, HARD_PIMC, LEVEL_CONFIGS } from '../src/bots/bot'
 import type { BotConfig } from '../src/bots/bot'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
-import { pendingSeats } from '../src/engine'
+import { legalActions, pendingSeats } from '../src/engine'
 import { seededRandom } from '../src/lib/seed'
 import { CARD_PLAY_KEYS, PARAMS, spsa, toOptions, toPoint, tuneBot } from '../scripts/tune-spsa.mjs'
-import { C, dealtState, playingState } from './helpers'
+import { C, dealtState, decisions, playingState } from './helpers'
 
 const defaults = { ...HEURISTIC_DEFAULTS } as Record<string, number>
 
@@ -110,5 +110,27 @@ describe('tune-spsa', () => {
       if (a.type === 'bid' && a.play && !(base.decide(s, seat, seededRandom(1)) as { play: boolean }).play) differs++
     }
     expect(differs).toBeGreaterThan(0)
+  })
+
+  it('fixes with pimc only constants that bids and the dealer\'s choice never read', () => {
+    // Every CARD_PLAY_KEYS value at the other end of its range.
+    const far = Object.fromEntries(
+      PARAMS.filter((p) => CARD_PLAY_KEYS.includes(p.key)).map((p) => [
+        p.key,
+        defaults[p.key] - p.lo < p.hi - defaults[p.key] ? p.hi : p.lo,
+      ]),
+    )
+    const base = createBot('heuristic:hard')
+    const moved = createBot({ id: 'heuristic:hard', ...far })
+    const hits = { bid: 0, choose: 0 }
+    for (let seed = 1; seed <= 5; seed++)
+      for (const { s, seat } of decisions(seed, 'hard')) {
+        const type = legalActions(s, seat)[0].type
+        if (type !== 'bid' && type !== 'choose') continue
+        hits[type]++
+        expect(moved.decide(s, seat, seededRandom(seed))).toEqual(base.decide(s, seat, seededRandom(seed)))
+      }
+    expect(hits.bid).toBeGreaterThan(100)
+    expect(hits.choose).toBeGreaterThan(5)
   })
 })

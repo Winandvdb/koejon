@@ -1,6 +1,7 @@
 // Tune the heuristic's constants with SPSA (see tune-spsa.mjs) by self-play:
 // a candidate's score is its win rate as heuristic:hard against this
-// checkout's heuristic:hard, each seed played twice with the sides swapped.
+// checkout's heuristic:hard (with --play pimc: both as the `hard` level bot,
+// see below), each seed played twice with the sides swapped.
 //
 //   npm run tune -- [--generations 50] [--matches 200] [--seed 1] [--jobs 4] [--out tune-heuristic.json]
 //                   [--fixed bidThreshold1,bidThreshold2] [--play heuristic|pimc] [--samples 10]
@@ -17,7 +18,8 @@
 // heuristic:hard, the candidate with its options. The constants that only the
 // heuristic's card play reads (CARD_PLAY_KEYS) stay fixed. --samples sets the
 // worlds per pimc decision (default HARD_PIMC.samples); fewer worlds run
-// faster. --out is then the level's bot (HARD_PIMC) with the tuned options,
+// faster, but the bids are then tuned for a weaker card player than the one
+// that ships, so the bench check matters even more. --out is then the level's bot (HARD_PIMC) with the tuned options,
 // and the check on new seeds prints with that level's bot as --b.
 import { writeFileSync } from 'node:fs'
 import { availableParallelism } from 'node:os'
