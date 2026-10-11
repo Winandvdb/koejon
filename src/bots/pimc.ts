@@ -1,18 +1,138 @@
-import { RANK_ORDER, RANK_POINTS } from '../engine'
-import type { Action, Suit } from '../engine'
+import { partnerOf, RANK_ORDER, RANK_POINTS } from '../engine'
+import type { Action, Card, State, Suit } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
-import { sampleWorld } from './determinize'
-import { decisionPhase } from './observation'
+import { playedCards, sampleWorld } from './determinize'
+import { decisionPhase, observe } from './observation'
 import type { Observation } from './observation'
 import { solve } from './solver'
 
 /** Worlds per decision when the spec names no `samples`. */
 export const PIMC_SAMPLES = 20
+/** Worlds the modelled partner samples for its first lead, per world of a troefke decision. */
+export const PIMC_PARTNER_SAMPLES = 5
 
-/** Between equal values: the cheaper card — a side card before a trump, then fewer points, then lower. */
+/**
+ * Between equal values: the cheaper card — a side card before a trump, then
+ * fewer points, then lower — and no troefke over a troefke.
+ */
 function cost(a: Action, trump: Suit | null): number {
+  if (a.type === 'troefke') return 1
   if (a.type !== 'play') return 0
   return (a.card.s === trump ? 100 : 0) + RANK_POINTS[a.card.r] * 10 + RANK_ORDER[a.card.r]
+}
+
+/**
+ * What a troefke tells about the bidder's hand: 3 trumps, or 2 with the king
+ * or ace. The rules leave it open; this is the heuristic's own reason to ask.
+ */
+export function troefkeHand(cards: Card[], trump: Suit): boolean {
+  const trumps = cards.filter((c) => c.s === trump)
+  return trumps.length >= 3 || (trumps.length >= 2 && trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER.K))
+}
+
+/**
+ * After a troefke, keep only the worlds where the bidder had a troefke hand:
+ * the cards it holds there plus the ones it played this hand. Undefined when
+ * there is nothing to learn (no troefke, or the seat is the bidder itself).
+ */
+export function troefkeWeight(obs: Observation): ((world: State) => number) | undefined {
+  const bidder = obs.bidder
+  if (!obs.troefkeAsked || bidder === null || bidder === obs.seat || !obs.trump) return undefined
+  const trump = obs.trump
+  return (world) => {
+    const played = playedCards(world).flatMap((tc) => (tc.seat === bidder ? [tc.card] : []))
+    return troefkeHand([...world.hands[bidder], ...played], trump) ? 1 : 0
+  }
+}
+
+/** The partner of the bidder leads the first trick after a troefke: it obeys and leads a trump. */
+function troefkeLead(obs: Observation): boolean {
+  return (
+    obs.troefkeAsked &&
+    obs.tricksPlayed === 0 &&
+    obs.trick.length === 0 &&
+    obs.bidder !== null &&
+    obs.seat === partnerOf(obs.bidder) &&
+    obs.hand.some((c) => c.s === obs.trump)
+  )
+}
+
+/**
+ * Score `candidates` over `samples` worlds with `valueOf` and pick the best
+ * average; the trace lists them best first, so its first one is the choice.
+ */
+function best(
+  obs: Observation,
+  candidates: Action[],
+  samples: number,
+  valueOf: () => number[],
+  trace?: BotTrace,
+): Action {
+  const sum = candidates.map(() => 0)
+  const min = candidates.map(() => Infinity)
+  const max = candidates.map(() => -Infinity)
+  for (let n = 0; n < samples; n++) {
+    valueOf().forEach((value, i) => {
+      sum[i] += value
+      min[i] = Math.min(min[i], value)
+      max[i] = Math.max(max[i], value)
+    })
+  }
+  const order = candidates
+    .map((_, i) => i)
+    .sort((i, j) => sum[j] - sum[i] || cost(candidates[i], obs.trump) - cost(candidates[j], obs.trump) || i - j)
+  if (trace) {
+    for (const i of order) {
+      trace.candidates.push({
+        action: candidates[i],
+        score: sum[i] / samples,
+        visits: samples,
+        note: `min ${min[i]} max ${max[i]}`,
+      })
+    }
+    trace.notes.push(`pimc: ${samples} worlds, best average ${(sum[order[0]] / samples).toFixed(2)}`)
+  }
+  return candidates[order[0]]
+}
+
+/** The card with the best average over `samples` worlds that fit what the seat saw. */
+function playCard(obs: Observation, rand: () => number, samples: number, trace?: BotTrace): Action {
+  let candidates = obs.legal
+  if (troefkeLead(obs)) {
+    candidates = candidates.filter((a) => a.type === 'play' && a.card.s === obs.trump)
+    trace?.notes.push('troefke asked: lead a trump')
+    if (candidates.length === 1) return candidates[0]
+  }
+  const weight = troefkeWeight(obs)
+  return best(obs, candidates, samples, () => solve(sampleWorld(obs, rand, weight), obs.seat, candidates).map((v) => v.value), trace)
+}
+
+/**
+ * Troefke or not, for the bidder while its partner still has to lead. In a
+ * world with all cards open the partner already leads the best card, so a
+ * troefke could never win anything there. Here the partner does not see the
+ * bidder's hand: per world, its lead comes from its own small PIMC — with
+ * the troefke it obeys and samples troefke hands for the bidder (as
+ * `playCard` does), without it it guesses — and the solver plays the rest.
+ */
+function askTroefke(obs: Observation, rand: () => number, samples: number, partnerSamples: number, trace?: BotTrace): Action {
+  const candidates = obs.legal.filter((a) => a.type === 'ack' || a.type === 'troefke')
+  const partner = partnerOf(obs.seat)
+  return best(
+    obs,
+    candidates,
+    samples,
+    () => {
+      const world = sampleWorld(obs, rand)
+      return candidates.map((a) => {
+        // The partner's view of the same deal, ready to lead.
+        const view = observe({ ...world, trickAcks: [0, 1, 2, 3], troefkeAsked: a.type === 'troefke' }, partner)
+        const lead = playCard(view, rand, partnerSamples)
+        return solve(world, obs.seat, [lead])[0].value
+      })
+    },
+    trace,
+  )
 }
 
 /**
@@ -22,54 +142,33 @@ function cost(a: Action, trump: Suit | null): number {
  * Its known weak points (strategy fusion: it assumes it will know the cards
  * later; non-locality) are accepted.
  *
- * Card play only: `supports` is false for bids, troefke and the dealer's
- * choice. `solve` can value bids, but each world shows all hands, so PIMC
- * bid far too often (25% on the 1st card against 7% for heuristic:hard, a
- * quarter of its bids with one trump or none) and won only 38% of its
- * matches against the same card play with heuristic:hard bids (#86).
+ * The troefke: the bidder decides it with a partner that cannot see its hand
+ * (`askTroefke`); the partner obeys it and every seat but the bidder samples
+ * only troefke hands for the bidder from then on.
  *
- * Options: `samples`, the worlds per decision.
+ * No bids or dealer's choice: `supports` is false for them. `solve` can value
+ * bids, but each world shows all hands, so PIMC bid far too often (25% on
+ * the 1st card against 7% for heuristic:hard, a quarter of its bids with one
+ * trump or none) and won only 38% of its matches against the same card play
+ * with heuristic:hard bids (#86).
+ *
+ * Options: `samples`, the worlds per decision; `partnerSamples`, the worlds
+ * the partner samples for its lead in a troefke decision.
  */
 export function createPimc(variant: string | undefined, options: Record<string, unknown>): Algorithm {
   if (variant !== undefined) throw new Error(`unknown pimc variant: ${variant}`)
   for (const [k, v] of Object.entries(options)) {
-    if (k !== 'samples') throw new Error(`unknown pimc option: ${k}`)
+    if (k !== 'samples' && k !== 'partnerSamples') throw new Error(`unknown pimc option: ${k}`)
     if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) throw new Error(`pimc option ${k} must be a positive integer`)
   }
   const samples = (options.samples as number | undefined) ?? PIMC_SAMPLES
+  const partnerSamples = (options.partnerSamples as number | undefined) ?? PIMC_PARTNER_SAMPLES
   return {
     id: 'pimc',
-    supports: (obs) => decisionPhase(obs) === 'play',
+    supports: (obs) => decisionPhase(obs) === 'play' || obs.legal.some((a) => a.type === 'troefke'),
     decide(obs: Observation, rand: () => number, trace?: BotTrace): Action {
-      const { legal } = obs
-      const sum = legal.map(() => 0)
-      const min = legal.map(() => Infinity)
-      const max = legal.map(() => -Infinity)
-      for (let n = 0; n < samples; n++) {
-        const values = solve(sampleWorld(obs, rand), obs.seat, legal)
-        values.forEach(({ value }, i) => {
-          sum[i] += value
-          min[i] = Math.min(min[i], value)
-          max[i] = Math.max(max[i], value)
-        })
-      }
-      // Best first; the trace keeps this order, so its first candidate is the card played.
-      const order = legal
-        .map((_, i) => i)
-        .sort((i, j) => sum[j] - sum[i] || cost(legal[i], obs.trump) - cost(legal[j], obs.trump) || i - j)
-      const best = order[0]
-      if (trace) {
-        for (const i of order) {
-          trace.candidates.push({
-            action: legal[i],
-            score: sum[i] / samples,
-            visits: samples,
-            note: `min ${min[i]} max ${max[i]}`,
-          })
-        }
-        trace.notes.push(`pimc: ${samples} worlds, best average ${(sum[best] / samples).toFixed(2)}`)
-      }
-      return legal[best]
+      if (obs.legal.some((a) => a.type === 'troefke')) return askTroefke(obs, rand, samples, partnerSamples, trace)
+      return playCard(obs, rand, samples, trace)
     },
   }
 }

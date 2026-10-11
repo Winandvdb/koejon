@@ -34,9 +34,9 @@ function take<T>(items: T[], n: number, rand: () => number): T[] {
  * hand's 'card' events sit in the log after its last 'deal' event: a hand
  * stays far under the 60-event cap, so none are lost. A state built by
  * hand may carry no log; then the three visible tricks are all that can
- * be known.
+ * be known. A sampled world has the same fields, so it works on one too.
  */
-function playedCards(obs: Observation): TrickCard[] {
+export function playedCards(obs: Pick<Observation, 'log' | 'prevTrick' | 'lastTrick' | 'trick'>): TrickCard[] {
   for (let i = obs.log.length - 1; i >= 0; i--) {
     if (obs.log[i].t === 'deal') {
       const out: TrickCard[] = []
