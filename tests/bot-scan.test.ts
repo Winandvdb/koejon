@@ -102,6 +102,24 @@ describe('bot seed scans', () => {
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 
+  it('easy: a lead with a side ace in hand cashes an ace, unless it pulls with the boss trump', () => {
+    let found = 0
+    scanMatches('easy', SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || notes.includes('lazy dump') || s.trick.length > 0) return
+      const trump = s.trump!
+      const seat = a.seat
+      const hand = s.hands[seat]
+      if (hand.length < 2 || !hand.some((c) => c.r === 'A' && c.s !== trump)) return
+      if (s.troefkeAsked && s.tricksPlayed === 0 && seat === partnerOf(s.bidder!)) return
+      found++
+      // Easy remembers nothing: a boss trump tops every trump outside its hand, played or not.
+      const outside = RANKS.filter((r) => !hand.some((c) => c.s === trump && c.r === r))
+      const boss = a.card.s === trump && outside.every((r) => RANK_ORDER[r] < RANK_ORDER[a.card.r])
+      expect(a.card.r === 'A' || boss, `lead ${a.card.r}${a.card.s} (${notes.join('; ')}), seed scan at easy`).toBe(true)
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
   it.each(LEVELS)('%s: overtakes the partner with the led suit, not a trump', (level) => {
     let found = 0
     scanMatches(level, SEEDS, (s, a, notes) => {

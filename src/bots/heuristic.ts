@@ -388,7 +388,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
     return because(why, 'low trump to draw the trump ace', lowest(trumps))
   // A short defender with side aces pulls with a low trump, so the bidders'
   // trumps fall before the aces go.
-  if (tactics && shortDefender && oppMayTrump && lowTrumps.length && aces.length)
+  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length)
     return because(why, 'defender pull: low trump, keeps the boss', lowest(lowTrumps))
   // Trump is always allowed, also on a suit an opponent can follow: cash an
   // ace only once no opponent may hold trump.
@@ -410,15 +410,16 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   // Draw out the ace: a card without points under our king, so the king tops
   // the suit once the ace falls. Only 'full' memory knows the ace already fell.
   const has = (suit: Suit, r: Rank) => s.hand.some((c) => c.s === suit && c.r === r)
-  const underKing = leads.filter(
-    (c) =>
-      tactics &&
-      c.s !== trump &&
-      RANK_POINTS[c.r] === 0 &&
-      has(c.s, 'K') &&
-      !has(c.s, 'A') &&
-      !read.acesGone.has(c.s),
-  )
+  const underKing = tactics
+    ? leads.filter(
+        (c) =>
+          c.s !== trump &&
+          RANK_POINTS[c.r] === 0 &&
+          has(c.s, 'K') &&
+          !has(c.s, 'A') &&
+          !read.acesGone.has(c.s),
+      )
+    : []
   if (underKing.length) return because(why, 'draw out the ace: low card under the king', lowest(underKing))
   return because(why, 'low lead', lowest(leads))
 }
@@ -555,7 +556,7 @@ function choosePlayCard(
   const read = readHand(s, profile.memory)
   const smart =
     s.trick.length === 0 ? leadCard(s, legal, read, profile.tactics, why) : followCard(s, legal, read, opt, why)
-  // Imperfect on purpose: sometimes fall back to a lazy dump.
+  // Imperfect on purpose: sometimes fall back to a lazy card.
   if (rand() < profile.skill) return smart
   // The smart rule did not decide, so its reason stays out of the trace.
   why.length = 0

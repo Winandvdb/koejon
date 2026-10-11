@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BOT_LEVELS, createBot } from '../src/bots/bot'
+import { BOT_LEVELS, BOT_PROFILES, createBot } from '../src/bots/bot'
 import type { BotLevel } from '../src/bots/bot'
 import { createAlgorithm } from '../src/bots/algorithm'
 import type { BotTrace } from '../src/bots/algorithm'
@@ -378,7 +378,7 @@ describe('bot card play', () => {
     for (const level of ['normal', 'hard'] as const) {
       expect(botAction(s, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'A') })
     }
-    // Easy cashes it too: a beginner plays its aces at once (see 'bot levels').
+    // Easy cashes it too: a beginner plays its aces at once (see the easy tests in 'bot leads').
     expect(botAction(s, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('S', 'A') })
   })
 
@@ -494,7 +494,7 @@ describe('bot card play', () => {
 describe('bot leads', () => {
   const LEVELS = ['easy', 'normal', 'hard'] as const
   // Easy plays no lead tactics: see the tests of easy below.
-  const TACTICS = ['normal', 'hard'] as const
+  const TACTICS = BOT_LEVELS.filter((l) => BOT_PROFILES[l].tactics)
 
   /** PLAYING, seat 1 leads. `bidder` 1 = seat 1 bids, 3 = partner bids, 0 = defending. */
   function leadState(hand: Card[], bidder: number, over: Partial<State> = {}): State {
@@ -795,8 +795,11 @@ describe('bot levels', () => {
   it("easy's lazy card is any legal card; the other levels dump the cheapest", () => {
     // The partner wins with CA: a careful dump keeps the spade ace.
     const s = playingState({
-      trick: [{ seat: 0, card: C('C', 'A') }],
-      leader: 0,
+      trick: [
+        { seat: 3, card: C('C', 'A') },
+        { seat: 0, card: C('C', '9') },
+      ],
+      leader: 3,
       turn: 1,
       bidder: 0,
       hands: [[], [C('S', 'A'), C('S', '9'), C('D', '10')], [], []],
