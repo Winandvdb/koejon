@@ -77,9 +77,11 @@ describe('tune-spsa', () => {
     expect(fixedKeys(['bidThreshold1'])).toEqual(['bidThreshold1', 'dealerWeak'])
     expect(fixedKeys([], ['dealerWeak'])).toEqual([])
     expect(() => fixedKeys([], ['nope'])).toThrow(/--free/)
+    expect(() => fixedKeys([], ['bidThreshold1'])).toThrow(/not set by hand/)
+    expect(() => fixedKeys(['dealerWeak'], ['dealerWeak'])).toThrow(/both/)
     // The score pulls dealerWeak up, as a tuning run would on noise.
     const { best } = await run(1, (o) => o.dealerWeak + 0.02 * o.dealerAce, 50, fixedKeys([]))
-    expect(best.dealerWeak).toBe(0.05)
+    expect(best.dealerWeak).toBe(defaults.dealerWeak)
     expect(best.dealerAce).toBeGreaterThan(defaults.dealerAce)
   })
 })

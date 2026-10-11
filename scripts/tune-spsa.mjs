@@ -93,6 +93,10 @@ export function fixedKeys(fixed, free = []) {
   for (const [flag, keys] of /** @type {const} */ ([['fixed', fixed], ['free', free]]))
     for (const k of keys)
       if (!PARAMS.some((p) => p.key === k)) throw new Error(`--${flag}: unknown constant '${k}'`)
+  for (const k of free) {
+    if (!PARAMS.some((p) => p.key === k && p.fixed)) throw new Error(`--free: '${k}' is not set by hand, so it is tuned already`)
+    if (fixed.includes(k)) throw new Error(`--free and --fixed both name '${k}'`)
+  }
   const byHand = PARAMS.filter((p) => p.fixed && !free.includes(p.key)).map((p) => p.key)
   return [...new Set([...fixed, ...byHand])]
 }

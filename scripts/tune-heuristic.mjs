@@ -31,8 +31,9 @@ const { values: opt } = parseArgs({
     free: { type: 'string', default: '' },
   },
 })
-// Constants that keep their default, for example the bid thresholds to keep
-// today's bid rate: tuned freely, they move the most.
+// Constants that keep their default: the ones set by hand (`fixed` in PARAMS)
+// unless --free names them, plus --fixed, for example the bid thresholds to
+// keep today's bid rate: tuned freely, they move the most.
 const FIXED = fixedKeys(opt.fixed.split(',').filter(Boolean), opt.free.split(',').filter(Boolean))
 /** @param {string} name */
 function positiveInt(name) {
