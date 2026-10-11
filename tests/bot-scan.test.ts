@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { legalActions, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
+import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
 import { scanMatches } from './helpers'
 
 // Seed scans: rules checked in every match where the situation occurs, in
@@ -120,6 +121,18 @@ describe('bot seed scans', () => {
       if (run && oppAfter) return
       found++
       expect(a.card.s, `overtake partner on a plain lead, seed scan at ${level}`).not.toBe(trump)
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it.each(LEVELS)('%s: the dealer goes blind on two weak suits only with the hand-set chance', (level) => {
+    let found = 0
+    scanMatches(level, SEEDS, (s, a, notes) => {
+      if (a.type !== 'choose' || s.lines[a.seat % 2] <= 2) return
+      const t = s.turned!
+      if (t.first.s === t.second!.s || Math.max(RANK_ORDER[t.first.r], RANK_ORDER[t.second!.r]) > RANK_ORDER['Q']) return
+      found++
+      expect(notes, `weak dealer choice, seed scan at ${level}`).toContain(`choose: go with chance ${HEURISTIC_DEFAULTS.dealerWeak}`)
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
