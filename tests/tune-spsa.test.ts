@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import type { BotTrace } from '../src/bots/algorithm'
+import { createBot, HARD_PIMC, LEVEL_CONFIGS } from '../src/bots/bot'
+import type { BotConfig } from '../src/bots/bot'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
-import { PARAMS, fixedKeys, spsa, toOptions, toPoint } from '../scripts/tune-spsa.mjs'
+import { legalActions, pendingSeats } from '../src/engine'
+import { seededRandom } from '../src/lib/seed'
+import { CARD_PLAY_KEYS, PARAMS, fixedKeys, spsa, toOptions, toPoint, tuneBot } from '../scripts/tune-spsa.mjs'
+import { C, dealtState, decisions, playingState } from './helpers'
 
 const defaults = { ...HEURISTIC_DEFAULTS } as Record<string, number>
 
@@ -70,6 +76,62 @@ describe('tune-spsa', () => {
     const { best } = await run(1, (o) => 0.01 * o.bidThreshold1 + 0.02 * o.dealerAce, 50, ['bidThreshold1'])
     expect(best.bidThreshold1).toBe(defaults.bidThreshold1)
     expect(best.dealerAce).toBeGreaterThan(defaults.dealerAce)
+  })
+
+  it('with pimc plays the hard level bot: pimc cards, the candidate bids', () => {
+    // The untuned side is the level bot ('heuristic:hard' as an object spec).
+    const level = LEVEL_CONFIGS.hard as BotConfig
+    expect(level.rules[1].use).toBe('heuristic:hard')
+    expect(tuneBot({}, HARD_PIMC)).toEqual({ ...level, rules: [level.rules[0], { use: { id: 'heuristic:hard' } }] })
+    expect(tuneBot({ bidThreshold1: 6 }, null)).toEqual({ id: 'heuristic:hard', bidThreshold1: 6 })
+    for (const k of CARD_PLAY_KEYS) expect(Object.keys(HEURISTIC_DEFAULTS)).toContain(k)
+
+    // A candidate that bids on anything: its options reach the bids, pimc plays the card.
+    const bot = createBot(tuneBot({ bidThreshold1: 6, clearBid: 0, betterSuit: 0, loneTrumpMin: 8 }, HARD_PIMC))
+    const hands = [
+      [C('C', 'J'), C('C', 'Q'), C('D', 'J'), C('D', 'Q'), C('S', 'J'), C('S', 'Q')],
+      [C('H', '9'), C('H', 'J'), C('H', 'K'), C('S', '9'), C('C', '9'), C('D', '9')],
+      [C('C', 'K'), C('C', 'A'), C('D', 'K'), C('D', 'A'), C('S', 'K'), C('S', 'A')],
+      [C('H', '10'), C('H', 'Q'), C('H', 'A'), C('S', '10'), C('C', '10'), C('D', '10')],
+    ]
+    const trace = (): BotTrace => ({ candidates: [], notes: [] })
+    const card = trace()
+    expect(bot.decide(playingState({ bidder: 1, turn: 3, leader: 3, hands }), 3, seededRandom(1), card).type).toBe('play')
+    expect(card.algorithm).toBe('pimc')
+    // The options reach the bids: on some deal the candidate bids where the untuned side passes.
+    const base = createBot(LEVEL_CONFIGS.hard)
+    let differs = 0
+    for (let seed = 1; seed <= 20; seed++) {
+      const s = dealtState(seed)
+      const seat = pendingSeats(s)[0]
+      const bid = trace()
+      const a = bot.decide(s, seat, seededRandom(1), bid)
+      expect(bid.algorithm).toBe('heuristic:hard')
+      if (a.type === 'bid' && a.play && !(base.decide(s, seat, seededRandom(1)) as { play: boolean }).play) differs++
+    }
+    expect(differs).toBeGreaterThan(0)
+  })
+
+  it('fixes with pimc only constants that bids and the dealer\'s choice never read', () => {
+    // Every CARD_PLAY_KEYS value at the other end of its range.
+    const far = Object.fromEntries(
+      PARAMS.filter((p) => CARD_PLAY_KEYS.includes(p.key)).map((p) => [
+        p.key,
+        defaults[p.key] - p.lo < p.hi - defaults[p.key] ? p.hi : p.lo,
+      ]),
+    )
+    const base = createBot('heuristic:hard')
+    const moved = createBot({ id: 'heuristic:hard', ...far })
+    const hits = { bid: 0, choose: 0 }
+    for (let seed = 1; seed <= 5; seed++)
+      for (const { s, seat } of decisions(seed, 'hard')) {
+        const type = legalActions(s, seat)[0].type
+        if (type !== 'bid' && type !== 'choose') continue
+        hits[type]++
+        expect(moved.decide(s, seat, seededRandom(seed))).toEqual(base.decide(s, seat, seededRandom(seed)))
+      }
+    expect(hits.bid).toBeGreaterThan(100)
+    expect(hits.choose).toBeGreaterThan(5)
   })
 
   it('keeps the values set by hand unless --free names them', async () => {

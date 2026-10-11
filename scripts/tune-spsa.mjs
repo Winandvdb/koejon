@@ -35,6 +35,26 @@ export const PARAMS = [
   { key: 'vetMaxRisk', lo: 0, hi: 4, step: 1 },
 ]
 
+/**
+ * Constants that only the heuristic's card play and troefke read. A bot that
+ * plays its cards with pimc never uses them, so with `--play pimc` SPSA would
+ * move them on noise alone: they stay fixed.
+ */
+export const CARD_PLAY_KEYS = ['troefkeChance', 'contestMin', 'cheapWin', 'vetMaxRisk']
+
+/**
+ * The bot the tuner plays for `options`: `heuristic:hard` with them, or with
+ * `pimc` options pimc plays the cards and the troefke and `heuristic:hard`
+ * with them bids (the `hard` level bot of bot.ts).
+ * @param {Record<string, number>} options
+ * @param {{ samples: number, partnerSamples: number } | null} pimc
+ */
+export function tuneBot(options, pimc) {
+  const heuristic = { id: 'heuristic:hard', ...options }
+  if (!pimc) return heuristic
+  return { name: 'pimc-hard', rules: [{ use: { id: 'pimc', ...pimc } }, { use: heuristic }] }
+}
+
 // Standard SPSA gain decay (Spall). The search runs in [0, 1] per constant.
 const ALPHA = 0.602
 const GAMMA = 0.101
