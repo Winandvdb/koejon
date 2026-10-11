@@ -146,7 +146,6 @@ function copyHand(h: Hand): Hand {
   }
 }
 
-/** The seat to move. */
 export function moverOf(h: Hand): number {
   switch (h.phase) {
     case R1:
@@ -161,7 +160,6 @@ export function moverOf(h: Hand): number {
   }
 }
 
-/** Does card `c` beat card `best` with trump suit `trump`? */
 function beats(c: number, best: number, trump: number): boolean {
   if (SUIT_OF[c] === trump) return SUIT_OF[best] !== trump || RANK_OF[c] > RANK_OF[best]
   return SUIT_OF[best] !== trump && SUIT_OF[c] === SUIT_OF[best] && RANK_OF[c] > RANK_OF[best]

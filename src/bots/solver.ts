@@ -123,7 +123,6 @@ function createSearch(ct: Contract, team: number, pos: Position) {
     return [lo, hi]
   }
 
-  /** Does `c` beat `best` in the running trick? */
   function beats(c: number, best: number): boolean {
     if (SUIT_OF[c] === trump) return SUIT_OF[best] !== trump || RANK_OF[c] > RANK_OF[best]
     return SUIT_OF[best] !== trump && SUIT_OF[c] === SUIT_OF[best] && RANK_OF[c] > RANK_OF[best]

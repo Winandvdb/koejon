@@ -286,7 +286,6 @@ export class HostGame {
     return `${BOT_UID_PREFIX}${seat}:${this.rand().toString(36).slice(2, 8)}`
   }
 
-  /** Rotate a bot's difficulty: easy → normal → hard. */
   cycleBotLevel(seat: number): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'LOBBY') return
@@ -475,7 +474,6 @@ export class HostGame {
     try {
       next = apply(this.state, a)
     } catch (e) {
-      // Illegal or stale intent: dropped.
       console.warn('[host] dropped action', a.type, 'seat', a.seat, (e as Error).message)
       return false
     }
@@ -771,7 +769,7 @@ export class HostGame {
 
   // ---- table talk ----
 
-  /** Nag a seat that keeps the table waiting: one pending actor for > 9 s.
+  /** Nag a seat that keeps the table waiting: one pending actor for `hurryMs`.
    *  The host fires it and commits, so all clients see the same nag. */
   private armHurry(): void {
     const pend = pendingSeats(this.state)

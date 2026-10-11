@@ -107,7 +107,7 @@ describe('scoring', () => {
       multiplier: 2,
       points: [10, 30],
       tricksWon: [0, 5],
-      // last trick won by team1: seat0 leads... make trick winner team1.
+      // Seat 1's SA wins the last trick for team 1.
       trick: [
         { seat: 0, card: C('S', '10') },
         { seat: 1, card: C('S', 'A') },
