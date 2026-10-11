@@ -39,11 +39,11 @@ Cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring
 
 Algorithms get only an `Observation` (public state, own hand, legal actions), never the engine `State`. A bot only picks from `legalActions`.
 
-- `bot.ts` — a bot is data: `BotConfig = { name, rules: [{ when?: { phase }, use: spec }] }`; the first matching rule decides. `LEVEL_CONFIGS` gives the bot per level; `botAction` (used by the host) plays it. `hard` = `pimc` for cards and troefke + `heuristic:hard` for bids. **Rule:** tests of heuristic rules use `createBot('heuristic:<level>')`, not `botAction`.
+- `bot.ts` — a bot is data: `BotConfig = { name, rules: [{ when?: { phase }, use: spec }] }`; the first rule whose phase matches and whose algorithm `supports` the decision decides, and no match throws. `LEVEL_CONFIGS` gives the bot per level; `botAction` (used by the host) plays it. `hard` = `pimc` for cards and troefke + `heuristic:hard` for bids, with `HARD_PIMC` worlds per decision kept low so that a phone host decides within 2 s. **Rule:** tests of heuristic rules use `createBot('heuristic:<level>')`, not `botAction`.
 - `algorithm.ts` — `Algorithm`, `BotTrace` and the registry (`createAlgorithm(spec)`). **Rule:** an algorithm builds the algorithms its options name through the registry, never by import.
 - `observation.ts` — `observe`, and `decisionPhase` (the one place that says which decisions are `bidding` or `play`).
 - `value.ts` — `handValue` (all search algorithms score hands with it) and `breakEven`.
-- `determinize.ts` — `sampleWorld`: a full engine `State` that fits an observation. **Rule:** all randomness via `rand`. A world shares arrays with the live state: change it only through `apply`.
+- `determinize.ts` — `sampleWorld`: a full engine `State` that fits an observation. **Rule:** the hand's played cards come from the `log` since its last `deal` event. Hidden fields the rest of the hand does not need get neutral values (`seed`, `rng`, pile order, the draw deck). All randomness via `rand`. A world shares arrays with the live state: change it only through `apply`.
 - `solver.ts` — `solve`: double-dummy value of each action when all hands are known. **Rule:** `tests/solver.test.ts` checks it against a plain minimax on the engine, so a change to scoring or play rules in `src/engine/` must show up there.
 - `pimc.ts` — algorithm `pimc`. It takes card play and the troefke but no bids or dealer's choice, so a bot with it needs a second rule for those. A rule `when: { phase: 'play' }` leaves the troefke to the next rule.
 - `mcts.ts` — algorithms `mcts` (determinized MCTS) and `ismcts` (SO-ISMCTS). They search every decision of the hand on `Hand`, a bitmask copy of the rules, because the engine's `apply` is far too slow for that. **Rule:** `tests/mcts.test.ts` compares `Hand` with the engine, so a rule change in `src/engine/` must show up in `Hand`.
@@ -100,7 +100,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - TypeScript strict. No new dependencies unless the task needs one. Pin exact versions.
 - Make the smallest change that meets the task. Do not refactor unrelated code.
 - For a bug: first write a test that fails, then fix it.
-- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match. For a bot or game rule, add a scan to `tests/bot-scan.test.ts` with `scanMatches`. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
+- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to `tests/bot-scan.test.ts` with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
 
 ## Git and GitHub
 

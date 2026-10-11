@@ -54,7 +54,11 @@ export function liftRange(s: State, seat: number): number[] {
   return out
 }
 
-/** `startLines` is the boomke length per team; the line marks keep it for the whole match. */
+/**
+ * `drawers` fixes which seat draws for each team (default: the lowest seat of
+ * each team). `startLines` is the boomke length per team; the line marks keep
+ * it for the whole match.
+ */
 export function createMatch(seed: number, drawers?: [number, number], startLines = START_LINES): State {
   return {
     phase: 'LOBBY',
