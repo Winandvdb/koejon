@@ -5,8 +5,7 @@
 import { isMainThread, parentPort, workerData } from 'node:worker_threads'
 import { createServer } from 'vite'
 import { loadDecider, realDecisionPhase } from './bot-spec.mjs'
-
-const STEP_CAP = 20000
+import { playMatch } from './play-match.mjs'
 
 export function newBidStats() {
   return { hands: 0, secondUp: 0, r1: [0, 0], r2: [0, 0], trumps: [0, 0, 0, 0, 0, 0, 0] }
@@ -76,36 +75,13 @@ export async function runSlice(job) {
       sides.push({ name: loaded.name, legacy: loaded.legacy, decide })
     }
 
+    const engine = { apply, createMatch, pendingSeats, seededRandom }
     /**
-     * One match; `pair[team]` plays for that team. Returns the winning team.
      * @param {number} seed
      * @param {Function[]} pair
      * @param {ReturnType<typeof newBidStats>} [stats]
      */
-    function runMatch(seed, pair, stats) {
-      let s = createMatch(seed)
-      const rand = seededRandom(seed * 7919 + 13)
-      let steps = 0
-      while (s.phase !== 'GAME_OVER') {
-        if (steps++ > STEP_CAP) throw new Error(`match ${seed} did not terminate`)
-        const seat = pendingSeats(s)[0]
-        const a = pair[seat % 2](s, seat, rand)
-        if (stats && a.type === 'bid') {
-          const r1 = s.phase === 'BIDDING_R1'
-          const suit = r1 ? s.turned.first.s : s.turned.second.s
-          stats[r1 ? 'r1' : 'r2'][0]++
-          if (a.play) {
-            stats[r1 ? 'r1' : 'r2'][1]++
-            stats.trumps[s.hands[seat].filter((/** @type {{ s: string }} */ c) => c.s === suit).length]++
-          }
-        }
-        const next = apply(s, a)
-        if (stats && s.phase === 'DEALING') stats.hands++
-        if (stats && !s.turned?.secondUp && next.turned?.secondUp) stats.secondUp++
-        s = next
-      }
-      return s.winner
-    }
+    const runMatch = (seed, pair, stats) => playMatch(engine, seed, pair, stats)
 
     let wins = 0
     const self = [newBidStats(), newBidStats()]

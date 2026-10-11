@@ -81,6 +81,9 @@ firestore-debug.log
 
 .idea/
 
+# Output of npm run tune
+tune-heuristic.json
+
 # Agent issue worktrees (start-issue skill)
 .worktrees/
 .vscode/settings.json
