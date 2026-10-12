@@ -3,7 +3,7 @@ import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
-import { botAction, BOT_LEVELS, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import { botAction, BOT_LEVELS, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
@@ -243,7 +243,7 @@ describe('heuristic trace', () => {
   it('the skill option changes only the lazy dumps and draws the same random numbers', () => {
     const plain = createBot('heuristic:hard')
     const skilled = createBot({ id: 'heuristic:hard', skill: 1 })
-    const profile = createBot({ id: 'heuristic:hard', skill: 0.95 })
+    const profile = createBot({ id: 'heuristic:hard', skill: BOT_PROFILES.hard.skill })
     let dumps = 0
     for (const seed of [1, 2, 3])
       decisions(seed, 'hard').forEach(({ s, seat }, i) => {

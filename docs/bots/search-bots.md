@@ -142,8 +142,9 @@ gave the `hard` level 0.25, the largest margin tried that passes. #183 changed i
 `heuristic:hard` plays about 5% of its cards as a lazy dump (`skill: 0.95`): a planned
 mistake. As the anchor card, pimc kept such a card when its own card was not more than the
 margin better. The anchor is now `{ id: 'heuristic:hard', skill: 1 }`: the heuristic option
-`skill` overrides the level's skill, and with 1 it never dumps. It draws the same random
-numbers, so the rest of the match does not change.
+`skill` overrides the level's skill, and with 1 it never dumps. On `normal` and `hard` a lazy
+dump draws no extra random number, so `skill` changes only the dumps, not the rest of the
+match. On `easy` a lazy card is a random card, which draws one more number.
 
 Hand values are whole lines, so with 10 worlds pimc's gain is a multiple of 0.1: a margin of
 0.25 acts as 0.2, 0.3 and 0.35 act the same, and 0.45 acts as 0.4.

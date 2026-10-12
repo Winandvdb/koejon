@@ -7,11 +7,13 @@
 // level, botAction). At each real card choice (more than one legal card) it
 // also asks --ref, and --bot again with another random stream. Both extra
 // asks draw from their own streams, so the match is the one `npm run bench`
-// self-play plays for that seed. Output is the same for the same arguments.
+// self-play plays for that seed (`playMatch`). Output is the same for the same
+// arguments.
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { createServer } from 'vite'
 import { loadDecider, parseSpec } from './bot-spec.mjs'
+import { playMatch } from './play-match.mjs'
 
 const { values: opt } = parseArgs({
   options: {
@@ -42,24 +44,21 @@ try {
   let otherThanRef = 0
   let otherWorlds = 0
   for (let seed = 1; seed <= SEEDS; seed++) {
-    let s = createMatch(seed)
-    const rand = seededRandom(seed * 7919 + 13)
     const refRand = seededRandom(seed * 7919 + 101)
     const againRand = seededRandom(seed * 7919 + 202)
-    while (s.phase !== 'GAME_OVER') {
-      const seat = pendingSeats(s)[0]
-      const legal = legalActions(s, seat)
+    const decide = (/** @type {any} */ s, /** @type {number} */ seat, /** @type {() => number} */ rand) => {
       const t0 = performance.now()
       const a = bot.decide(s, seat, rand)
       const dt = performance.now() - t0
-      if (a.type === 'play' && legal.length > 1) {
+      if (a.type === 'play' && legalActions(s, seat).length > 1) {
         choices++
         ms += dt
         if (!same(a, ref.decide(s, seat, refRand))) otherThanRef++
         if (!same(a, bot.decide(s, seat, againRand))) otherWorlds++
       }
-      s = apply(s, a)
+      return a
     }
+    playMatch({ apply, createMatch, pendingSeats, seededRandom }, seed, [decide, decide])
   }
   const pct = (/** @type {number} */ k) => `${((100 * k) / choices).toFixed(1)}%`
   console.log(`Bot ${bot.name}, reference ${ref.name}, seeds 1-${SEEDS}`)

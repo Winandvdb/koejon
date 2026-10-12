@@ -38,7 +38,7 @@ export const PARAMS = [
 /**
  * Constants that only the heuristic's card play and troefke read. With
  * `--play pimc` the candidate's values never reach the cards: pimc plays them,
- * anchored to a plain `heuristic:hard` (`HARD_PIMC`), so SPSA would move them
+ * anchored to `heuristic:hard` without the candidate's options (`HARD_PIMC`), so SPSA would move them
  * on noise alone and they stay fixed. A change of their defaults does move the
  * `hard` level's cards through that anchor: bench it with `--level hard` too.
  */

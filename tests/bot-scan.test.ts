@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
-import { createBot, HARD_ANCHOR_MARGIN, LEVEL_CONFIGS } from '../src/bots/bot'
+import { createBot, HARD_ANCHOR_MARGIN, HARD_PIMC, LEVEL_CONFIGS } from '../src/bots/bot'
 import { troefkeHand } from '../src/bots/conventions'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
 import { seededRandom } from '../src/lib/seed'
@@ -193,7 +193,8 @@ describe('bot seed scans', () => {
       const anchor = trace.candidates.find((c) => c.note?.endsWith(', anchor'))
       if (a.type !== 'play' || !anchor) return
       const note = notes.find((n) => n.startsWith('anchor heuristic:hard '))
-      const gain = trace.candidates[0].score! - anchor.score!
+      // The scores are averages: their difference can miss a margin on the 0.1 grid by a rounding error.
+      const gain = trace.candidates[0].score! - anchor.score! - 1e-9
       if (JSON.stringify(anchor.action) === JSON.stringify(a)) {
         expect(gain, note).toBeLessThanOrEqual(HARD_ANCHOR_MARGIN)
         kept++
@@ -206,4 +207,14 @@ describe('bot seed scans', () => {
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
     expect(kept).toBeGreaterThan(found)
   }, 300_000)
+
+  it('hard level: the anchor never plays a lazy dump', () => {
+    let found = 0
+    scanMatches('hard', SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || legalActions(s, a.seat).length < 2) return
+      found++
+      expect(notes, 'lazy dump in the hard level anchor').not.toContain('lazy dump')
+    }, createBot(HARD_PIMC.anchor))
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
 })
