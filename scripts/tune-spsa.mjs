@@ -49,7 +49,7 @@ export const CARD_PLAY_KEYS = ['troefkeChance', 'contestMin', 'cheapWin', 'vetMa
  * `pimc` options pimc plays the cards and the troefke and `heuristic:hard`
  * with them bids (the `hard` level bot of bot.ts).
  * @param {Record<string, number>} options
- * @param {{ samples: number, partnerSamples: number, anchor?: string, margin?: number } | null} pimc
+ * @param {{ samples: number, partnerSamples: number, anchor?: import('../src/bots/algorithm.ts').AlgorithmSpec, margin?: number } | null} pimc
  */
 export function tuneBot(options, pimc) {
   const heuristic = { id: 'heuristic:hard', ...options }
