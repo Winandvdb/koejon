@@ -2263,15 +2263,23 @@ button.tag {
   white-space: nowrap;
 }
 
-.an-val.best,
-.an-bids tr.best td {
-  border-color: var(--rate-best);
-  color: var(--rate-best);
+/* Played: solid green border. Best: gold dotted outline. A played best move shows both. */
+.an-val.played,
+.an-bids tr.played {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  font-weight: 800;
 }
 
-.an-val.played,
-.an-bids tr.played td {
-  font-weight: 800;
+.an-val.best,
+.an-bids tr.best {
+  outline: 2px dotted var(--gold);
+  outline-offset: 2px;
+}
+
+.an-bids tr.played,
+.an-bids tr.best {
+  border-radius: 6px;
 }
 
 .an-bids,
