@@ -6,7 +6,7 @@
   import { arrangeHand, cardKey, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
   import { isPlaying, lastBids, showBids, sideOf, troefkeBubble } from '../lib/table'
-  import { ownDecisions, replayMoves, type MoveHand } from '../lib/replay'
+  import { replayMoves, type MoveHand } from '../lib/replay'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
@@ -87,8 +87,6 @@
   const nextHand = () => go(starts[hand] ?? last)
 
   const moves = $derived(replayMoves(match, steps, my))
-  const own = $derived(ownDecisions(moves))
-  const prevOwn = $derived(own.findLast((d) => d < i))
   const seatNames = $derived(seats.map((x) => x.name))
 
   // The overview comes first; a chosen hand or the start opens the move list.
@@ -254,13 +252,6 @@
     </div>
 
     <div class="replay-controls">
-      <button
-        class="icon-btn"
-        title={$t.prevOwn}
-        aria-label={$t.prevOwn}
-        disabled={prevOwn === undefined}
-        onclick={() => prevOwn !== undefined && go(prevOwn)}>⇤</button
-      >
       <button class="icon-btn" title={$t.prevHand} aria-label={$t.prevHand} disabled={i === 0} onclick={prevHand}>⏮</button>
       <button class="icon-btn" title={$t.prevStep} aria-label={$t.prevStep} disabled={i === 0} onclick={() => go(i - 1)}>‹</button>
       <button
