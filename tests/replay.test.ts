@@ -1,7 +1,86 @@
 import { describe, expect, test } from 'vitest'
+import { apply, legalActions, sameCard, type State } from '../src/engine'
 import { addHistory, readHistory } from '../src/lib/history'
 import { KJN_MAX_CHARS, loadKjn, parseKjn, readKjnFile, replayKjn, replaySteps, serializeKjn } from '../src/lib/kjn'
+import { ownDecisions, replayMoves } from '../src/lib/replay'
 import { finishedMatch, memoryStore } from './helpers'
+
+/** Options of `seat` in `s`, trick acknowledgements done first. */
+function options(s: State, seat: number): number {
+  if (s.phase === 'PLAYING') for (const x of [0, 1, 2, 3]) if (!s.trickAcks.includes(x)) s = apply(s, { type: 'ack', seat: x })
+  return legalActions(s, seat).filter((a) => a.type !== 'ack').length
+}
+
+describe('replayMoves', () => {
+  test('groups every action per hand with its step, trick winners and own flags', () => {
+    for (const seed of [3, 7]) {
+      const { match, steps } = loadKjn(finishedMatch(seed).kjn)
+      const my = seed % 4
+      const hands = replayMoves(match, steps, my)
+      expect(hands).toHaveLength(match.hands.length)
+      expect(hands[0].start).toBe(0)
+      expect(hands.at(-1)!.end).toBe(steps.length - 1)
+
+      hands.forEach((h, i) => {
+        const kh = match.hands[i]
+        expect(h.n).toBe(i + 1)
+        if (i > 0) expect(h.start).toBe(hands[i - 1].end + 1)
+        expect(steps[h.start].handNumber).toBe(h.n)
+        expect(steps[h.start].phase).toBe('BIDDING_R1')
+
+        // Item count per hand.
+        expect(h.bids).toHaveLength(kh.auction.flat().length + (kh.choice !== undefined ? 1 : 0) + (kh.troefke ? 1 : 0))
+        expect(h.tricks).toHaveLength(kh.contract ? 6 : 0)
+        for (const t of h.tricks) expect(t.items).toHaveLength(4)
+
+        // Step per item: one after the other, from the deal to the end of the hand.
+        const items = [...h.bids, ...h.tricks.flatMap((t) => t.items)]
+        expect(items.map((x) => x.step)).toEqual(items.map((_, j) => h.start + 1 + j))
+        expect(h.end).toBe(h.start + items.length)
+
+        for (const x of items) {
+          expect(x.own).toBe(x.seat === my)
+          if (x.action.type === 'play') {
+            const card = x.action.card
+            expect(steps[x.step - 1].hands[x.seat].some((c) => sameCard(c, card))).toBe(true)
+            expect(steps[x.step].hands[x.seat].some((c) => sameCard(c, card))).toBe(false)
+          }
+        }
+
+        // Trick winners: the winner leads the next trick, and the counts match the engine.
+        h.tricks.forEach((t, j) => {
+          expect(t.items.filter((x) => x.winner).map((x) => x.seat)).toEqual([t.winner])
+          if (j < 5) expect(h.tricks[j + 1].leader).toBe(t.winner)
+        })
+        if (kh.contract) expect(h.tricksWon).toEqual(steps[h.end].tricksWon)
+        expect(h.lines).toEqual(steps[h.end].lines)
+      })
+    }
+  })
+
+  test('own decisions are the own steps with more than one legal action', () => {
+    let skipped = 0
+    for (const seed of [3, 7]) {
+      const { match, steps } = loadKjn(finishedMatch(seed).kjn)
+      const my = seed % 4
+      const hands = replayMoves(match, steps, my)
+      const expected: number[] = []
+      for (const h of hands)
+        for (const x of [...h.bids, ...h.tricks.flatMap((t) => t.items)]) {
+          if (!x.own) continue
+          if (x.action.type === 'troefke' || options(steps[x.step - 1], my) > 1) expected.push(x.step - 1)
+          else skipped++
+        }
+      const own = ownDecisions(hands)
+      expect(own).toEqual(expected)
+      expect(own.length).toBeGreaterThan(0)
+      // Each one is a state where the own seat acts next.
+      for (const d of own) expect(options(steps[d], my)).toBeGreaterThan(0)
+    }
+    // Forced cards (one legal card) are left out.
+    expect(skipped).toBeGreaterThan(0)
+  })
+})
 
 describe('replaySteps', () => {
   test('gives the state after every recorded action and ends where replayKjn ends', () => {
