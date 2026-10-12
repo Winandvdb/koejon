@@ -60,7 +60,6 @@
               class="mv-item mv-bid {x.rating?.cls ?? ''}"
               class:own={x.own}
               class:current={step === x.step}
-              class:next={step === x.step - 1}
               data-step={x.step}
               onclick={() => ongo(x.step)}
             >
@@ -81,7 +80,6 @@
                   class:own={x.own}
                   class:win={x.winner}
                   class:current={step === x.step}
-                  class:next={step === x.step - 1}
                   class:red={isRedSuit(c.s)}
                   data-step={x.step}
                   title="{names[x.seat]}{x.winner ? ` · ${$t.trickWon}` : ''}"

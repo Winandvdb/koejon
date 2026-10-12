@@ -2107,12 +2107,6 @@ button.tag {
   outline-offset: 1px;
 }
 
-/* The move to be made from the shown position. */
-.mv-item.next {
-  outline: 2px dashed var(--gold);
-  outline-offset: 1px;
-}
-
 .mv-rate {
   font-size: 0.75rem;
 }
