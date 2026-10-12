@@ -85,7 +85,8 @@
                   title="{names[x.seat]}{x.winner ? ` · ${$t.trickWon}` : ''}"
                   onclick={() => ongo(x.step)}
                 >
-                  <span class="mv-c">{c.r}{SUIT_GLYPH[c.s]}{#if x.winner}<span aria-label={$t.trickWon}> ✓</span>{/if}</span>
+                  <span class="mv-c">{c.r}{SUIT_GLYPH[c.s]}</span>
+                  {#if x.winner}<span class="mv-win" aria-label={$t.trickWon}>✓</span>{/if}
                   <span class="mv-seat">{names[x.seat]}</span>
                   {@render rating(x)}
                 </button>
