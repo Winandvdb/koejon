@@ -127,7 +127,10 @@
   ])
   $effect(() => {
     // Off stops the work too: the queue can hold every step of the match.
-    analyzer?.want(analysis ? [i, ...summaries.flatMap((x) => x.steps)] : [])
+    // Read the state before `analyzer?.`: while it is null, `?.` skips the
+    // arguments, and an effect that read no state never runs again.
+    const wanted = analysis ? [i, ...summaries.flatMap((x) => x.steps)] : []
+    analyzer?.want(wanted)
   })
   const ratings = $derived(analysis ? rated.get(i) : undefined)
   const ratingOf = (seat: number): RatingClass | undefined => ratings?.find((r) => r.seat === seat)?.rating
