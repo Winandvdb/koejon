@@ -1,7 +1,7 @@
 import { apply, createMatch, legalActions, pendingSeats, rngShuffle } from '../src/engine'
 import type { Action, Card, State, Suit, TrickCard } from '../src/engine'
 import { botAction, createBot } from '../src/bots/bot'
-import type { BotLevel } from '../src/bots/bot'
+import type { Bot, BotLevel } from '../src/bots/bot'
 import type { BotTrace } from '../src/bots/algorithm'
 import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
 import type { KeyValueStore } from '../src/lib/storage'
@@ -24,23 +24,23 @@ export function finishedMatch(seed: number): { final: State; kjn: string } {
 }
 
 /**
- * Seed scan: play seeded matches of `heuristic:<level>` bots and show `visit`
- * every action with the state before it and the bot's trace notes. A scan
+ * Seed scan: play seeded matches of `heuristic:<level>` bots (or `bot`) and
+ * show `visit` every action with the state before it and the bot's trace. A scan
  * finds situations that are rare in a hand-played game, in the real game flow.
  */
 export function scanMatches(
   level: BotLevel,
   seeds: number,
-  visit: (s: State, a: Action, notes: string[]) => void,
+  visit: (s: State, a: Action, notes: string[], trace: BotTrace) => void,
+  bot: Bot = createBot(`heuristic:${level}`),
 ): void {
-  const bot = createBot(`heuristic:${level}`)
   for (let seed = 1; seed <= seeds; seed++) {
     let s = createMatch(seed)
     const rand = seededRandom(seed * 7919 + 13)
     while (s.phase !== 'GAME_OVER') {
       const trace: BotTrace = { candidates: [], notes: [] }
       const a = bot.decide(s, pendingSeats(s)[0], rand, trace)
-      visit(s, a, trace.notes)
+      visit(s, a, trace.notes, trace)
       s = apply(s, a)
     }
   }

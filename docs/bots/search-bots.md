@@ -119,6 +119,24 @@ The `pimc` column agrees with #178 (39% and 26%), so the probe measures the same
   heuristic card usually has enough visits (under 50 in less than 2% of the cases), so a
   margin is possible, but it needs a real margin: exact ties are rare.
 
+### The anchor in `pimc` (#178)
+
+`pimc` got the options `anchor` and `margin`: it plays the anchor's card unless its own best
+card is more than `margin` lines better on the same worlds. Each margin with
+`anchor: 'heuristic:hard'` and the `hard` worlds (`samples` 10, `partnerSamples` 2):
+
+| Margin | Another card than `heuristic:hard` | Another card with other worlds | Win rate against the `hard` level without anchor (1000 matches) |
+|---|---|---|---|
+| none | 39.2% | 25.9% | – |
+| 0 | 27.4% | 23.7% | 49.6% ± 3.1% |
+| 0.1 | 22.8% | 19.6% | 49.1% ± 3.1% |
+| 0.25 | 20.5% | 18.9% | 48.2% ± 3.1% |
+| 0.5 | 11.3% | 12.0% | 40.6% ± 3.0% |
+
+The first two columns come from 8 seeded matches per margin, all four seats with the
+anchored bot. A margin of 0.5 fails the bench rule: the small gains add up over a match. The
+`hard` level uses 0.25 (`HARD_ANCHOR_MARGIN`), the largest margin tried that passes.
+
 ## 6. Decision
 
 The `hard` level stays on `pimc` with `heuristic:hard` bids:

@@ -1,6 +1,6 @@
 import { partnerOf, RANK_ORDER, RANK_POINTS, rngNext, sameCard } from '../engine'
 import type { Action, Suit } from '../engine'
-import type { Algorithm, BotTrace } from './algorithm'
+import type { Algorithm, AlgorithmSpec, BotTrace } from './algorithm'
 import { troefkeHand, troefkeLead, troefkeWeight } from './conventions'
 import { sampleWorld } from './determinize'
 import { decisionPhase, observe } from './observation'
@@ -25,9 +25,17 @@ function cost(a: Action, trump: Suit | null): number {
 // Moved to the shared conventions; still exported here for older imports.
 export { troefkeWeight } from './conventions'
 
+/** The card of another algorithm that pimc keeps unless its best card is more than `margin` lines better on average. */
+interface Anchor {
+  algorithm: Algorithm
+  margin: number
+}
+
 /**
  * Score `candidates` over `samples` worlds with `valueOf` and pick the best
- * average; the trace lists them best first, so its first one is the choice.
+ * average; the trace lists them best first, so its first one is the choice,
+ * except when `anchored` (an index into `candidates`, its candidate note
+ * ending in `, anchor`) is kept: then a note says so.
  */
 function best(
   obs: Observation,
@@ -35,6 +43,7 @@ function best(
   samples: number,
   valueOf: () => number[],
   trace?: BotTrace,
+  anchored?: { id: string; index: number; margin: number },
 ): Action {
   const sum = candidates.map(() => 0)
   const min = candidates.map(() => Infinity)
@@ -55,16 +64,25 @@ function best(
         action: candidates[i],
         score: sum[i] / samples,
         visits: samples,
-        note: `min ${min[i]} max ${max[i]}`,
+        note: `min ${min[i]} max ${max[i]}${anchored?.index === i ? ', anchor' : ''}`,
       })
     }
     trace.notes.push(`pimc: ${samples} worlds, best average ${(sum[order[0]] / samples).toFixed(2)}`)
   }
-  return candidates[order[0]]
+  if (!anchored) return candidates[order[0]]
+  const gain = (sum[order[0]] - sum[anchored.index]) / samples
+  const keep = gain <= anchored.margin
+  trace?.notes.push(`anchor ${anchored.id} ${cardText(candidates[anchored.index])}: ${keep ? 'kept' : 'replaced'}, pimc +${gain.toFixed(2)} ${keep ? '<=' : '>'} margin ${anchored.margin}`)
+  return candidates[keep ? anchored.index : order[0]]
 }
 
-/** The card with the best average over `samples` worlds that fit what the seat saw. */
-function playCard(obs: Observation, rand: () => number, samples: number, trace?: BotTrace): Action {
+const cardText = (a: Action): string => (a.type === 'play' ? `${a.card.r}${a.card.s}` : a.type)
+
+/**
+ * The card with the best average over `samples` worlds that fit what the seat
+ * saw; with an `anchor`, its card unless the best one beats it by more than the margin.
+ */
+function playCard(obs: Observation, rand: () => number, samples: number, trace?: BotTrace, anchor?: Anchor): Action {
   let candidates = obs.legal
   if (troefkeLead(obs)) {
     candidates = candidates.filter((a) => a.type === 'play' && a.card.s === obs.trump)
@@ -74,8 +92,20 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
       return candidates[0]
     }
   }
+  // The anchor sees only this observation and draws from the same `rand`, so a seed still repeats.
+  const card = anchor?.algorithm.supports(obs) ? anchor.algorithm.decide(obs, rand) : undefined
+  const index = card ? candidates.findIndex((a) => samePlay(a, card)) : -1
+  const anchored = anchor && index >= 0 ? { id: anchor.algorithm.id, index, margin: anchor.margin } : undefined
+  if (anchor && !anchored) trace?.notes.push(`anchor ${anchor.algorithm.id}: ${card ? `${cardText(card)} not a candidate` : 'no card'}, pimc decides`)
   const weight = troefkeWeight(obs)
-  return best(obs, candidates, samples, () => solve(sampleWorld(obs, rand, weight), obs.seat, candidates).map((v) => v.value), trace)
+  return best(
+    obs,
+    candidates,
+    samples,
+    () => solve(sampleWorld(obs, rand, weight), obs.seat, candidates).map((v) => v.value),
+    trace,
+    anchored,
+  )
 }
 
 /**
@@ -144,22 +174,44 @@ const samePlay = (a: Action, b: Action): boolean =>
  * with heuristic:hard bids (#86).
  *
  * Options: `samples`, the worlds per decision; `partnerSamples`, the worlds
- * the partner samples for its lead in a troefke decision.
+ * the partner samples for its lead in a troefke decision; `anchor`, an
+ * algorithm spec whose card it plays unless its own best card is more than
+ * `margin` lines (default 0: the anchor wins the ties) better on the same
+ * worlds. The anchor makes the card play more predictable: with few worlds
+ * many choices are close to a coin flip (#178). It plays cards only: not the
+ * troefke, and not the partner model inside it.
  */
-export function createPimc(variant: string | undefined, options: Record<string, unknown>): Algorithm {
+export function createPimc(
+  variant: string | undefined,
+  options: Record<string, unknown>,
+  create: (spec: AlgorithmSpec) => Algorithm,
+): Algorithm {
   if (variant !== undefined) throw new Error(`unknown pimc variant: ${variant}`)
   for (const [k, v] of Object.entries(options)) {
+    if (k === 'anchor') {
+      if (typeof v !== 'string' && (typeof v !== 'object' || v === null)) throw new Error('pimc option anchor must be an algorithm spec')
+      continue
+    }
+    if (k === 'margin') {
+      if (typeof v !== 'number' || !(v >= 0)) throw new Error('pimc option margin must be a number >= 0')
+      if (options.anchor === undefined) throw new Error('pimc option margin needs an anchor')
+      continue
+    }
     if (k !== 'samples' && k !== 'partnerSamples') throw new Error(`unknown pimc option: ${k}`)
     if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) throw new Error(`pimc option ${k} must be a positive integer`)
   }
   const samples = (options.samples as number | undefined) ?? PIMC_SAMPLES
   const partnerSamples = (options.partnerSamples as number | undefined) ?? PIMC_PARTNER_SAMPLES
+  const anchor: Anchor | undefined =
+    options.anchor === undefined
+      ? undefined
+      : { algorithm: create(options.anchor as AlgorithmSpec), margin: (options.margin as number | undefined) ?? 0 }
   return {
     id: 'pimc',
     supports: (obs) => decisionPhase(obs) === 'play' || obs.legal.some((a) => a.type === 'troefke'),
     decide(obs: Observation, rand: () => number, trace?: BotTrace): Action {
       if (obs.legal.some((a) => a.type === 'troefke')) return askTroefke(obs, rand, samples, partnerSamples, trace)
-      return playCard(obs, rand, samples, trace)
+      return playCard(obs, rand, samples, trace, anchor)
     },
   }
 }
