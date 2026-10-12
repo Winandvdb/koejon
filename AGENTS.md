@@ -67,6 +67,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `quotes.ts` — table talk: `activeQuotes` finds candidates, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
 - `i18n.ts` — all UI text, Dutch (`nl`, default) and English (`en`). **Rule:** every new UI string goes in both languages.
 - `table.ts` — what the live table and the replay both show (bids, bubbles, trick shown, fly directions). **Rule:** public state only; both screens call these, never copy them.
+- `replay.ts` — the replay's move list model: `replayMoves` (per hand its bids and tricks, each item with its step in `replaySteps`, trick winner, own flag, `rating` slot for move ratings) and `ownDecisions` (own steps with more than one legal action). **Rule:** pure, no DOM; `tests/replay.test.ts` checks it.
 - `prefs.ts`, `theme.ts` — per-device preferences as stores that save every change. **Rule:** use `safeStorage`. Components use the stores, never the keys (`koejon-name`, `koejon-bot-level`, `koejon-lang`, `koejon-sort-mode`, `koejon-theme`). Keep the keys: saved values must stay valid.
 - `storage.ts` — `safeStorage` (never throws), `KeyValueStore`, `readJson`. **Rule:** use it for app storage; never touch `localStorage` outside a try/catch.
 - `devsettings.ts` — dev build test shortcuts (`DevPanel.svelte`). **Rules:** production builds use `DEV_DEFAULTS`. The host uploads no KJN record for a match with another tree length or with autoplay.
@@ -75,7 +76,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 
 ### Other paths
 
-- `src/components/` — Svelte UI. `App.svelte`: startup and routing. `Table.svelte`: the game table. `Replay.svelte`: read-only replay. `Nameplate`, `Avatar`, `TurnedCards`, `Opponent`, `TrickArea` and `ResultPanel` are shared by both. **Rules:** must work at phone width. Replay sends no intents and uses no network. A change to a table part goes in the shared component, not in one screen.
+- `src/components/` — Svelte UI. `App.svelte`: startup and routing. `Table.svelte`: the game table. `Replay.svelte`: read-only replay in a game-review layout (table plus a panel with `ReplayOverview` and `ReplayMoves`). `Nameplate`, `Avatar`, `TurnedCards`, `Opponent`, `TrickArea` and `ResultPanel` are shared by both. **Rules:** must work at phone width. Replay sends no intents and uses no network. A change to a table part goes in the shared component, not in one screen.
 - `src/app.css` — all styles and colour tokens.
 - `public/` — manifest, icons (`icon.svg` is the source of the PNGs), `robots.txt`. Copied to `dist/` as is.
 - `pwa/` — service worker template and precache list; dev build name and icons. **Rule:** the worker never caches other origins (Firebase). Registered in production builds only.
