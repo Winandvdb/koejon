@@ -2231,51 +2231,23 @@ button.tag {
   color: var(--muted);
 }
 
-/* The rated move: class at top left, seat name at top right, the move in the centre. */
+/* The rated move on one line; the card itself is on the table. */
 .an-move {
-  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 4px 0;
-}
-
-.an-rate {
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-
-.an-who {
-  position: absolute;
-  top: 0;
-  right: 0;
-  max-width: 40%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.an-card {
-  --cw: 52px;
-  width: var(--cw);
-  height: calc(var(--cw) * 1.4);
-}
-
-.an-card > * {
-  width: 100%;
-  height: 100%;
-}
-
-.an-bid {
-  font-weight: 800;
-  font-size: 1.05rem;
-  padding: 6px 0 2px;
+  gap: 6px;
 }
 
 .an-verdict {
-  text-align: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.an-who {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .an-values {

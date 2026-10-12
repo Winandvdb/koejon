@@ -229,17 +229,12 @@
       {/if}
       {#each ratings ?? [] as r (r.seat)}
         <div class="an-move">
-          <span class="chip rate rate-{r.rating} an-rate" title={rateName[r.rating]}>{RATING_GLYPH[r.rating]}</span>
-          <b class="an-who">{seats[r.seat].name}</b>
-          {#if r.played.type === 'play'}
-            <div class="an-card"><CardView card={r.played.card} /></div>
-          {:else}
-            <div class="an-bid">{actionLabel(r.played)}</div>
-          {/if}
-          <div class="an-verdict">
+          <span class="chip rate rate-{r.rating}" title={rateName[r.rating]}>{RATING_GLYPH[r.rating]}</span>
+          <span class="an-verdict">
             {rateName[r.rating]}
             {#if r.loss > 0}<span class="an-muted">({signed(-r.loss)} {$t.lostLines})</span>{/if}
-          </div>
+          </span>
+          <b class="an-who">{seats[r.seat].name}</b>
         </div>
         {#if r.kind === 'play'}
           <div class="an-values">
