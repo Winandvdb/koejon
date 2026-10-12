@@ -2165,10 +2165,6 @@ button.tag {
   background: var(--rate-blunder);
 }
 
-.mv-card {
-  position: relative;
-}
-
 /* On a card, the class badge sits inside its top left corner. */
 .mv-card.rated .mv-rate {
   position: absolute;
