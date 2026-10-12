@@ -146,7 +146,7 @@
       const step = rated.get(x.step)
       if (!step) return x
       const c = step.find((r) => r.seat === x.seat && sameAction(r.played, x.action))?.rating
-      if (!c) return { ...x, rating: { cls: 'rated rated-forced', icon: '✓', label: $t.noChoice } }
+      if (!c) return { ...x, rating: { cls: 'rated rated-forced', icon: '–', label: $t.noChoice } }
       return { ...x, rating: { cls: `rated rated-${c}`, icon: RATING_GLYPH[c], label: rateName[c] } }
     }
     return moves.map((h) => ({

@@ -2167,7 +2167,8 @@ button.tag {
 
 /* A forced move: only one legal option, nothing to judge. */
 .mv-item.rated-forced .mv-rate {
-  background: var(--rate-best);
+  background: var(--muted);
+  opacity: 0.7;
 }
 
 /* On a card, the class badge sits inside its top left corner. */
