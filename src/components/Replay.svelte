@@ -115,45 +115,39 @@
   const bidsShown = $derived(showBids(pub))
 
   // Move ratings: computed in a worker, only for the steps on screen.
-  let analysis = $state(false)
-  let analyzer: Analyzer | null = null
+  let analyzer = $state.raw<Analyzer | null>(null)
   let rated = $state.raw(new Map<number, Rating[]>())
   let failed = $state(false)
-  function toggleAnalysis() {
-    analysis = !analysis
-    if (analysis && !analyzer) {
-      const worker = new Worker(new URL('../lib/analysis-worker.ts', import.meta.url), { type: 'module' })
-      analyzer = new Analyzer(worker, kjn)
-      analyzer.results.subscribe((m) => (rated = new Map(m)))
-      analyzer.failed.subscribe((f) => (failed = f))
-    }
-  }
-  $effect(() => () => analyzer?.stop())
+  $effect(() => {
+    const a = new Analyzer(new Worker(new URL('../lib/analysis-worker.ts', import.meta.url), { type: 'module' }), kjn)
+    const offResults = a.results.subscribe((m) => (rated = new Map(m)))
+    const offFailed = a.failed.subscribe((f) => (failed = f))
+    analyzer = a
+    return () => (offResults(), offFailed(), a.stop())
+  })
 
   const range = (from: number, to: number) => Array.from({ length: to - from }, (_, k) => from + k)
   const handSteps = $derived(range(starts[hand - 1], starts[hand] ?? steps.length))
-  const handEnd = $derived(i === handSteps.at(-1))
-  /** Summaries to show here: the hand at its last step, and the match at the very end. */
+  const handStart = $derived(i === handSteps[0])
+  /** Summaries to show here: the hand at its start (its header in the move list), and the match at the very end. */
   const summaries = $derived([
-    ...(handEnd ? [{ title: $t.thisHand, steps: handSteps }] : []),
+    ...(handStart ? [{ title: $t.thisHand, steps: handSteps }] : []),
     ...(i === last ? [{ title: $t.wholeMatch, steps: range(0, steps.length) }] : []),
   ])
   $effect(() => {
-    // Off stops the work too: the queue can hold every step of the match.
-    // Read the state before `analyzer?.`: while it is null, `?.` skips the
-    // arguments, and an effect that read no state never runs again.
-    const wanted = analysis ? [i, ...(tab === 'moves' ? handSteps : []), ...summaries.flatMap((x) => x.steps)] : []
-    analyzer?.want(wanted)
+    analyzer?.want([i, ...(tab === 'moves' ? handSteps : []), ...summaries.flatMap((x) => x.steps)])
   })
-  const ratings = $derived(analysis ? rated.get(i) : undefined)
+  const ratings = $derived(rated.get(i))
   const ratingOf = (seat: number): RatingClass | undefined => ratings?.find((r) => r.seat === seat)?.rating
   const rateName = $derived(ratingNames($t))
   // The move list shows the class of each rated item in its rating slot.
   const ratedMoves = $derived.by((): MoveHand[] => {
-    if (!analysis) return moves
     const rate = (x: MoveItem): MoveItem => {
-      const c = rated.get(x.step)?.find((r) => r.seat === x.seat && sameAction(r.played, x.action))?.rating
-      return c ? { ...x, rating: { cls: `rated rated-${c}`, icon: RATING_GLYPH[c], label: rateName[c] } } : x
+      const step = rated.get(x.step)
+      if (!step) return x
+      const c = step.find((r) => r.seat === x.seat && sameAction(r.played, x.action))?.rating
+      if (!c) return { ...x, rating: { cls: 'rated rated-forced', icon: '✓', label: $t.noChoice } }
+      return { ...x, rating: { cls: `rated rated-${c}`, icon: RATING_GLYPH[c], label: rateName[c] } }
     }
     return moves.map((h) => ({
       ...h,
@@ -224,7 +218,7 @@
         <div class="an-muted">{$t.analysisFailed}</div>
       {:else if !ratings}
         <div class="an-muted"><span class="spinner"></span> {$t.analysing}</div>
-      {:else if ratings.length === 0}
+      {:else if ratings.length === 0 && !handStart}
         <div class="an-muted">{$t.noChoice}</div>
       {/if}
       {#each ratings ?? [] as r (r.seat)}
@@ -346,9 +340,6 @@
         onclick={() => (sheetOpen = !sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button
       >
       <span class="replay-title" title="{$t.replayOf} {label}"><b>{$t.replayOf}</b> {label}</span>
-      <button class="btn tiny analysis-toggle" class:on={analysis} aria-pressed={analysis} onclick={toggleAnalysis}>
-        {$t.analysis}
-      </button>
       <div class="replay-menu" bind:this={menu}>
         <button
           class="icon-btn"
@@ -402,7 +393,7 @@
           <ReplayMoves hands={ratedMoves} names={seatNames} step={i} {hand} ongo={go} />
         {/if}
       </div>
-      {#if analysis && tab === 'moves'}{@render analysisPanel()}{/if}
+      {#if tab === 'moves'}{@render analysisPanel()}{/if}
     </div>
 
     <div class="replay-controls">

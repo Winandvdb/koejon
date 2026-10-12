@@ -2165,6 +2165,11 @@ button.tag {
   background: var(--rate-blunder);
 }
 
+/* A forced move: only one legal option, nothing to judge. */
+.mv-item.rated-forced .mv-rate {
+  background: var(--rate-best);
+}
+
 /* On a card, the class badge sits inside its top left corner. */
 .mv-card.rated .mv-rate {
   position: absolute;
@@ -2174,16 +2179,6 @@ button.tag {
 }
 
 /* ---------- Replay analysis ---------- */
-
-.analysis-toggle.on {
-  background: var(--accent);
-  color: var(--accent-contrast);
-  border-color: transparent;
-}
-
-.replay-head .analysis-toggle {
-  margin: 0 4px;
-}
 
 .analysis-panel {
   flex: none;
@@ -2257,29 +2252,33 @@ button.tag {
 }
 
 .an-val {
-  border: 1px solid var(--border);
+  border: 2px solid var(--border);
   border-radius: 8px;
   padding: 1px 6px;
   white-space: nowrap;
 }
 
-/* Played: solid green border. Best: gold dotted outline. A played best move shows both. */
+/* Played: solid green border. Best: gold dotted border. Played and best: both, green inside. */
 .an-val.played,
-.an-bids tr.played {
+.an-bids tr.played td {
   border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
   font-weight: 800;
 }
 
 .an-val.best,
-.an-bids tr.best {
-  outline: 2px dotted var(--gold);
-  outline-offset: 2px;
+.an-bids tr.best td {
+  border-style: dotted;
+  border-color: var(--gold);
 }
 
-.an-bids tr.played,
-.an-bids tr.best {
-  border-radius: 6px;
+.an-val.played.best,
+.an-bids tr.played.best td {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.an-bids td {
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
 }
 
 .an-bids,
