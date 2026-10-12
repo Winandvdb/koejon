@@ -89,7 +89,6 @@
   const moves = $derived(replayMoves(match, steps, my))
   const own = $derived(ownDecisions(moves))
   const prevOwn = $derived(own.findLast((d) => d < i))
-  const nextOwn = $derived(own.find((d) => d > i))
   const seatNames = $derived(seats.map((x) => x.name))
 
   // The overview comes first; a chosen hand or the start opens the move list.
@@ -273,13 +272,6 @@
       >
       <button class="icon-btn" title={$t.nextStep} aria-label={$t.nextStep} disabled={i === last} onclick={() => go(i + 1)}>›</button>
       <button class="icon-btn" title={$t.nextHand} aria-label={$t.nextHand} disabled={i === last} onclick={nextHand}>⏭</button>
-      <button
-        class="icon-btn"
-        title={$t.nextOwn}
-        aria-label={$t.nextOwn}
-        disabled={nextOwn === undefined}
-        onclick={() => nextOwn !== undefined && go(nextOwn)}>⇥</button
-      >
     </div>
   </aside>
 </div>
