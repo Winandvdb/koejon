@@ -2154,6 +2154,18 @@ button.tag {
   background: var(--rate-blunder);
 }
 
+.mv-card {
+  position: relative;
+}
+
+/* On a card, the class badge sits in its top left corner. */
+.mv-card.rated .mv-rate {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  font-size: 0.65rem;
+}
+
 /* ---------- Replay analysis ---------- */
 
 .analysis-toggle.on {
@@ -2167,7 +2179,11 @@ button.tag {
 }
 
 .analysis-panel {
-  margin-bottom: 8px;
+  flex: none;
+  max-height: 45%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 10px 8px;
   padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -2208,11 +2224,51 @@ button.tag {
   color: var(--muted);
 }
 
+/* The rated move: class at top left, seat name at top right, the move in the centre. */
 .an-move {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  gap: 4px 6px;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.an-rate {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.an-who {
+  position: absolute;
+  top: 0;
+  right: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.an-card {
+  --cw: 52px;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.4);
+}
+
+.an-card > * {
+  width: 100%;
+  height: 100%;
+}
+
+.an-bid {
+  font-weight: 800;
+  font-size: 1.05rem;
+  padding: 6px 0 2px;
+}
+
+.an-verdict {
+  text-align: center;
 }
 
 .an-values {

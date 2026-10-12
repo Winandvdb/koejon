@@ -229,9 +229,17 @@
       {/if}
       {#each ratings ?? [] as r (r.seat)}
         <div class="an-move">
-          <span class="chip rate rate-{r.rating}">{RATING_GLYPH[r.rating]}</span>
-          <b>{seats[r.seat].name}</b>: {actionLabel(r.played)} · {rateName[r.rating]}
-          {#if r.loss > 0}<span class="an-muted">({signed(-r.loss)} {$t.lostLines})</span>{/if}
+          <span class="chip rate rate-{r.rating} an-rate" title={rateName[r.rating]}>{RATING_GLYPH[r.rating]}</span>
+          <b class="an-who">{seats[r.seat].name}</b>
+          {#if r.played.type === 'play'}
+            <div class="an-card"><CardView card={r.played.card} /></div>
+          {:else}
+            <div class="an-bid">{actionLabel(r.played)}</div>
+          {/if}
+          <div class="an-verdict">
+            {rateName[r.rating]}
+            {#if r.loss > 0}<span class="an-muted">({signed(-r.loss)} {$t.lostLines})</span>{/if}
+          </div>
         </div>
         {#if r.kind === 'play'}
           <div class="an-values">
@@ -396,10 +404,10 @@
             onstart={startReplay}
           />
         {:else}
-          {#if analysis}{@render analysisPanel()}{/if}
           <ReplayMoves hands={ratedMoves} names={seatNames} step={i} {hand} ongo={go} />
         {/if}
       </div>
+      {#if analysis && tab === 'moves'}{@render analysisPanel()}{/if}
     </div>
 
     <div class="replay-controls">
