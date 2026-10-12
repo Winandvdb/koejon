@@ -84,7 +84,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `rules/` — game rules (NL, EN), shown in the app.
 - `RULE_ASSUMPTIONS.md` — rule choices the rules text does not specify. **Rule:** add an entry when you decide a new rule detail.
 - `firestore.rules` — deployed by CI from `main` only. **Rules:** prod, dev and PR previews share one database, so a rules change must accept every write of every build still in use. Keep the rules to auth, ownership, write-once and size limits; check the exact data shape in tests. To make a rule stricter, first release a build that writes the new shape, then tighten the rule in a later release.
-- `docs/bots/` — bot measurements and the choices made from them (`search-bots.md`: why the `hard` level uses `pimc`). **Rule:** read it before you change the algorithm of a level; add new bench results when they change a choice.
+- `docs/bots/` — bot measurements and the choices made from them (`search-bots.md`: why the `hard` level uses `pimc`; `levels.md`: the targets for the gaps between the levels). **Rule:** read it before you change the algorithm of a level; add new bench results when they change a choice.
 - `docs/spikes/` — the result of a spike (issue label `question`) is a write-up here, not code: `<issue>-<slug>.md`.
 - `IMPLEMENTATION_PROMPT.md` — the original build spec. Historical: where it differs, the code and README are correct.
 
