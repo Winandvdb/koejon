@@ -2158,11 +2158,11 @@ button.tag {
   position: relative;
 }
 
-/* On a card, the class badge sits in its top left corner. */
+/* On a card, the class badge sits inside its top left corner. */
 .mv-card.rated .mv-rate {
   position: absolute;
-  top: -5px;
-  left: -5px;
+  top: 2px;
+  left: 2px;
   font-size: 0.65rem;
 }
 
