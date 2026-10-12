@@ -89,6 +89,8 @@ describe('the hard level bot', () => {
     const a = hard.decide(s, seat, seededRandom(1), tr)
     expect(tr.algorithm).toBe(algorithm)
     expect(botAction(s, seat, seededRandom(1), 'hard')).toEqual(a)
+    // Its cards are anchored to the heuristic card, its troefke is not.
+    expect(tr.notes.some((n) => n.startsWith('anchor heuristic:hard'))).toBe(a.type === 'play')
     // Two troefke searches: seconds on a loaded runner.
   }, 60_000)
 })

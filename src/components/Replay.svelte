@@ -8,12 +8,15 @@
   import { arrangeHand, cardKey, sortMode } from '../lib/prefs'
   import type { SeatInfo } from '../lib/net-types'
   import { isPlaying, lastBids, showBids, sideOf, troefkeBubble } from '../lib/table'
+  import { replayMoves, type MoveHand, type MoveItem } from '../lib/replay'
   import CardView from './CardView.svelte'
   import Boomke from './Boomke.svelte'
   import InfoPanel from './InfoPanel.svelte'
   import Nameplate from './Nameplate.svelte'
   import Opponent from './Opponent.svelte'
   import ResultPanel from './ResultPanel.svelte'
+  import ReplayMoves from './ReplayMoves.svelte'
+  import ReplayOverview from './ReplayOverview.svelte'
   import TrickArea from './TrickArea.svelte'
   import TurnedCards from './TurnedCards.svelte'
 
@@ -85,6 +88,16 @@
   const prevHand = () => go(i > starts[hand - 1] ? starts[hand - 1] : (starts[hand - 2] ?? 0))
   const nextHand = () => go(starts[hand] ?? last)
 
+  const moves = $derived(replayMoves(match, steps, my))
+  const seatNames = $derived(seats.map((x) => x.name))
+
+  // The overview comes first; a chosen hand or the start opens the move list.
+  let tab = $state<'overview' | 'moves'>('overview')
+  // Phones: the panel is a bottom sheet that can fold away for more table.
+  let sheetOpen = $state(true)
+  const openHand = (h: MoveHand) => (go(h.start), (tab = 'moves'), (sheetOpen = true))
+  const startReplay = () => (go(0), (tab = 'moves'), (sheetOpen = true))
+
   let auto = $state(false)
   $effect(() => {
     if (!auto) return
@@ -129,12 +142,25 @@
     // Off stops the work too: the queue can hold every step of the match.
     // Read the state before `analyzer?.`: while it is null, `?.` skips the
     // arguments, and an effect that read no state never runs again.
-    const wanted = analysis ? [i, ...summaries.flatMap((x) => x.steps)] : []
+    const wanted = analysis ? [i, ...(tab === 'moves' ? handSteps : []), ...summaries.flatMap((x) => x.steps)] : []
     analyzer?.want(wanted)
   })
   const ratings = $derived(analysis ? rated.get(i) : undefined)
   const ratingOf = (seat: number): RatingClass | undefined => ratings?.find((r) => r.seat === seat)?.rating
   const rateName = $derived(ratingNames($t))
+  // The move list shows the class of each rated item in its rating slot.
+  const ratedMoves = $derived.by((): MoveHand[] => {
+    if (!analysis) return moves
+    const rate = (x: MoveItem): MoveItem => {
+      const c = rated.get(x.step)?.find((r) => r.seat === x.seat && sameAction(r.played, x.action))?.rating
+      return c ? { ...x, rating: { cls: `rated rated-${c}`, icon: RATING_GLYPH[c], label: rateName[c] } } : x
+    }
+    return moves.map((h) => ({
+      ...h,
+      bids: h.bids.map(rate),
+      tricks: h.tricks.map((tr) => ({ ...tr, items: tr.items.map(rate) })),
+    }))
+  })
   const kindRows = $derived([['bidding', $t.biddingLabel], ['play', $t.cardsLabel]] as const)
 
   function actionLabel(a: Action): string {
@@ -192,54 +218,8 @@
   }}
 />
 
-<div class="table-wrap replay">
-  <div class="replay-bar">
-    <span class="replay-title" title="{$t.replayOf} {label}"><b>{$t.replayOf}</b> {label}</span>
-    <div class="replay-controls">
-      <button class="icon-btn" title={$t.prevHand} aria-label={$t.prevHand} disabled={i === 0} onclick={prevHand}>⏮</button>
-      <button class="icon-btn" title={$t.prevStep} aria-label={$t.prevStep} disabled={i === 0} onclick={() => go(i - 1)}>‹</button>
-      <button
-        class="icon-btn"
-        title={auto ? $t.pause : $t.autoPlay}
-        aria-label={auto ? $t.pause : $t.autoPlay}
-        disabled={!auto && i === last}
-        onclick={() => (auto = !auto)}>{auto ? '⏸' : '▶'}</button
-      >
-      <button class="icon-btn" title={$t.nextStep} aria-label={$t.nextStep} disabled={i === last} onclick={() => go(i + 1)}>›</button>
-      <button class="icon-btn" title={$t.nextHand} aria-label={$t.nextHand} disabled={i === last} onclick={nextHand}>⏭</button>
-      <span class="replay-label">{$t.hand} {hand} {$t.of} {match.hands.length}</span>
-    </div>
-    <div class="replay-end">
-      <button class="btn tiny analysis-toggle" class:on={analysis} aria-pressed={analysis} onclick={toggleAnalysis}>
-        {$t.analysis}
-      </button>
-      <div class="replay-menu" bind:this={menu}>
-        <button
-          class="icon-btn"
-          title={$t.moreActions}
-          aria-label={$t.moreActions}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onclick={() => (menuOpen = !menuOpen)}>⋯</button
-        >
-        {#if menuOpen}
-          <div class="replay-menu-pop panel" role="menu">
-            <button class="btn tiny" role="menuitem" onclick={() => ((menuOpen = false), downloadKjn(kjn, at))}>
-              {$t.download}
-            </button>
-            <button class="btn tiny" role="menuitem" onclick={() => ((menuOpen = false), fileInput?.click())}>
-              {$t.openKjn}
-            </button>
-          </div>
-        {/if}
-        <input bind:this={fileInput} type="file" accept=".kjn" hidden onchange={openFile} />
-      </div>
-      <button class="icon-btn" title={$t.close} aria-label={$t.close} onclick={onclose}>✕</button>
-    </div>
-  </div>
-  {#if error}<div class="alert replay-alert">{error}</div>{/if}
-  {#if analysis}
-    <div class="panel analysis-panel" aria-live="polite">
+{#snippet analysisPanel()}
+  <div class="analysis-panel" aria-live="polite">
       {#if failed}
         <div class="an-muted">{$t.analysisFailed}</div>
       {:else if !ratings}
@@ -311,10 +291,11 @@
           </tbody>
         </table>
       {/each}
-    </div>
-  {/if}
+  </div>
+{/snippet}
 
-  <div class="table">
+<div class="replay" class:sheet-closed={!sheetOpen}>
+  <div class="table replay-board">
     <div class="felt">
       <InfoPanel {pub} {seats} {myTeam} opts={{ info: true, score: true }} />
       <Boomke marks={pub.marks} {myTeam} phase={pub.phase} />
@@ -351,4 +332,88 @@
       </div>
     </div>
   </div>
+
+  <aside class="replay-side">
+    <div class="replay-head">
+      <button
+        class="icon-btn replay-fold"
+        title={sheetOpen ? $t.minimize : $t.expand}
+        aria-label={sheetOpen ? $t.minimize : $t.expand}
+        aria-expanded={sheetOpen}
+        onclick={() => (sheetOpen = !sheetOpen)}>{sheetOpen ? '▾' : '▴'}</button
+      >
+      <span class="replay-title" title="{$t.replayOf} {label}"><b>{$t.replayOf}</b> {label}</span>
+      <button class="btn tiny analysis-toggle" class:on={analysis} aria-pressed={analysis} onclick={toggleAnalysis}>
+        {$t.analysis}
+      </button>
+      <div class="replay-menu" bind:this={menu}>
+        <button
+          class="icon-btn"
+          title={$t.moreActions}
+          aria-label={$t.moreActions}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onclick={() => (menuOpen = !menuOpen)}>⋯</button
+        >
+        {#if menuOpen}
+          <div class="replay-menu-pop panel" role="menu">
+            <button class="btn tiny" role="menuitem" onclick={() => ((menuOpen = false), downloadKjn(kjn, at))}>
+              {$t.download}
+            </button>
+            <button class="btn tiny" role="menuitem" onclick={() => ((menuOpen = false), fileInput?.click())}>
+              {$t.openKjn}
+            </button>
+          </div>
+        {/if}
+        <input bind:this={fileInput} type="file" accept=".kjn" hidden onchange={openFile} />
+      </div>
+      <button class="icon-btn" title={$t.close} aria-label={$t.close} onclick={onclose}>✕</button>
+    </div>
+    {#if error}<div class="alert replay-alert">{error}</div>{/if}
+
+    <div class="replay-sheet">
+      <div class="replay-tabs">
+        <div class="segmented" role="tablist">
+          <button role="tab" aria-selected={tab === 'overview'} class:active={tab === 'overview'} onclick={() => (tab = 'overview')}
+            >{$t.overview}</button
+          >
+          <button role="tab" aria-selected={tab === 'moves'} class:active={tab === 'moves'} onclick={() => (tab = 'moves')}
+            >{$t.moves}</button
+          >
+        </div>
+        <span class="replay-label">{$t.hand} {hand} {$t.of} {match.hands.length}</span>
+      </div>
+      <div class="replay-body">
+        {#if tab === 'overview'}
+          <ReplayOverview
+            {match}
+            hands={moves}
+            names={seatNames}
+            {myTeam}
+            {hand}
+            startLines={[steps[0].lines[0], steps[0].lines[1]]}
+            onhand={openHand}
+            onstart={startReplay}
+          />
+        {:else}
+          {#if analysis}{@render analysisPanel()}{/if}
+          <ReplayMoves hands={ratedMoves} names={seatNames} step={i} {hand} ongo={go} />
+        {/if}
+      </div>
+    </div>
+
+    <div class="replay-controls">
+      <button class="icon-btn" title={$t.prevHand} aria-label={$t.prevHand} disabled={i === 0} onclick={prevHand}>⏮</button>
+      <button class="icon-btn" title={$t.prevStep} aria-label={$t.prevStep} disabled={i === 0} onclick={() => go(i - 1)}>‹</button>
+      <button
+        class="icon-btn"
+        title={auto ? $t.pause : $t.autoPlay}
+        aria-label={auto ? $t.pause : $t.autoPlay}
+        disabled={!auto && i === last}
+        onclick={() => (auto = !auto)}>{auto ? '⏸' : '▶'}</button
+      >
+      <button class="icon-btn" title={$t.nextStep} aria-label={$t.nextStep} disabled={i === last} onclick={() => go(i + 1)}>›</button>
+      <button class="icon-btn" title={$t.nextHand} aria-label={$t.nextHand} disabled={i === last} onclick={nextHand}>⏭</button>
+    </div>
+  </aside>
 </div>

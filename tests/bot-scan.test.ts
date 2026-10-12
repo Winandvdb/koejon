@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
-import { createBot } from '../src/bots/bot'
+import { createBot, HARD_ANCHOR_MARGIN, LEVEL_CONFIGS } from '../src/bots/bot'
 import { troefkeHand } from '../src/bots/conventions'
 import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
 import { seededRandom } from '../src/lib/seed'
@@ -102,6 +102,24 @@ describe('bot seed scans', () => {
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 
+  it('easy: a lead with a side ace in hand cashes an ace, unless it pulls with the boss trump', () => {
+    let found = 0
+    scanMatches('easy', SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || notes.includes('lazy dump') || s.trick.length > 0) return
+      const trump = s.trump!
+      const seat = a.seat
+      const hand = s.hands[seat]
+      if (hand.length < 2 || !hand.some((c) => c.r === 'A' && c.s !== trump)) return
+      if (s.troefkeAsked && s.tricksPlayed === 0 && seat === partnerOf(s.bidder!)) return
+      found++
+      // Easy remembers nothing: a boss trump tops every trump outside its hand, played or not.
+      const outside = RANKS.filter((r) => !hand.some((c) => c.s === trump && c.r === r))
+      const boss = a.card.s === trump && outside.every((r) => RANK_ORDER[r] < RANK_ORDER[a.card.r])
+      expect(a.card.r === 'A' || boss, `lead ${a.card.r}${a.card.s} (${notes.join('; ')}), seed scan at easy`).toBe(true)
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
   it.each(LEVELS)('%s: overtakes the partner with the led suit, not a trump', (level) => {
     let found = 0
     scanMatches(level, SEEDS, (s, a, notes) => {
@@ -165,4 +183,27 @@ describe('bot seed scans', () => {
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
+
+  it('hard level: a card other than the anchor card beats it by more than the margin', () => {
+    // pimc is slow: few seeds, but every card decision counts.
+    let found = 0
+    let kept = 0
+    const hard = createBot(LEVEL_CONFIGS.hard)
+    scanMatches('hard', 2, (s, a, notes, trace) => {
+      const anchor = trace.candidates.find((c) => c.note?.endsWith(', anchor'))
+      if (a.type !== 'play' || !anchor) return
+      const note = notes.find((n) => n.startsWith('anchor heuristic:hard '))
+      const gain = trace.candidates[0].score! - anchor.score!
+      if (JSON.stringify(anchor.action) === JSON.stringify(a)) {
+        expect(gain, note).toBeLessThanOrEqual(HARD_ANCHOR_MARGIN)
+        kept++
+      } else {
+        found++
+        expect(a, note).toEqual(trace.candidates[0].action)
+        expect(gain, note).toBeGreaterThan(HARD_ANCHOR_MARGIN)
+      }
+    }, hard)
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+    expect(kept).toBeGreaterThan(found)
+  }, 300_000)
 })
