@@ -3,7 +3,6 @@ import type { Card, Rank, Suit, TrickCard } from './types'
 export const SUITS: Suit[] = ['S', 'H', 'D', 'C']
 export const RANKS: Rank[] = ['9', '10', 'J', 'Q', 'K', 'A']
 
-/** Trick rank strength, low to high: 9=1 .. A=6. */
 export const RANK_ORDER: Record<Rank, number> = {
   '9': 1,
   '10': 2,
@@ -27,6 +26,8 @@ export function fullDeck(): Card[] {
   for (const s of SUITS) for (const r of RANKS) deck.push({ s, r })
   return deck
 }
+
+export const isRedSuit = (s: Suit): boolean => s === 'H' || s === 'D'
 
 export function sameCard(a: Card, b: Card): boolean {
   return a.s === b.s && a.r === b.r

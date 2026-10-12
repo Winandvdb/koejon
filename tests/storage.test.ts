@@ -1,7 +1,7 @@
 import { get } from 'svelte/store'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { safeStorage } from '../src/lib/storage'
-import { blockStorage } from './helpers'
+import { readJson, safeStorage } from '../src/lib/storage'
+import { blockStorage, memoryStore } from './helpers'
 
 const thrower = () => {
   throw new DOMException('Quota exceeded', 'QuotaExceededError')
@@ -10,6 +10,34 @@ const thrower = () => {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.resetModules()
+})
+
+describe('readJson', () => {
+  test('gives the stored value', () => {
+    const store = memoryStore()
+    store.setItem('k', '{"a":1}')
+    expect(readJson(store, 'k', null)).toEqual({ a: 1 })
+  })
+
+  test('gives the fallback for a missing or broken value', () => {
+    const store = memoryStore()
+    expect(readJson(store, 'k', [])).toEqual([])
+    store.setItem('k', '{broken')
+    expect(readJson(store, 'k', 'fallback')).toBe('fallback')
+  })
+
+  test('gives the fallback when the store throws', () => {
+    expect(readJson({ getItem: thrower, setItem: thrower, removeItem: thrower }, 'k', 7)).toBe(7)
+  })
+
+  test('gives the fallback when storage is blocked', () => {
+    const restore = blockStorage()
+    try {
+      expect(readJson(safeStorage, 'k', 'fallback')).toBe('fallback')
+    } finally {
+      restore()
+    }
+  })
 })
 
 describe('blocked storage', () => {
@@ -42,6 +70,12 @@ describe('blocked storage', () => {
       const { sortMode } = await import('../src/lib/prefs')
       expect(get(sortMode)).toBeNull()
       expect(() => sortMode.set('high')).not.toThrow()
+      const { lang, botLevel, playerName } = await import('../src/lib/prefs')
+      expect(get(lang)).toBe('nl')
+      expect(get(botLevel)).toBe('normal')
+      expect(() => lang.set('en')).not.toThrow()
+      expect(() => botLevel.set('hard')).not.toThrow()
+      expect(() => playerName.set('Jef')).not.toThrow()
     } finally {
       restore()
     }

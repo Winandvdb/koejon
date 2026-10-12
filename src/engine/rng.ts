@@ -12,11 +12,6 @@ export function rngInt(holder: { rng: number }, n: number): number {
   return Math.floor(rngNext(holder) * n)
 }
 
-/** Uniform integer in [lo, hi] inclusive. */
-export function rngRange(holder: { rng: number }, lo: number, hi: number): number {
-  return lo + rngInt(holder, hi - lo + 1)
-}
-
 /** In-place Fisher-Yates shuffle. */
 export function rngShuffle<T>(holder: { rng: number }, arr: T[]): T[] {
   for (let i = arr.length - 1; i > 0; i--) {

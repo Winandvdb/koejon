@@ -12,8 +12,7 @@ Transport (`src/lib/transport.ts`):
 - **Multiplayer**: each guest opens a WebRTC data channel to the host (`link-p2p.ts`); Firestore
   carries only the lobby view and signaling (`rooms/{code}/rtc/{uid}`, ~2 writes per connect).
   A guest whose channel does not open (strict NAT, no WebRTC) falls back to the Firestore path
-  (`link-firestore.ts`) automatically. Load the page with `?p2p=off` to force that fallback
-  for that tab (kept across refreshes; `?p2p=on` undoes it). The console logs `[p2p] on/off`.
+  (`link-firestore.ts`) automatically. A browser without WebRTC uses the Firestore path from the start.
   Optional TURN relay: set `VITE_TURN_URL`, `VITE_TURN_USER`, `VITE_TURN_CRED`.
 - The host keeps the full engine state in its own `localStorage` for reload recovery.
 
@@ -35,6 +34,34 @@ npm run build     # svelte-check + production build
 
 `npm test` also picks up `tests/e2e.emulator.test.ts` when the Firestore emulator is
 reachable on `127.0.0.1:8180`; it skips cleanly when no emulator is running.
+
+## See why a bot chose an action
+
+```bash
+npm run bot:trace -- --seed 5                          # whole match, all seats, heuristic:normal
+npm run bot:trace -- --seed 5 --seats 0 --hand 2       # only seat 0, only hand 2
+npm run bot:trace -- --seed 5 --bot bots/mine.json --others heuristic:easy --from 40 --to 90
+npm run bot:trace -- --seed 5 --json > trace.jsonl     # one JSON object per decision
+```
+
+It plays the seeded match that `npm run bench` plays for that seed and prints each real
+decision: own hand, trick, trump, turned cards, lines, legal actions, the bot rule and
+algorithm that decided, its trace (candidates best first, notes) and the chosen action,
+with a summary line after each trick and hand. The same seed and options give the same
+output.
+
+- `--bot <spec>`: an algorithm id (`heuristic:hard`), inline JSON or the path of a bot
+  configuration file. Default `heuristic:normal`.
+- `--seats 0,1`: the seats that play `--bot` and print. The other seats play `--others`
+  (default: `--bot`). Without `--seats` all four seats play `--bot`; with `--others` only
+  seats 0 and 2 do.
+- `--from` / `--to`: first and last step to show. A step is one engine action of the
+  match, counted from 1 (lifts, deals and confirmations included).
+- `--hand <n>`: only that hand (the engine's hand counter; a redeal after all passed is a
+  hand of its own).
+- `--json`: decisions only, as JSON lines.
+
+Colour is used only when stdout is a terminal (and `NO_COLOR` is not set).
 
 ## Local development (Firebase Emulator Suite, no credentials needed)
 
@@ -104,22 +131,35 @@ To point the CLI at a different project, edit `.firebaserc` or run `firebase use
   cards, seeded RNG, dealer draw, dealing, bidding, legal-play rules (follow suit,
   no-underbuy, trump-led), trick resolution, boomke scoring, match end.
 - `src/bots/` — bot heuristics that only ever pick from `legalActions`.
-- `src/lib/` — `firebase.ts` (init + emulator auto-connect), `room.ts` (client session:
-  room/hand subscriptions, intents), `host.ts` (`HostGame`: authoritative loop, bot
-  scheduling, action-doc processing, heartbeat).
-- `src/components/` — Svelte UI: home, lobby, table, boomke scoreboard, log, rules dialog.
-- Firestore layout: `rooms/{code}` (public state), `rooms/{code}/hands/{uid}` (private
-  hands; `hands/host` holds bot hands), `rooms/{code}/actions/{uid}` (player intents),
-  `rooms/{code}/engine/state` (host-only serialized engine state for recovery),
-  `games/{id}` (finished matches as KJN/1 records, write-only; see below).
+- `src/lib/` — `host.ts` (`HostGame`: authoritative loop, bot scheduling, intent
+  processing, heartbeat), `room.ts` (client session: view, intents), the links
+  (`link-local.ts`, `link-p2p.ts`, `link-firestore.ts`, behind `transport.ts`),
+  `firebase.ts` (init + emulator auto-connect), and the match records: `kjn.ts`,
+  `history.ts`, `stats.ts`, `download.ts`. The `AGENTS.md` code map lists every module.
+- `src/components/` — Svelte UI: home, lobby, table, boomke scoreboard, log, rules dialog,
+  replay viewer.
+- Firestore layout: `rooms/{code}` (lobby view and public state), `rooms/{code}/hands/{uid}`
+  (private hands; `hands/host` holds bot hands), `rooms/{code}/rtc/{uid}` (WebRTC
+  signaling: the guest's offer and the host's answer), `rooms/{code}/actions/{uid}`
+  (player intents, fallback path only), `rooms/{code}/engine/state` (host-only serialized
+  engine state for recovery), `games/{id}` (finished matches as KJN/1 records,
+  write-only; see below).
 
-### Firestore data flow
+### Data flow
 
-1. A client writes `actions/{uid}` with an intent (join, leave, act).
-2. The host's snapshot listener queues it, validates it through the engine (`apply`)
-   and writes the new public state + hand docs + engine snapshot in one batch, then
-   deletes the intent doc.
-3. All clients render from the `rooms/{code}` snapshot plus their own hand doc.
+1. A guest joins the room and writes `rtc/{uid}` with a WebRTC offer. The host
+   writes its answer into the same doc. The SDPs carry all ICE candidates, so this
+   takes about two writes per connect.
+2. Over the data channel the guest sends intents (join, leave, act). The host
+   validates each one through the engine (`apply`) and sends the new public state and
+   that guest's hand back over the same channel. No Firestore traffic for game moves.
+3. Firestore keeps the lobby view (`rooms/{code}`) and the heartbeat, so a guest can
+   find the room before a channel exists.
+4. A guest whose channel does not open within a timeout falls back to Firestore. It
+   writes `actions/{uid}` with its intents. The host queues them, applies them, and
+   writes the public state, hand docs and engine snapshot in one batch. It then
+   deletes the intent doc. This guest renders from the `rooms/{code}` snapshot plus
+   its own hand doc. Other guests of the same room stay on their channel.
 
 If the host disconnects the room shows a "host left" state (no host migration — known
 limitation). Reconnects resume from the Firestore snapshot; a host reload restores the
@@ -129,8 +169,8 @@ host's kick button (lobby seat list or in-game nameplate).
 
 ## Game records (KJN/1)
 
-Every finished match, multiplayer and solo, is stored once as a KJN/1 record, for
-later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
+Every finished match that a human played to the end, multiplayer and solo, is
+stored once as a KJN/1 record, for later analysis and bot work. Code: `src/lib/kjn.ts` (record, `serializeKjn`,
 `parseKjn`, `replayKjn`).
 
 ### Format
@@ -181,7 +221,8 @@ KJN/1 sample that must keep parsing to the same text.
 
 ### The `games` collection
 
-At `GAME_OVER` the host queues one document `games/{random id}`:
+At `GAME_OVER` the host queues one document `games/{random id}` (except for the
+matches under "Not stored" below):
 `format`, `app`, `seats`, `winner`, `hands` (count) and `kjn` (the full text, about
 6 KB; at most 100 000 characters). The in-progress record lives next to the engine
 state in the host's `localStorage` (`koejon-kjn-<code>`), so a host reload loses
@@ -197,8 +238,12 @@ Solo play stays offline; only the finished match is uploaded, signing in first
 when the match started offline. If the queue is lost while offline (storage
 cleared), the record is lost, which is acceptable.
 
-Not stored: unfinished matches, matches the host began on an older build, and
-bot-only matches from tests or `npm run bench`.
+Not stored: unfinished matches, matches the host began on an older build,
+bot-only matches from tests or `npm run bench`, and matches that no human played
+to the end. At `GAME_OVER` at least one seat must still be `human`; a seat that
+changed hands is `mixed` and does not count. Without such a seat the host makes
+no record at all: no upload and no `room.kjn`, so also no local history entry and
+no download.
 
 The rules check only what every build must keep: signed in, create only (the app
 cannot read, change or delete games), at most 12 fields, a `format` of the form

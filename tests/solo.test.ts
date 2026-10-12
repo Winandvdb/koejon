@@ -1,12 +1,12 @@
 import * as firestore from 'firebase/firestore'
 import { describe, expect, test, vi } from 'vitest'
-import { botAction } from '../src/bots/bot'
+import { botAction, BOT_LEVELS } from '../src/bots/bot'
 import { HostGame, type HostOptions } from '../src/lib/host'
 import { QUOTES } from '../src/lib/quotes'
-import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
+import { addSoloBots, localLinks, SOLO_CODE } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
 import { seededRandom } from '../src/lib/seed'
-import { safeStorage } from '../src/lib/storage'
+import { safeStorage, type KeyValueStore } from '../src/lib/storage'
 import { blockStorage, failLocks, memoryStore, until } from './helpers'
 
 // Spies on every Firestore read and write the app uses, so a test can prove
@@ -71,6 +71,18 @@ async function open(
 }
 
 describe('offline solo', () => {
+  test.each(BOT_LEVELS)('addSoloBots: partner at hard, opponents at %s', async (level) => {
+    const g = await open(memoryStore(), true)
+    addSoloBots(g.host, level)
+    await until(() => g.view()?.room?.seats.filter(Boolean).length === 4)
+    const seats = g.view()!.room!.seats
+    expect(seats[1]?.botLevel).toBe(level)
+    expect(seats[2]?.botLevel).toBe('hard')
+    expect(seats[3]?.botLevel).toBe(level)
+    await g.host.destroyRoom()
+    g.close()
+  })
+
   test('plays a full match, survives a reload mid-game', async () => {
     const storage = memoryStore()
     const first = await open(storage, true)
@@ -92,7 +104,9 @@ describe('offline solo', () => {
     await second.host.destroyRoom()
     second.close()
     expect(localLinks(UID, storage)).toBeNull()
-    expect(storage.getItem(`koejon-engine-${SOLO_CODE}`)).toBeNull()
+    for (const key of ['engine', 'seq', 'quotes', 'seats', 'kjn', 'kjn-final']) {
+      expect(storage.getItem(`koejon-${key}-${SOLO_CODE}`)).toBeNull()
+    }
     // A whole solo match, reload included, never touched Firestore.
     const { getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot } = firestore
     for (const f of [getDoc, setDoc, updateDoc, deleteDoc, writeBatch, onSnapshot]) expect(f).not.toHaveBeenCalled()

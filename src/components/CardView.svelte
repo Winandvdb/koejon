@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Card } from '../engine'
+  import { isRedSuit, type Card } from '../engine'
   import { SUIT_GLYPH } from '../lib/i18n'
 
   let { card = null }: { card?: Card | null } = $props()
 
-  const red = $derived(!!card && (card.s === 'H' || card.s === 'D'))
+  const red = $derived(!!card && isRedSuit(card.s))
   const court = $derived(!!card && (card.r === 'J' || card.r === 'Q' || card.r === 'K'))
 </script>
 

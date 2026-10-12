@@ -6,7 +6,8 @@ import { addHistory, HISTORY_KEY, HISTORY_MAX, readHistory } from '../src/lib/hi
 import { HostGame } from '../src/lib/host'
 import type { GameDoc } from '../src/lib/kjn'
 import { FirestoreGuestLink, FirestoreHostLink } from '../src/lib/link-firestore'
-import { localLinks, SOLO_CODE, type KeyValueStore } from '../src/lib/link-local'
+import { localLinks, SOLO_CODE } from '../src/lib/link-local'
+import type { KeyValueStore } from '../src/lib/storage'
 import { P2PGuestLink, P2PHostLink } from '../src/lib/link-p2p'
 import type { HandDoc, RoomDoc } from '../src/lib/net-types'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
@@ -228,14 +229,14 @@ describe('host sends the record at GAME_OVER', () => {
     const published: RoomUpdate[] = []
     const link: HostLink = {
       ...links.host,
-      saveGame: async (_id, g) => void games.push(g),
       publish: async (u, h) => {
         published.push(structuredClone(u))
         await links.host.publish(u, h)
       },
     }
     const session = new RoomSession(SOLO_CODE, ME, links.guest, link, history)
-    const host = await HostGame.attach(SOLO_CODE, ME, link, { storage, botDelay: () => 0, drawLingerMs: 0, bidLingerMs: 0, dealLingerMs: 0 })
+    const save = async (_id: string, g: GameDoc) => void games.push(g)
+    const host = await HostGame.attach(SOLO_CODE, ME, link, { storage, botDelay: () => 0, drawLingerMs: 0, bidLingerMs: 0, dealLingerMs: 0, saveGame: save })
     host.onError = (e) => {
       throw e
     }
@@ -265,9 +266,9 @@ describe('host sends the record at GAME_OVER', () => {
     host.dispose()
     session.dispose()
     const links2 = localLinks(ME, storage)!
-    const link2: HostLink = { ...links2.host, saveGame: async () => {} }
+    const link2 = links2.host
     const session2 = new RoomSession(SOLO_CODE, ME, links2.guest, link2, history)
-    const host2 = await HostGame.attach(SOLO_CODE, ME, link2, { storage, botDelay: () => 0 })
+    const host2 = await HostGame.attach(SOLO_CODE, ME, link2, { storage, botDelay: () => 0, saveGame: async () => {} })
     await until(() => (get(session2.room)?.seq ?? 0) > published.at(-1)!.seq!)
     expect(get(session2.room)!.kjn).toBe(games[0].kjn)
     expect(readHistory(history)).toHaveLength(1)

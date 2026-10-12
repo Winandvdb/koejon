@@ -6,16 +6,18 @@ import {
   RANK_ORDER,
   trickWinnerIndex,
 } from '../src/engine'
-import type { State } from '../src/engine'
-import { botAction, BOT_LEVELS, type BotLevel } from '../src/bots/bot'
-import { mulberry } from './helpers'
+import type { Action, State } from '../src/engine'
+import { botAction, BOT_LEVELS, createBot } from '../src/bots/bot'
+import { seededRandom } from '../src/lib/seed'
 
 const MATCHES = 60
 const STEP_CAP = 20000
 
-function runMatch(seed: number, level: BotLevel): { state: State; steps: number; hands: number } {
+type Decide = (s: State, seat: number, rand: () => number) => Action
+
+function runMatch(seed: number, decide: Decide): { state: State; steps: number; hands: number } {
   let s = createMatch(seed)
-  const rand = mulberry(seed * 7919 + 13)
+  const rand = seededRandom(seed * 7919 + 13)
   let steps = 0
   let lastTrickSeen = 0
 
@@ -24,7 +26,7 @@ function runMatch(seed: number, level: BotLevel): { state: State; steps: number;
     const seats = pendingSeats(s)
     if (seats.length === 0) throw new Error(`match ${seed} stalled in ${s.phase}`)
     // Act with the first pending seat (others wait for the next step).
-    const a = botAction(s, seats[0], rand, level)
+    const a = decide(s, seats[0], rand)
     // No-underbuy invariant: a lower trump is never played while the seat can
     // follow the led suit and a trump already lies in the trick.
     if (a.type === 'play' && s.trick.length > 0) {
@@ -65,11 +67,13 @@ function runMatch(seed: number, level: BotLevel): { state: State; steps: number;
 }
 
 describe('bot-vs-bot simulation', () => {
-  it.each(BOT_LEVELS)(`terminates ${MATCHES} complete matches of %s bots with all invariants`, (level) => {
+  // The heuristic of every level: the `hard` level bot plays pimc, too slow for 60 matches (below).
+  it.each(BOT_LEVELS)(`terminates ${MATCHES} complete matches of heuristic:%s bots with all invariants`, (level) => {
+    const bot = createBot(`heuristic:${level}`)
     let totalHands = 0
     const wins = [0, 0]
     for (let seed = 1; seed <= MATCHES; seed++) {
-      const { state, hands } = runMatch(seed, level)
+      const { state, hands } = runMatch(seed, (s, seat, rand) => bot.decide(s, seat, rand))
       totalHands += hands
       expect(state.winner).not.toBeNull()
       wins[state.winner!]++
@@ -78,5 +82,25 @@ describe('bot-vs-bot simulation', () => {
     // sanity: both teams won some matches (bots are roughly symmetric)
     expect(wins[0]).toBeGreaterThan(0)
     expect(wins[1]).toBeGreaterThan(0)
+  }, 120_000)
+
+  it('terminates complete matches of the hard level bot (pimc card play) against heuristic:hard with all invariants', () => {
+    const hard = createBot('heuristic:hard')
+    for (const seed of [1, 2, 3]) {
+      const { state } = runMatch(seed, (s, seat, rand) =>
+        seat % 2 === 0 ? botAction(s, seat, rand, 'hard') : hard.decide(s, seat, rand),
+      )
+      expect(state.winner).not.toBeNull()
+    }
+  }, 120_000)
+
+  it.each(['mcts', 'ismcts'])('terminates complete matches of %s against heuristic:hard with all invariants', (id) => {
+    // Bids and cards: the whole hand is in the tree.
+    const search = createBot({ id, iterations: 20 })
+    const hard = createBot('heuristic:hard')
+    for (const seed of [1, 2]) {
+      const { state } = runMatch(seed, (s, seat, rand) => (seat % 2 === 0 ? search : hard).decide(s, seat, rand))
+      expect(state.winner).not.toBeNull()
+    }
   }, 120_000)
 })

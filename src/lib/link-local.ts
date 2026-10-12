@@ -1,12 +1,21 @@
+import type { BotLevel } from '../bots/bot'
+import type { HostGame } from './host'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
+import { readJson, type KeyValueStore } from './storage'
 import type { GuestEvents, GuestLink, HostLink } from './transport'
 
 /** Room code of the one offline solo room per browser. */
 export const SOLO_CODE = 'SOLO'
 
-const KEY = 'koejon-solo'
+/** The empty seats of a solo room: the partner (seat 2) always plays hard,
+ *  the two opponents at the chosen level. */
+export function addSoloBots(host: HostGame, level: BotLevel): void {
+  host.addBot(1, level)
+  host.addBot(2, 'hard')
+  host.addBot(3, level)
+}
 
-export type KeyValueStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
+const KEY = 'koejon-solo'
 
 interface Saved {
   room: RoomDoc
@@ -77,11 +86,4 @@ export function localLinks(
   return { host, guest }
 }
 
-function read(storage: KeyValueStore): Saved | null {
-  try {
-    const json = storage.getItem(KEY)
-    return json ? (JSON.parse(json) as Saved) : null
-  } catch {
-    return null
-  }
-}
+const read = (storage: KeyValueStore) => readJson<Saved | null>(storage, KEY, null)

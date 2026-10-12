@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'vitest'
+import { get } from 'svelte/store'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { arrangeHand, cardKey, moveCard } from '../src/lib/prefs'
-import { C } from './helpers'
+import { C, memoryStore } from './helpers'
 
 const hand = [C('H', '9'), C('S', 'K'), C('H', 'A'), C('S', '9'), C('D', 'J'), C('H', '10')]
 const keys = (cs: ReturnType<typeof C>[]) => cs.map(cardKey)
@@ -64,5 +65,59 @@ describe('moveCard', () => {
   test('moves forward and backward', () => {
     expect(moveCard(['a', 'b', 'c', 'd'], 0, 2)).toEqual(['b', 'c', 'a', 'd'])
     expect(moveCard(['a', 'b', 'c', 'd'], 3, 1)).toEqual(['a', 'd', 'b', 'c'])
+  })
+})
+
+describe('saved preferences', () => {
+  // A fresh module per test: the stores load their saved value on import.
+  const fresh = async (saved: Record<string, string> = {}) => {
+    const store = memoryStore()
+    for (const [k, v] of Object.entries(saved)) store.setItem(k, v)
+    vi.resetModules()
+    vi.stubGlobal('localStorage', store)
+    return { store, prefs: await import('../src/lib/prefs') }
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  test('without saved values: Dutch, normal bots, no name, no sort mode', async () => {
+    const { store, prefs } = await fresh()
+    expect(get(prefs.lang)).toBe('nl')
+    expect(get(prefs.botLevel)).toBe('normal')
+    expect(get(prefs.playerName)).toBe('')
+    expect(get(prefs.sortMode)).toBeNull()
+    expect(store.getItem('koejon-lang')).toBeNull()
+  })
+
+  test('the language survives a reload', async () => {
+    const first = await fresh()
+    first.prefs.lang.set('en')
+    expect(first.store.getItem('koejon-lang')).toBe('en')
+    const second = await fresh({ 'koejon-lang': 'en' })
+    expect(get(second.prefs.lang)).toBe('en')
+  })
+
+  test('values under the existing keys still load', async () => {
+    const { prefs } = await fresh({
+      'koejon-name': 'Jef',
+      'koejon-bot-level': 'hard',
+      'koejon-sort-mode': 'low',
+    })
+    expect(get(prefs.playerName)).toBe('Jef')
+    expect(get(prefs.botLevel)).toBe('hard')
+    expect(get(prefs.sortMode)).toBe('low')
+  })
+
+  test('unknown saved values fall back', async () => {
+    const { prefs } = await fresh({ 'koejon-lang': 'fr', 'koejon-bot-level': 'god', 'koejon-sort-mode': 'x' })
+    expect(get(prefs.lang)).toBe('nl')
+    expect(get(prefs.botLevel)).toBe('normal')
+    expect(get(prefs.sortMode)).toBeNull()
+  })
+
+  test('the name is saved', async () => {
+    const { store, prefs } = await fresh()
+    prefs.playerName.set('Jef')
+    expect(store.getItem('koejon-name')).toBe('Jef')
   })
 })

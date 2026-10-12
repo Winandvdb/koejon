@@ -1,5 +1,7 @@
-import { derived, writable } from 'svelte/store'
+import { derived } from 'svelte/store'
+import type { BotLevel } from '../bots/bot'
 import type { Card, Suit } from '../engine'
+import { lang } from './prefs'
 
 export type Lang = 'nl' | 'en'
 
@@ -14,7 +16,6 @@ const dict = {
     codePh: 'Kamercode',
     roomCode: 'Kamercode',
     lobby: 'Lobby',
-    addBot: 'Bot toevoegen',
     remove: 'Weg',
     shuffle: 'Schud zitplaatsen',
     moveHint: 'Tik op een speler, dan op een plek om te wisselen',
@@ -29,13 +30,14 @@ const dict = {
     hostElsewhere: 'Deze kamer is al open in een ander tabblad',
     you: 'jij',
     bot: 'bot',
+    botName: 'Bot',
+    language: 'Taal',
     botLevel: 'Botniveau',
+    opponentLevel: 'Niveau tegenstanders',
     lvlEasy: 'Makkelijk',
     lvlNormal: 'Normaal',
     lvlHard: 'Moeilijk',
     empty: 'leeg',
-    teamA: 'Team A',
-    teamB: 'Team B',
     drawForDealer: 'Trekken voor eerste deler',
     drawsNow: 'trekt een kaart…',
     cutTitle: 'Afpakken',
@@ -53,14 +55,10 @@ const dict = {
     pass: 'Pas',
     dealerChoice: 'Deler kiest',
     trump: 'Troef',
-    stake: 'Inzet',
-    level: 'Stap',
     turnedCard: 'Getoonde kaart',
-    secondCard: 'Tweede kaart',
     tricks: 'Slagen',
     points: 'Punten',
     yourTurn: 'Jij bent aan de beurt',
-    waiting: 'Wachten…',
     boomke: 'Boomke',
     koei: 'Koei',
     kapot: 'Kapot',
@@ -74,7 +72,6 @@ const dict = {
     rules: 'Regels',
     close: 'Sluiten',
     minimize: 'Inklappen',
-    noUnderbuy: 'niet onderkopen',
     newMatch: 'Nieuw spel',
     scored: 'Uitslag',
     erased: 'geveegd',
@@ -94,8 +91,6 @@ const dict = {
     devInteractiveDraws: 'Zelf trekken en afnemen',
     devAutoplay: 'Autoplay (4 bots)',
     devHostOnly: 'Telt alleen als jij de host bent.',
-    invite: 'Uitnodigen',
-    inviteLink: 'Uitnodigingslink',
     copy: 'Kopieer',
     copied: 'Gekopieerd!',
     lastTricks: 'Vorige slagen',
@@ -169,7 +164,6 @@ const dict = {
     codePh: 'Room code',
     roomCode: 'Room code',
     lobby: 'Lobby',
-    addBot: 'Add bot',
     remove: 'Remove',
     shuffle: 'Shuffle seats',
     moveHint: 'Tap a player, then a seat to swap',
@@ -184,13 +178,14 @@ const dict = {
     hostElsewhere: 'This room is already open in another tab',
     you: 'you',
     bot: 'bot',
+    botName: 'Bot',
+    language: 'Language',
     botLevel: 'Bot level',
+    opponentLevel: 'Opponent level',
     lvlEasy: 'Easy',
     lvlNormal: 'Normal',
     lvlHard: 'Hard',
     empty: 'empty',
-    teamA: 'Team A',
-    teamB: 'Team B',
     drawForDealer: 'Draw for first dealer',
     drawsNow: 'draws a card…',
     cutTitle: 'Cut the deck',
@@ -208,14 +203,10 @@ const dict = {
     pass: 'Pass',
     dealerChoice: 'Dealer chooses',
     trump: 'Trump',
-    stake: 'Stake',
-    level: 'Level',
     turnedCard: 'Turned card',
-    secondCard: 'Second card',
     tricks: 'Tricks',
     points: 'Points',
     yourTurn: 'Your turn',
-    waiting: 'Waiting…',
     boomke: 'Boomke',
     koei: 'Koei',
     kapot: 'Kapot',
@@ -229,7 +220,6 @@ const dict = {
     rules: 'Rules',
     close: 'Close',
     minimize: 'Minimize',
-    noUnderbuy: 'no underbuy',
     newMatch: 'New match',
     scored: 'Result',
     erased: 'erased',
@@ -249,8 +239,6 @@ const dict = {
     devInteractiveDraws: 'Draw and cut by hand',
     devAutoplay: 'Autoplay (4 bots)',
     devHostOnly: 'Counts only when you are the host.',
-    invite: 'Invite',
-    inviteLink: 'Invite link',
     copy: 'Copy',
     copied: 'Copied!',
     lastTricks: 'Last tricks',
@@ -318,8 +306,22 @@ const dict = {
 
 export type Dict = (typeof dict)['nl']
 
-export const lang = writable<Lang>('nl')
+// The language is a preference: prefs.ts owns the store and saves it.
+export { lang }
 export const t = derived(lang, (l) => dict[l])
+
+export const levelNames = (d: Record<'lvlEasy' | 'lvlNormal' | 'lvlHard', string>): Record<BotLevel, string> => ({
+  easy: d.lvlEasy,
+  normal: d.lvlNormal,
+  hard: d.lvlHard,
+})
+
+/** Locale for dates and numbers. */
+export const localeOf = (l: Lang) => (l === 'nl' ? 'nl-BE' : 'en-GB')
+
+/** Name of seat `i`; "Speler 1" / "Player 1" while the seat has none. */
+export const seatName = (d: { player: string }, name: string | null | undefined, i: number) =>
+  name || `${d.player} ${i + 1}`
 
 export const SUIT_GLYPH: Record<Suit, string> = { S: '♠', H: '♥', D: '♦', C: '♣' }
 
@@ -331,6 +333,3 @@ export function suitName(s: Suit, l: Lang): string {
   return names[l][s]
 }
 
-export function cardText(c: Card): string {
-  return `${SUIT_GLYPH[c.s]}${c.r}`
-}

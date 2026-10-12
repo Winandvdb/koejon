@@ -1,3 +1,4 @@
+import { dealOrder } from '../engine'
 import type { PublicState } from '../engine'
 
 /** One packet that goes onto the next deck: a team's trick pile (one card back
@@ -41,13 +42,14 @@ export interface DealPair {
 /** The deal as the engine does it (`doDeal`): 3 rounds of two cards to each
  *  seat, from the top of the deck, the dealer's left neighbour first. */
 export function dealPairs(dealer: number): DealPair[] {
+  const order = dealOrder(dealer)
   return Array.from({ length: 12 }, (_, i) => ({
-    seat: (dealer + 1 + (i % 4)) % 4,
+    seat: order[i % 4],
     from: [2 * i, 2 * i + 1],
   }))
 }
 
 /** The pair (index in `dealPairs`) that brings card `k` of `seat`'s dealt hand. */
 export function pairOfCard(dealer: number, seat: number, k: number): number {
-  return Math.floor(k / 2) * 4 + ((seat - dealer + 3) % 4)
+  return Math.floor(k / 2) * 4 + dealOrder(dealer).indexOf(seat)
 }

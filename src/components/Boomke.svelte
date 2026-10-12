@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../lib/i18n'
-  import { START_LINES, type BoomkeMark } from '../engine'
+  import { START_LINES, type BoomkeMark, type Phase } from '../engine'
 
   let {
     marks,
@@ -9,7 +9,7 @@
   }: {
     marks: BoomkeMark[]
     myTeam: number
-    phase: string
+    phase: Phase
   } = $props()
 
   /** Collapsed during play; opens automatically when a hand is scored. */
@@ -109,7 +109,6 @@
         <span>{$t.zij} <b>{remaining(1)}</b></span>
       </div>
       <svg width="140" height={H} viewBox="0 0 140 {H}" aria-hidden="true">
-    <!-- one shared trunk: just a vertical line -->
     <line x1={CX} y1={H - 6} x2={CX} y2={TOP - 4} class="trunk" />
     {#each [0, 1] as side (side)}
       {@const dir = side === 0 ? -1 : 1}

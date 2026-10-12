@@ -1,14 +1,10 @@
-import { getDoc, setDoc } from 'firebase/firestore'
 import { derived, get, writable, type Readable } from 'svelte/store'
 import { clientState, createMatch, legalActions, toPublic } from '../engine'
 import type { Action, Card, State } from '../engine'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
 import { DEFAULT_ROOM_OPTS } from './net-types'
-import { FirestoreGuestLink, roomRef } from './link-firestore'
-import { P2P_ENABLED, P2PGuestLink, P2PHostLink } from './link-p2p'
 import { addHistory } from './history'
-import type { KeyValueStore } from './link-local'
-import { safeStorage } from './storage'
+import { safeStorage, type KeyValueStore } from './storage'
 import type { GuestLink, HostLink } from './transport'
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
@@ -48,6 +44,7 @@ export function newRoomDoc(code: string, uid: string, name: string): RoomDoc {
     seats: [{ uid, name, bot: false }, null, null, null],
     pub: toPublic(createMatch(0)),
     version: 1,
+    seq: 0,
     heartbeat: Date.now(),
     opts: { ...DEFAULT_ROOM_OPTS },
   }
@@ -147,10 +144,8 @@ export class RoomSession {
    *  longer open, so it landed. A message lost on a weak connection gives no
    *  error of its own, so no such state in time rejects. */
   async act(action: Action): Promise<void> {
-    const before = get(this.room)?.seq
+    const before = get(this.room)?.seq ?? 0 // no room yet: any state is newer
     await this.send({ kind: 'act', action })
-    // A host without seq (older build) cannot confirm.
-    if (before === undefined) return
     const key = actionKey(action)
     await new Promise<void>((resolve, reject) => {
       let unsub = () => {}
@@ -180,18 +175,30 @@ export class RoomSession {
   }
 }
 
-function hostSession(code: string, uid: string): RoomSession {
+/** The networked room modules, loaded on first multiplayer use so that solo
+ *  play, the home screen and the replay never pull in the Firebase SDK. */
+const links = () => Promise.all([import('firebase/firestore'), import('./link-p2p'), import('./link-firestore')])
+
+async function readRoom(code: string) {
+  const [{ getDoc }, , { roomRef }] = await links()
+  return getDoc(roomRef(code))
+}
+
+async function hostSession(code: string, uid: string): Promise<RoomSession> {
+  const [, { P2PHostLink }] = await links()
   const link = new P2PHostLink(code, uid)
   return new RoomSession(code, uid, link.guest, link)
 }
 
-function guestSession(code: string, uid: string): RoomSession {
+async function guestSession(code: string, uid: string): Promise<RoomSession> {
+  const [, { P2P_ENABLED, P2PGuestLink }, { FirestoreGuestLink }] = await links()
   const link = P2P_ENABLED ? new P2PGuestLink(code, uid) : new FirestoreGuestLink(code, uid)
   return new RoomSession(code, uid, link)
 }
 
-/** Create a room and return a session. The caller becomes host seat 0. */
+/** The caller becomes host seat 0. */
 export async function createRoom(uid: string, name: string): Promise<RoomSession> {
+  const [{ getDoc, setDoc }, , { roomRef }] = await links()
   for (let tries = 0; tries < 10; tries++) {
     const code = makeCode()
     const ref = roomRef(code)
@@ -203,12 +210,23 @@ export async function createRoom(uid: string, name: string): Promise<RoomSession
   throw new Error('could not allocate a room code')
 }
 
-/** Join an existing room by code. */
 export async function joinRoom(code: string, uid: string, name: string): Promise<RoomSession> {
   code = code.trim().toUpperCase()
-  const snap = await getDoc(roomRef(code))
+  const snap = await readRoom(code)
   if (!snap.exists()) throw new Error('room-not-found')
+  return enterRoom(snap.data() as RoomDoc, code, uid, name)
+}
+
+/** Back into a room after a reload, with one read: null unless the seat is
+ *  still ours. A seat that turned bot meanwhile is reclaimed. */
+export async function resumeRoom(code: string, uid: string, name: string): Promise<RoomSession | null> {
+  const snap = await readRoom(code)
+  if (!snap.exists()) return null
   const room = snap.data() as RoomDoc
+  return seatOf(room, uid) >= 0 ? enterRoom(room, code, uid, name) : null
+}
+
+async function enterRoom(room: RoomDoc, code: string, uid: string, name: string): Promise<RoomSession> {
   // Back to our own room (reload): this tab hosts it again.
   if (room.hostUid === uid) return hostSession(code, uid)
   const si = seatOf(room, uid)
@@ -218,7 +236,7 @@ export async function joinRoom(code: string, uid: string, name: string): Promise
     if (room.pub && room.pub.phase !== 'LOBBY') throw new Error('room-started')
     if (room.seats.every((s) => s !== null)) throw new Error('room-full')
   }
-  const session = guestSession(code, uid)
+  const session = await guestSession(code, uid)
   await session.send({ kind: 'join', name })
   return session
 }

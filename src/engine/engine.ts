@@ -1,6 +1,6 @@
 import { fullDeck, RANK_ORDER, sameCard, trickPoints, trickWinnerIndex } from './cards'
 import { rngShuffle } from './rng'
-import type { Action, BoomkeMark, Card, State, Suit } from './types'
+import type { Action, BoomkeMark, Card, Phase, State, Suit } from './types'
 import { START_LINES } from './types'
 
 const freshMarks = (startLines: number): BoomkeMark[] =>
@@ -23,9 +23,19 @@ export class IllegalActionError extends Error {
 
 /** Teams are seats {0,2} and {1,3}. */
 export const teamOf = (seat: number) => seat % 2
-const leftOf = (seat: number) => (seat + 1) % 4
+export const leftOf = (seat: number) => (seat + 1) % 4
+export const partnerOf = (seat: number) => (seat + 2) % 4
 /** The dealer's right neighbour cuts. */
 export const cutterOf = (dealer: number) => (dealer + 3) % 4
+
+export const isBidding = (phase: Phase) =>
+  phase === 'BIDDING_R1' || phase === 'BIDDING_R2' || phase === 'DEALER_CHOICE'
+
+export const dealOrder = (dealer: number): number[] => {
+  const first = leftOf(dealer)
+  const second = leftOf(first)
+  return [first, second, leftOf(second), dealer]
+}
 
 /** Packet sizes `seat` may lift right now (dealer draw or cut); empty when none. */
 export function liftRange(s: State, seat: number): number[] {
@@ -45,10 +55,9 @@ export function liftRange(s: State, seat: number): number[] {
 }
 
 /**
- * Create a fresh match in phase LOBBY.
- * `drawers` optionally fixes which seat draws for each team
- * (default: lowest seat of each team). `startLines` is the boomke length
- * per team; the line marks keep it for the whole match.
+ * `drawers` fixes which seat draws for each team (default: the lowest seat of
+ * each team). `startLines` is the boomke length per team; the line marks keep
+ * it for the whole match.
  */
 export function createMatch(seed: number, drawers?: [number, number], startLines = START_LINES): State {
   return {
@@ -129,7 +138,6 @@ export function pendingSeats(s: State): number[] {
   }
 }
 
-/** Cards of `seat`'s hand that may legally be played right now. */
 export function legalCards(s: State, seat: number): Card[] {
   if (s.phase !== 'PLAYING' || s.turn !== seat) return []
   const hand = s.hands[seat]
@@ -153,7 +161,7 @@ export function legalCards(s: State, seat: number): Card[] {
   return [...follow, ...overTrumps]
 }
 
-/** Suits the dealer may pick in DEALER_CHOICE (distinct suits of the shown cards). */
+/** Suits the dealer may pick in DEALER_CHOICE. */
 export function choiceSuits(s: State): Suit[] {
   const t = s.turned!
   const suits: Suit[] = [t.first.s]
@@ -206,7 +214,7 @@ export function legalActions(s: State, seat: number): Action[] {
       // the partner's first lead is still pending — it may be ignored.
       if (
         s.bidder === seat &&
-        s.turn === (s.bidder + 2) % 4 &&
+        s.turn === partnerOf(s.bidder) &&
         s.tricksPlayed === 0 &&
         s.trick.length === 0 &&
         !s.troefkeAsked
@@ -251,20 +259,26 @@ function cutDeck(s: State, n: number): void {
 function nextDeck(s: State): Card[] {
   const deck = [...s.piles[0], ...s.piles[1]]
   s.piles = [[], []]
-  // A state saved before the cut existed may reach the deal uncut and empty.
-  return deck.length === 24 ? deck : rngShuffle(s, fullDeck())
+  return deck
 }
 
 function doDeal(s: State): void {
   const deck = nextDeck(s)
-  const order = [leftOf(s.dealer), (s.dealer + 2) % 4, (s.dealer + 3) % 4, s.dealer]
   const hands: Card[][] = [[], [], [], []]
   let i = 0
   for (let round = 0; round < 3; round++) {
-    for (const seat of order) {
+    for (const seat of dealOrder(s.dealer)) {
       hands[seat].push(deck[i++], deck[i++])
     }
   }
+  dealHands(s, s.dealer, hands)
+}
+
+/** Puts dealt `hands` on the table for `dealer` and opens round 1 of the bidding. */
+export function dealHands(s: State, dealer: number, hands: Card[][]): void {
+  s.dealer = dealer
+  s.dealerDraw = null
+  s.piles = [[], []]
   s.hands = hands
   const dh = hands[s.dealer]
   s.turned = { first: dh[5], second: dh[4], secondUp: false }
@@ -405,8 +419,6 @@ export function apply(state: State, action: Action): State {
     throw new IllegalActionError(`illegal action ${action.type} for seat ${action.seat} in ${state.phase}`)
   }
   const s = structuredClone(state)
-  // A host may resume an engine state saved before piles existed.
-  s.piles ??= [[], []]
   switch (action.type) {
     case 'start':
       s.phase = 'DEALER_DRAW'
@@ -415,8 +427,7 @@ export function apply(state: State, action: Action): State {
       break
     case 'draw': {
       const dd = s.dealerDraw!
-      // A host may resume a draw saved before the deck was kept.
-      const deck = (dd.deck ??= rngShuffle(s, fullDeck()))
+      const deck = dd.deck!
       // The bottom card of the packet is revealed.
       let card: Card
       if (dd.pending === 0) {
@@ -495,15 +506,14 @@ export function apply(state: State, action: Action): State {
     }
     case 'play': {
       const hand = s.hands[action.seat]
-      const idx = hand.findIndex((c) => sameCard(c, action.card))
-      if (idx < 0) throw new IllegalActionError('card not in hand')
-      hand.splice(idx, 1)
+      // actionIsLegal only allows cards of the hand, so idx is never -1.
+      hand.splice(hand.findIndex((c) => sameCard(c, action.card)), 1)
       s.trick.push({ seat: action.seat, card: action.card })
       pushLog(s, { t: 'card', seat: action.seat, card: action.card })
       if (s.trick.length === 4) {
         resolveTrick(s)
       } else {
-        s.turn = (s.turn + 1) % 4
+        s.turn = leftOf(s.turn)
       }
       break
     }
@@ -523,12 +533,8 @@ export function apply(state: State, action: Action): State {
   return s
 }
 
-/** True when `seat` may not look at their cards (dealer during bidding). */
 function handMasked(s: State, seat: number): boolean {
-  return (
-    seat === s.dealer &&
-    (s.phase === 'BIDDING_R1' || s.phase === 'BIDDING_R2' || s.phase === 'DEALER_CHOICE')
-  )
+  return seat === s.dealer && isBidding(s.phase)
 }
 
 /** The hand a given seat is allowed to see; null means "all face down". */

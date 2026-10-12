@@ -4,7 +4,7 @@ import type { Action } from '../src/engine'
 import { get } from 'svelte/store'
 import { DEAL_MS } from '../src/lib/deckstack'
 import { DEV_DEFAULTS, devSettings, parseDev, setDev, type BotSpeed, type DevSettings } from '../src/lib/devsettings'
-import { HostGame, type HostOptions } from '../src/lib/host'
+import { HostGame, PAINT_MS, type HostOptions } from '../src/lib/host'
 import type { GameDoc } from '../src/lib/kjn'
 import { localLinks, SOLO_CODE } from '../src/lib/link-local'
 import { newRoomDoc, RoomSession, type SessionView } from '../src/lib/room'
@@ -20,10 +20,11 @@ async function solo(dev: Partial<DevSettings>, click: (a: Action) => boolean, op
   const storage = memoryStore()
   const games: GameDoc[] = []
   const links = localLinks(UID, storage, newRoomDoc(SOLO_CODE, UID, 'Me'))!
-  const link: HostLink = { ...links.host, saveGame: async (_id, g) => void games.push(g) }
+  const link = links.host
   const session = new RoomSession(SOLO_CODE, UID, links.guest, link)
   const host = await HostGame.attach(SOLO_CODE, UID, link, {
     storage,
+    saveGame: async (_id, g) => void games.push(g),
     botDelay: () => 0,
     drawLingerMs: 0,
     bidLingerMs: 0,
@@ -94,9 +95,10 @@ describe('dev settings', () => {
     // Two deals: in at least one a bot bids first, so the host waits after it.
     await until(() => (g.pub()?.handNumber ?? 0) >= 2)
     g.close()
-    const waits = new Set(spy.mock.calls.map((c) => c[1]))
+    const waits = spy.mock.calls.map((c) => c[1] ?? 0)
     // 50 / 5, 100 / 5 (deal), 75 / 5 (after a bid or draw), 125 / 5 (after the deal).
-    for (const ms of [10, 20, 15, 25]) expect(waits).toContain(ms)
+    // A linger counts from its commit, so it is a few ms shorter by the time the bot waits.
+    for (const ms of [10, 20, 15, 25]) expect(waits.some((w) => w <= ms && w > ms - 5), `${ms} ms`).toBe(true)
     for (const ms of [50, 100, 75, 125]) expect(waits).not.toContain(ms)
   }, 30_000)
 
@@ -104,9 +106,11 @@ describe('dev settings', () => {
     const spy = vi.spyOn(globalThis, 'setTimeout')
     // The host deals, as in the app: no table sends `deal` itself.
     const g = await solo({}, (a) => a.type !== 'deal', { dealLingerMs: undefined })
-    await until(() => (g.pub()?.handNumber ?? 0) >= 2)
+    // The bot thinks PAINT_MS after the deal, then waits the rest of the pause.
+    // Only a bot that bids first waits: wait for that timer, not for a hand count.
+    const rest = DEAL_MS + 300 - PAINT_MS
+    await until(() => spy.mock.calls.some((c) => (c[1] ?? 0) <= rest && (c[1] ?? 0) > rest - 50))
     g.close()
-    expect(spy.mock.calls.map((c) => c[1])).toContain(DEAL_MS + 300)
   }, 30_000)
 
   test('instant bot speed waits 0 ms', async () => {

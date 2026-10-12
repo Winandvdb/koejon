@@ -8,10 +8,9 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import type { GameDoc } from './kjn'
-import { FirestoreGuestLink, FirestoreHostLink, HEARTBEAT_MS } from './link-firestore'
+import { FirestoreGuestLink, FirestoreHostLink } from './link-firestore'
 import type { HandDoc, Intent, PeerMsg, RoomDoc, RtcDoc } from './net-types'
-import type { GuestEvents, GuestLink, HostLink, RoomUpdate } from './transport'
+import { HEARTBEAT_MS, type GuestEvents, type GuestLink, type HostLink, type RoomUpdate } from './transport'
 
 const rtcRef = (code: string, uid: string) => doc(db, 'rooms', code, 'rtc', uid)
 const rtcCol = (code: string) => collection(db, 'rooms', code, 'rtc')
@@ -28,31 +27,8 @@ const RTC_CONFIG: RTCConfiguration = {
   ],
 }
 
-/** `?p2p=off` / `?p2p=on` set it for this tab; the app rewrites the URL to
- *  `?room=…`, so the choice is kept in sessionStorage across refreshes. */
-function p2pFlag(): string | null {
-  try {
-    const fromUrl = new URLSearchParams(globalThis.location?.search ?? '').get('p2p')
-    if (fromUrl) sessionStorage.setItem('koejon-p2p', fromUrl)
-    return sessionStorage.getItem('koejon-p2p')
-  } catch {
-    return null
-  }
-}
-
-/** Off without WebRTC (Node, old browsers) or after `?p2p=off` in this tab. */
-export const P2P_ENABLED = typeof RTCPeerConnection !== 'undefined' && p2pFlag() !== 'off'
-if (typeof RTCPeerConnection !== 'undefined') console.info(`[p2p] ${P2P_ENABLED ? 'on' : 'off'}`)
-
-/** This page's URL for a room (or none), keeping `p2p=off` visible so the
- *  forced fallback shows in the address bar and survives copy-paste. */
-export function appUrl(room?: string): string {
-  const q = new URLSearchParams()
-  if (room) q.set('room', room)
-  if (!P2P_ENABLED && typeof RTCPeerConnection !== 'undefined') q.set('p2p', 'off')
-  const s = q.toString()
-  return s ? `${location.pathname}?${s}` : location.pathname
-}
+/** Off without WebRTC (Node, old browsers). */
+export const P2P_ENABLED = typeof RTCPeerConnection !== 'undefined'
 
 /** No channel within this window counts as a failed attempt. */
 const OPEN_TIMEOUT_MS = 10_000
@@ -254,10 +230,6 @@ export class P2PHostLink implements HostLink {
     // Before the room goes: the rules check the host against the room doc.
     await Promise.all([...this.rtcIds].map((id) => deleteDoc(rtcRef(this.code, id)).catch(() => {})))
     await this.inner.destroy(humanUids)
-  }
-
-  saveGame(id: string, game: GameDoc): Promise<void> {
-    return this.inner.saveGame(id, game)
   }
 
   dispose(): void {

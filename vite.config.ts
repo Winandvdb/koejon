@@ -58,7 +58,6 @@ function appVersion(): string {
   }
 }
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [svelte(), devBranding(), serviceWorker()],
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },

@@ -1,21 +1,18 @@
-import { apply, createMatch, pendingSeats, rngNext } from '../src/engine'
-import type { Card, State, Suit, TrickCard } from '../src/engine'
-import { botAction } from '../src/bots/bot'
+import { apply, createMatch, legalActions, pendingSeats, rngShuffle } from '../src/engine'
+import type { Action, Card, State, Suit, TrickCard } from '../src/engine'
+import { botAction, createBot } from '../src/bots/bot'
+import type { Bot, BotLevel } from '../src/bots/bot'
+import type { BotTrace } from '../src/bots/algorithm'
 import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
-import type { KeyValueStore } from '../src/lib/link-local'
+import type { KeyValueStore } from '../src/lib/storage'
+import { seededRandom } from '../src/lib/seed'
 
 export const C = (s: Suit, r: Card['r']): Card => ({ s, r })
-
-/** Deterministic float source for bots/tests: the engine's own mulberry32. */
-export function mulberry(seed: number): () => number {
-  const holder = { rng: seed }
-  return () => rngNext(holder)
-}
 
 /** A finished bot match: final state and its KJN text. */
 export function finishedMatch(seed: number): { final: State; kjn: string } {
   let s = createMatch(seed)
-  const rand = mulberry(seed * 31 + 7)
+  const rand = seededRandom(seed * 31 + 7)
   const rec = newKjn('test', ['human', 'human', 'bot-normal', 'bot-normal'])
   while (s.phase !== 'GAME_OVER') {
     const a = botAction(s, pendingSeats(s)[0], rand)
@@ -24,6 +21,56 @@ export function finishedMatch(seed: number): { final: State; kjn: string } {
     s = next
   }
   return { final: s, kjn: serializeKjn(rec) }
+}
+
+/**
+ * Seed scan: play seeded matches of `heuristic:<level>` bots (or `bot`) and
+ * show `visit` every action with the state before it and the bot's trace. A scan
+ * finds situations that are rare in a hand-played game, in the real game flow.
+ */
+export function scanMatches(
+  level: BotLevel,
+  seeds: number,
+  visit: (s: State, a: Action, notes: string[], trace: BotTrace) => void,
+  bot: Bot = createBot(`heuristic:${level}`),
+): void {
+  for (let seed = 1; seed <= seeds; seed++) {
+    let s = createMatch(seed)
+    const rand = seededRandom(seed * 7919 + 13)
+    while (s.phase !== 'GAME_OVER') {
+      const trace: BotTrace = { candidates: [], notes: [] }
+      const a = bot.decide(s, pendingSeats(s)[0], rand, trace)
+      visit(s, a, trace.notes, trace)
+      s = apply(s, a)
+    }
+  }
+}
+
+/** Real decisions of a `heuristic:<level>` match: more than one legal action, not a lift or the first dealer. */
+export function decisions(seed: number, level: BotLevel): { s: State; seat: number }[] {
+  const bot = createBot(`heuristic:${level}`)
+  const out: { s: State; seat: number }[] = []
+  let s = createMatch(seed)
+  const rand = seededRandom(seed * 7919 + 13)
+  while (s.phase !== 'GAME_OVER') {
+    const seat = pendingSeats(s)[0]
+    const legal = legalActions(s, seat)
+    if (legal.length > 1 && !['draw', 'cut', 'chooseDealer'].includes(legal[0].type)) out.push({ s, seat })
+    s = apply(s, bot.decide(s, seat, rand))
+  }
+  return out
+}
+
+/** Same public info, other hidden cards: the other hands dealt anew, other deck and RNG. */
+export function hideOthers(s: State, seat: number, rand: () => number): State {
+  const t = structuredClone(s)
+  const others = [0, 1, 2, 3].filter((x) => x !== seat)
+  const cards = rngShuffle({ rng: Math.floor(rand() * 2 ** 31) }, others.flatMap((x) => t.hands[x]))
+  for (const x of others) t.hands[x] = cards.splice(0, t.hands[x].length)
+  t.rng = s.rng + 12345
+  t.seed = s.seed + 1
+  t.piles = [rngShuffle({ rng: 7 }, [...t.piles[0], ...t.piles[1]]), []]
+  return t
 }
 
 /** In-memory stand-in for localStorage. */

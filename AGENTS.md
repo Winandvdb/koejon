@@ -1,7 +1,8 @@
 # AGENTS.md
 
 Instructions for AI coding agents in this repo. Read this file first.
-Human docs: `README.md` (setup, deploy, data flow). Game rules: `rules/rules-en.md`.
+Human docs: `README.md` (setup, deploy, data flow, KJN format). Game rules: `rules/rules-en.md`.
+Details of a module live in its doc comments; this file holds what to know before you open it, and the rules.
 
 ## What this is
 
@@ -12,51 +13,79 @@ Other browsers only send intents (play this card, bid, pass).
 
 ## Commands
 
+Before you say a change is done, run `npm test` and `npm run build`. Both must pass.
+
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies (Node 20+). |
-| `npm test` | Unit tests + 60-match bot simulation per bot level (vitest). Must pass. |
-| `npm run build` | `svelte-check` (type check of `src/`, and of `tests/` + `scripts/` via `tsconfig.test.json`) + production build. Must pass. |
-| `npm run dev` | Dev server. Needs `firebase emulators:start` in another shell for multiplayer. Solo play needs no emulator. |
-| `npm run e2e` | Full match against the Firestore emulator. Optional. |
-| `npm run bench -- [--base origin/develop] [--matches 500] [--level normal]` | Bot benchmark (`scripts/bot-benchmark.mjs`): this checkout's bot against the bot of a git ref. Prints win rate and bidding stats. Run it for every bot change: the win rate plus its ± margin must reach 50%. |
-
-Before you say a change is done, run `npm test` and `npm run build`. Both must pass.
+| `npm test` | Unit tests, a 60-match simulation per `heuristic:<level>` and 3 matches of the `hard` level bot (vitest). |
+| `npm run build` | `svelte-check` of `src/`, and of `tests/` + `scripts/` (`tsconfig.test.json`), then the production build. |
+| `npm run dev` | Dev server. Multiplayer needs `firebase emulators:start` in another shell; solo does not. |
+| `npm run e2e` | Optional: a full match against the Firestore emulator. |
+| `npm run bench` | Two bots against each other (`scripts/bot-benchmark.mjs`; flags and side syntax in its header). `--level hard` plays the pimc bot and is slow: to bench the heuristic alone, use `--a heuristic:hard`. **Run it for every bot change: the win rate plus its ± margin must reach 50%.** |
+| `npm run tune` | SPSA tuning of the `heuristic:hard` constants (`scripts/tune-heuristic.mjs`; flags in its header). Check the result on new seeds with `npm run bench -- --a tune-heuristic.json --b heuristic:hard`, and change `HEURISTIC_DEFAULTS` only when that passes the bench rule. `--play pimc` tunes the bids of the `hard` level bot: put those values on the heuristic rule of `LEVEL_CONFIGS.hard`, not in `LEVEL_OPTIONS.hard`, which would also move `heuristic:hard` and the plain tuner (`tests/tune-spsa.test.ts` checks that `tuneBot` follows the level bot). A new constant in `HEURISTIC_DEFAULTS` needs a range in `PARAMS` (`scripts/tune-spsa.mjs`). |
+| `npm run bot:trace` | Plays the seeded match that `bench` plays for `--seed` and prints every decision with the rule, algorithm and trace that chose it (`scripts/bot-trace.mjs`; flags in its header and the README). Use it to see why a bot chose an action, before you tune it. |
 
 ## Code map
 
-| Path | Contents | Rules |
-|---|---|---|
-| `src/engine/` | Pure game engine: cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring. Entry: `createMatch`, `legalActions`, `apply`, `toPublic`. | No Firebase, DOM or Svelte imports. Deterministic: use the seeded RNG in `rng.ts`, never `Math.random`. All game rules live here. |
-| `src/bots/bot.ts` | Bot heuristics. Levels `easy`, `normal`, `hard` (`BOT_PROFILES`). Entry: `botAction`. | A bot only picks from `legalActions`. Never read other players' hands. |
-| `src/lib/host.ts` | `HostGame`: the authoritative loop on the host. Applies intents, runs bots, publishes state. | |
-| `src/lib/room.ts` | `RoomSession`: client side of a room (view, send intents). `createRoom`, `joinRoom`. | |
-| `src/lib/transport.ts` | `HostLink` / `GuestLink` interfaces. | |
-| `src/lib/link-local.ts` | Solo mode: host and guest in one tab, state in `localStorage`. No network. | |
-| `src/lib/link-p2p.ts` | Multiplayer over WebRTC. Firestore only for lobby and signaling. | |
-| `src/lib/link-firestore.ts` | Multiplayer fallback over Firestore when WebRTC fails. | Keep Firestore reads and writes low (cost). |
-| `src/lib/firebase.ts` | Firebase init, emulator auto-connect. | |
-| `src/lib/kjn.ts` | KJN/1 game records: `recordAction` (host builds the record), `serializeKjn`, `parseKjn`, `gameDoc`, `replayKjn` (engine check for analysis), `replaySteps` (engine state after each recorded action, for the replay viewer), `loadKjn` / `readKjnFile` (a finished match from untrusted text or a file, size-checked and replayed). The host queues one `games/{id}` doc per finished match (multiplayer and solo) and uploads it. Format spec in `README.md`. | KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. A record error must never stop a match. |
-| `src/lib/history.ts` | Local match history: the last `HISTORY_MAX` (20) finished matches in `localStorage` (`koejon-history`), with own seat, seat names and the `KJN/1` text. The host puts the text on `room.kjn` in `GAME_OVER` only; `RoomSession` saves it once per match for a seated human. `removeHistory` deletes one entry. | Device only: never uploaded, no Firestore reads. Seat names stay out of the `KJN/1` text. |
-| `src/lib/stats.ts` | Personal statistics on this device: `matchStats` (one seat's numbers from a finished `KJN/1` record), `totalStats` (the history plus `koejon-stats`, the totals of matches that dropped out of it; `addHistory` adds those via `keepDropped`), per group (`matchGroup`: `players` when another seat had a human, else `bots`). Shown in the played matches panel of `Home.svelte`. | No engine state and no network: the numbers come from the history only. |
-| `src/lib/download.ts` | `.kjn` file of a finished match (`kjnFile`: `room.kjn` unchanged, `koejon-<YYYY-MM-DD>-<HHmm>.kjn`) and `downloadKjn`: share sheet where files can be shared, else a `Blob` download. Used by the overflow menu of the replay screen (`Replay.svelte`), which also opens a `.kjn` file. | No network. |
-| `src/lib/deckstack.ts` | `deckStack(pub)`: how the next deck forms at the cut (trick piles, or the hands after an all-passed deal), bottom packet first, from `CUTTING` until the deal. `dealPairs(dealer)`: the deal per two (deck positions and seat); `pairOfCard`: the pair that brings each hand card; `DEAL_MS`: the deal animation, which the host waits for before the first bid (`HostOptions.dealLingerMs`). `Table.svelte` animates both: the deck goes to the dealer, the hand cards fly in per two (a blind dealer gets backs). | Must move the cards as the engine does (`cutDeck`, `allPassed`, `doDeal`): `tests/deckstack.test.ts` plays the moves on the engine's cards. Public state only. |
-| `src/lib/quotes.ts` | Table talk ("quotes"). `activeQuotes(pub)` derives candidates; the host's `QuoteBook` decides which fire. | Quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line. |
-| `src/lib/i18n.ts` | All UI text, Dutch (`nl`, default) and English (`en`). | Every new UI string goes in both languages. |
-| `src/lib/prefs.ts`, `theme.ts` | Per-player preferences in `localStorage`. | Wrap `localStorage` in try/catch. |
-| `src/lib/storage.ts` | `safeStorage`: `localStorage` that never throws (blocked storage reads as empty). | Use it for app storage; never touch `localStorage` directly outside a try/catch. |
-| `src/lib/devsettings.ts` | Dev build test shortcuts (`DevSettings`): tree length, bot speed, skip "Gezien", interactive card draws, autoplay. Per browser in `localStorage` (`koejon-dev`). `App.svelte` gives them to the host (`HostOptions.dev`) and shows `DevPanel.svelte` in the settings popover, in dev builds only. | Production builds use `DEV_DEFAULTS`. The host uploads no KJN record for a match with another tree length or with autoplay. |
-| `src/lib/seed.ts` | `?seed=N`: a solo game that repeats exactly (deal, bot names, bot plays), for scripted demos. The host's `rand` option carries it. | Solo only. Only in the Vite dev server or a build with `VITE_ALLOW_SEED=1`; never set that flag in a deploy workflow (whoever knows the seed knows every hand). |
-| `src/components/` | Svelte UI. `Table.svelte` is the game table. `App.svelte` is startup and routing. `Home.svelte` also lists the played matches and opens `.kjn` files. `Replay.svelte` is the read-only replay viewer (all hands open, step / hand / auto-play controls). | Must work at phone width. Replay sends no intents and uses no network. |
-| `src/app.css` | All styles and colour tokens. | |
-| `public/` | Web app manifest, app icons (`icon.svg` is the source of the PNGs) and `robots.txt`. | Copied to `dist/` as is. |
-| `pwa/` | Service worker template (`sw.js`) and `precache.ts`. A plugin in `vite.config.ts` emits `dist/sw.js` with the list of built files. `devbrand.ts` + `dev/` hold the dev build name and icons; a plugin emits them only when `VITE_APP_VARIANT=dev` (the dev channel and previews of PRs into develop). | The worker never caches other origins (Firebase). Registered in production builds only. |
-| `tests/` | Vitest tests. `helpers.ts` has state builders: `playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`, and `mulberry`, `memoryStore`, `blockStorage`, `until`. | Reuse the helpers. |
-| `rules/` | Game rules (NL, EN). Shown in the app. | |
-| `RULE_ASSUMPTIONS.md` | Rule choices that the rules text did not specify. | Add an entry when you decide a new rule detail. |
-| `firestore.rules` | Firestore security rules. Deployed by CI on push to `main`. | Prod, dev and PR previews share one database, and CI deploys the rules only from `main`. A rules change must accept every write of every build that is still in use. Keep the rules to auth, ownership, write-once and size limits. Check the exact data shape in tests, not in the rules. To make a rule stricter, first release a build that already writes the new shape, then tighten the rule in a later release. |
-| `docs/spikes/` | Spike write-ups (issues with label `question`), one file per issue: `<issue>-<slug>.md`. | The result of a spike is a write-up here, not code. |
-| `IMPLEMENTATION_PROMPT.md` | The original build spec. Historical. | Where it differs from the code or README, the code and README are correct. |
+A **Rule** is a constraint that a change must keep.
+
+### `src/engine/` — pure game engine
+
+Cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring. Entry: `createMatch`, `legalActions`, `apply`, `toPublic`. Shared helpers: `teamOf`, `partnerOf`, `leftOf`, `isBidding`, `dealOrder`, `dealHands`.
+**Rule:** no Firebase, DOM or Svelte imports. Deterministic: use the seeded RNG in `rng.ts`, never `Math.random`. All game rules live here.
+
+### `src/bots/`
+
+Algorithms get only an `Observation` (public state, own hand, legal actions), never the engine `State`. A bot only picks from `legalActions`.
+
+- `bot.ts` — a bot is data: `BotConfig = { name, rules: [{ when?: { phase }, use: spec }] }`; the first rule whose phase matches and whose algorithm `supports` the decision decides, and no match throws. `LEVEL_CONFIGS` gives the bot per level; `botAction` (used by the host) plays it. `hard` = `pimc` for cards and troefke + `heuristic:hard` for bids, with `HARD_PIMC` worlds per decision kept low so that a phone host decides within 2 s, and its cards anchored to `heuristic:hard` with `HARD_ANCHOR_MARGIN` (more human-like play). **Rule:** tests of heuristic rules use `createBot('heuristic:<level>')`, not `botAction`.
+- `algorithm.ts` — `Algorithm`, `BotTrace` and the registry (`createAlgorithm(spec)`). **Rule:** an algorithm builds the algorithms its options name through the registry, never by import.
+- `observation.ts` — `observe`, and `decisionPhase` (the one place that says which decisions are `bidding` or `play`).
+- `value.ts` — `handValue` (all search algorithms score hands with it) and `breakEven`.
+- `determinize.ts` — `sampleWorld`: a full engine `State` that fits an observation. **Rule:** the hand's played cards come from the `log` since its last `deal` event. Hidden fields the rest of the hand does not need get neutral values (`seed`, `rng`, pile order, the draw deck). All randomness via `rand`. A world shares arrays with the live state: change it only through `apply`.
+- `solver.ts` — `solve`: double-dummy value of each action when all hands are known. **Rule:** `tests/solver.test.ts` checks it against a plain minimax on the engine, so a change to scoring or play rules in `src/engine/` must show up there.
+- `pimc.ts` — algorithm `pimc`. It takes card play and the troefke but no bids or dealer's choice, so a bot with it needs a second rule for those. A rule `when: { phase: 'play' }` leaves the troefke to the next rule. Option `anchor` (an algorithm spec) with `margin`: pimc plays the anchor's card unless its own best card is more than `margin` lines better on the same worlds; cards only, not the troefke.
+- `mcts.ts` — algorithms `mcts` (determinized MCTS) and `ismcts` (SO-ISMCTS). They search every decision of the hand on `Hand`, a bitmask copy of the rules, because the engine's `apply` is far too slow for that. **Rule:** `tests/mcts.test.ts` compares `Hand` with the engine, so a rule change in `src/engine/` must show up in `Hand`.
+- `conventions.ts` — the troefke convention shared by all algorithms: `troefkeHand` (may ask), `troefkeLead` (obey), `troefkeWeight` (read). When to ask stays per algorithm. **Rule:** a convention, not an engine rule: the partner may ignore it.
+- `heuristic.ts` — algorithm `heuristic:easy|normal|hard`. Constants in `HEURISTIC_DEFAULTS` (tuned with `npm run tune`, except the ones marked `fixed` in `PARAMS`); `LEVEL_OPTIONS` overrides them per level.
+
+### `src/lib/`
+
+- `host.ts` — `HostGame`: the authoritative loop (intents, bots, publish, KJN upload via `HostOptions.saveGame`). **Rule:** imports no transport implementation.
+- `room.ts` — `RoomSession` (client side: view, intents), `createRoom`, `joinRoom`, `resumeRoom`. **Rule:** no static imports of `firebase/*`, `firebase.ts`, `link-p2p.ts` or `link-firestore.ts`: they load by dynamic import, so the start bundle has no Firebase code.
+- `transport.ts` — `HostLink` / `GuestLink` and `HEARTBEAT_MS`. **Rule:** transport only: no game records, no URLs.
+- `link-local.ts` (solo, `localStorage`, no network), `link-p2p.ts` (WebRTC; Firestore for lobby and signaling), `link-firestore.ts` (fallback when WebRTC fails). **Rule:** keep Firestore reads and writes low (cost).
+- `net-types.ts` — wire types shared by host, guests and all links. **Rule:** a change must stay readable by builds still in use (shared database).
+- `firebase.ts` — Firebase init, emulator auto-connect. **Rule:** reach it only by dynamic import, so a solo player never downloads the SDK.
+- `games.ts` — `saveGame`: one finished match as write-once `games/{id}`. `App.svelte` passes it to the host by dynamic import.
+- `kjn.ts` — KJN/1 game records: build, serialize, parse, replay, load from a file. Format spec in `README.md`. **Rules:** KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. A record error must never stop a match. Only a match that a human played to the end gets a record (`finishRecord` in `host.ts`: a seat still `human` at `GAME_OVER`; `mixed` does not count); else no upload, no `room.kjn`, no history entry and no download.
+- `history.ts` — the last 20 finished matches on this device. **Rule:** device only: never uploaded, no Firestore reads; seat names stay out of the KJN text.
+- `stats.ts` — personal statistics from the history. **Rule:** no engine state and no network.
+- `download.ts` — the `.kjn` file of a match (share sheet or download). No network.
+- `deckstack.ts` — how the next deck forms at the cut, and the deal animation timing (`DEAL_MS`, which the host waits for). **Rule:** must move the cards as the engine does (`cutDeck`, `allPassed`, `doDeal`); `tests/deckstack.test.ts` checks it. Public state only.
+- `quotes.ts` — table talk: `activeQuotes` finds candidates, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
+- `i18n.ts` — all UI text, Dutch (`nl`, default) and English (`en`). **Rule:** every new UI string goes in both languages.
+- `table.ts` — what the live table and the replay both show (bids, bubbles, trick shown, fly directions). **Rule:** public state only; both screens call these, never copy them.
+- `prefs.ts`, `theme.ts` — per-device preferences as stores that save every change. **Rule:** use `safeStorage`. Components use the stores, never the keys (`koejon-name`, `koejon-bot-level`, `koejon-lang`, `koejon-sort-mode`, `koejon-theme`). Keep the keys: saved values must stay valid.
+- `storage.ts` — `safeStorage` (never throws), `KeyValueStore`, `readJson`. **Rule:** use it for app storage; never touch `localStorage` outside a try/catch.
+- `devsettings.ts` — dev build test shortcuts (`DevPanel.svelte`). **Rules:** production builds use `DEV_DEFAULTS`. The host uploads no KJN record for a match with another tree length or with autoplay.
+- `seed.ts` — `?seed=N`: a solo game that repeats exactly. **Rule:** solo only, and only in the dev server or a build with `VITE_ALLOW_SEED=1`. Never set that flag in a deploy workflow: whoever knows the seed knows every hand.
+- `url.ts`, `md.ts` — `appUrl(room?)`; rules markdown to HTML.
+
+### Other paths
+
+- `src/components/` — Svelte UI. `App.svelte`: startup and routing. `Table.svelte`: the game table. `Replay.svelte`: read-only replay. `Nameplate`, `Avatar`, `TurnedCards`, `Opponent`, `TrickArea` and `ResultPanel` are shared by both. **Rules:** must work at phone width. Replay sends no intents and uses no network. A change to a table part goes in the shared component, not in one screen.
+- `src/app.css` — all styles and colour tokens.
+- `public/` — manifest, icons (`icon.svg` is the source of the PNGs), `robots.txt`. Copied to `dist/` as is.
+- `pwa/` — service worker template and precache list; dev build name and icons. **Rule:** the worker never caches other origins (Firebase). Registered in production builds only.
+- `tests/` — vitest. `helpers.ts` has state builders (`playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`), `memoryStore`, `blockStorage`, `until`, and `scanMatches` for seed scans (scans live in `bot-scan.test.ts`). **Rule:** reuse the helpers.
+- `rules/` — game rules (NL, EN), shown in the app.
+- `RULE_ASSUMPTIONS.md` — rule choices the rules text does not specify. **Rule:** add an entry when you decide a new rule detail.
+- `firestore.rules` — deployed by CI from `main` only. **Rules:** prod, dev and PR previews share one database, so a rules change must accept every write of every build still in use. Keep the rules to auth, ownership, write-once and size limits; check the exact data shape in tests. To make a rule stricter, first release a build that writes the new shape, then tighten the rule in a later release.
+- `docs/bots/` — bot measurements and the choices made from them (`search-bots.md`: why the `hard` level uses `pimc`; `levels.md`: the targets for the gaps between the levels). **Rule:** read it before you change the algorithm of a level; add new bench results when they change a choice.
+- `docs/spikes/` — the result of a spike (issue label `question`) is a write-up here, not code: `<issue>-<slug>.md`.
+- `IMPLEMENTATION_PROMPT.md` — the original build spec. Historical: where it differs, the code and README are correct.
 
 ## Game words (Dutch → meaning)
 
@@ -67,34 +96,24 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 
 ## Code style
 
-- Match the code around your change. Short comments that explain *why*, not *what*.
+- Match the code around your change. Short comments that explain *why*, never *what*: prefer self-explanatory code.
 - TypeScript strict. No new dependencies unless the task needs one. Pin exact versions.
 - Make the smallest change that meets the task. Do not refactor unrelated code.
 - For a bug: first write a test that fails, then fix it.
+- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to `tests/bot-scan.test.ts` with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
 
 ## Git and GitHub
 
-- Branches start from `develop`. PRs go into `develop`.
-- `develop` and `main` are protected: GitHub rejects direct pushes. A change gets into them only through a merged PR, also a small docs change.
-- Push to `develop` deploys the dev channel. Push to `main` deploys live. Never push to `main` or `develop` directly.
-- Branch name: `feature/<issue>-<short-slug>` or `fix/<issue>-<short-slug>` for bugs. `<issue>` is the GitHub issue number.
-- PR body: follow `.github/pull_request_template.md` (Summary, Plan, Acceptance criteria, Tests, Check by hand).
+- All work is a GitHub issue in `Winandvdb/koejon`; there is no backlog in the repo. An issue has a description, `Depends on #<D>` / `Related to #<R>` lines when needed, an `### Acceptance criteria` checklist, one type label (`bug`, `enhancement`, `question`) and one `priority:` label.
+- Skills (`.agents/skills/`): `create-issue` to create an issue, `start-issue` to claim one and work in a worktree (`.worktrees/<issue>`), `pr-review` to review a PR, `release-pr` to open the release PR from `develop` into `main` (it never merges: the merge deploys live).
+- Before you edit an issue, fetch it again (`gh issue view <n> --json title,body,labels,updatedAt`) and change that fresh copy: others can change it at any time, and `gh issue edit --body` replaces the full body.
+- An assigned issue is taken. Do not work on an issue assigned to someone else.
+- Branches start from `develop`: `feature/<issue>-<short-slug>`, or `fix/<issue>-<short-slug>` for bugs. PRs go into `develop`; `Closes #<issue>` closes the issue on merge.
+- `develop` and `main` are protected: a change gets in only through a merged PR, also a small docs change. A push to `develop` deploys the dev channel, a push to `main` deploys live.
+- PR body: follow `.github/pull_request_template.md` (Summary, Plan, Acceptance criteria, Tests, Check by hand). The plan and the acceptance criteria status go there. A PR with the label `needs manual check` is complete, but a person must still check the UI or network. A draft PR means that something failed.
 - Commit messages: short, imperative, for example `Fix trick rollback on late message`.
 - Never commit `.env.local` or other secrets. `.env.production` is committed on purpose (public web config).
-
-## GitHub issues
-
-- All work is tracked as GitHub issues in `Winandvdb/koejon`. There is no backlog in the repo.
-- An issue has a description, `Depends on #<D>` / `Related to #<R>` lines when needed, and an `### Acceptance criteria` checklist. It has one type label (`bug`, `enhancement`, `question`) and one `priority:` label.
-- To create an issue, use the `create-issue` skill (`.agents/skills/create-issue/SKILL.md`).
-- Before you edit an issue (title, body, labels), fetch it again with `gh issue view <n> --json title,body,labels,updatedAt`. Make your change on that fresh copy, never on a copy from earlier in the session. Other people or agents can change the issue at any time, and `gh issue edit --body` replaces the full body.
-- An assigned issue is taken. Do not work on an issue that is assigned to someone else.
-- To start work on an issue, use the `start-issue` skill (`.agents/skills/start-issue/SKILL.md`). It claims the issue and makes a worktree in `.worktrees/<issue>` (ignored by git). The plan and the acceptance criteria status go in the PR body.
-- `develop` is the default branch, so `Closes #<issue>` closes the issue when the PR merges.
-- To release `develop` to `main`, use the `release-pr` skill (`.agents/skills/release-pr/SKILL.md`). It cuts a `release/<YYYY-MM-DD>` branch from `develop` and opens the PR from it into `main`, with a description of all changes and the checks. It never merges: the merge deploys live.
-- Older issues start with `Backlog: task-<T>` and can name other work as `task-<T>`. Find that issue with `gh issue list --state all --search '"Backlog: task-<T>" in:body'`.
-- To review a PR, use the `pr-review` skill (`.agents/skills/pr-review/SKILL.md`). It reviews with three hats (General, Security, Performance) and posts one review with inline comments. A high-severity security issue or breaking bug requests changes, or turns your own PR into a draft.
-- A PR with the label `needs manual check` is complete, but a person must still check the UI or network behaviour. A draft PR means that something failed.
+- Older issues start with `Backlog: task-<T>` and can name other work as `task-<T>`. Find it with `gh issue list --state all --search '"Backlog: task-<T>" in:body'`.
 
 ## Keep this file current
 

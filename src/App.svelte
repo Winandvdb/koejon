@@ -1,29 +1,27 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { get } from 'svelte/store'
-  import { getDoc } from 'firebase/firestore'
-  import { signIn } from './lib/firebase'
   import {
     createRoom,
     joinRoom,
     newRoomDoc,
-    seatOf,
+    resumeRoom,
     RoomSession,
     type SessionView,
   } from './lib/room'
-  import { roomRef, saveGame } from './lib/link-firestore'
-  import { localLinks, SOLO_CODE } from './lib/link-local'
-  import { appUrl } from './lib/link-p2p'
-  import type { RoomDoc } from './lib/net-types'
+  import { saveGame } from './lib/games'
+  import { addSoloBots, localLinks, SOLO_CODE } from './lib/link-local'
+  import { appUrl } from './lib/url'
+  import { DEFAULT_ROOM_OPTS, type RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
   import { HostGame } from './lib/host'
   import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
-  import { lang, t } from './lib/i18n'
-  import { SORT_LABEL, SORT_MODES, sortMode } from './lib/prefs'
+  import { lang, localeOf, t } from './lib/i18n'
+  import { SORT_LABEL, SORT_MODES, playerName, sortMode } from './lib/prefs'
   import { safeStorage } from './lib/storage'
   import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
-  import type { Action } from './engine'
+  import type { Action, State } from './engine'
   import type { HistoryEntry } from './lib/history'
   import { loadKjn, readKjnFile, serializeKjn, type KjnMatch } from './lib/kjn'
   import Home from './components/Home.svelte'
@@ -55,11 +53,12 @@
 
   let authed = false
 
-  // Multiplayer needs a Firebase uid; solo does not. Retried on the
-  // multiplayer buttons when startup was offline.
+  // Multiplayer needs a Firebase uid; solo does not. Signing in loads the
+  // Firebase chunk, so it happens only on a multiplayer action or a resume.
   async function ensureAuth(): Promise<boolean> {
     if (authed) return true
     try {
+      const { signIn } = await import('./lib/firebase')
       uid = await signIn()
       authed = true
       safeStorage.setItem('koejon-uid', uid)
@@ -79,9 +78,13 @@
     return id
   }
 
+  // Until the first mount finishes a multiplayer resume may still be loading:
+  // the connecting view covers that, like the startup sign-in did before.
+  let starting = $state(true)
+
   onMount(async () => {
-    if (!(await ensureAuth())) uid = offlineUid()
-    const name = safeStorage.getItem('koejon-name') ?? ''
+    uid = offlineUid()
+    const name = get(playerName)
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
     // fallback for a fresh tab.
@@ -92,18 +95,19 @@
         // Offline solo: resume from this browser's storage; Firestore only
         // receives the finished match.
         const links = localLinks(uid, safeStorage)
-        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
         else forgetRoom()
-      } else if (code && authed) {
+      } else if (code && (await ensureAuth())) {
         // Return to a room in progress only when our seat is still ours.
-        const snap = await getDoc(roomRef(code))
-        const room = snap.exists() ? (snap.data() as RoomDoc) : null
-        if (room && seatOf(room, uid) >= 0) attach(await joinRoom(code, uid, name))
+        const resumed = await resumeRoom(code, uid, name)
+        if (resumed) attach(resumed)
         // An invite to a room we are not in yet: Home shows its join view.
         else if (!urlCode) forgetRoom()
       }
     } catch {
       forgetRoom()
+    } finally {
+      starting = false
     }
   })
 
@@ -189,7 +193,13 @@
       const rand = soloRand
       soloRand = undefined
       // Dev settings exist only in dev builds; elsewhere the host uses its defaults.
-      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, { rand, dev: DEV ? () => get(devSettings) : undefined })
+      // Solo and multiplayer both upload the finished match (solo plays offline, so only then).
+      // The lazy import keeps Firebase out of the start bundle until the upload needs it.
+      hostPromise = HostGame.attach(s.code, uid, s.hostLink!, {
+        rand,
+        dev: DEV ? () => get(devSettings) : undefined,
+        saveGame: (id, game) => import('./lib/games').then((m) => m.saveGame(id, game)),
+      })
         .then((h) => {
           // The user left while attaching: never keep hosting a room behind
           // their back (it would answer that room's guests forever).
@@ -247,12 +257,10 @@
       }
       // attach() runs teardown() which resets soloStarting — set it after.
       // Play stays offline; only the finished match is uploaded, when online.
-      attach(new RoomSession(SOLO_CODE, uid, links.guest, { ...links.host, saveGame }))
+      attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
       soloStarting = true
       const h = await ensureHost()
-      h.addBot(1, level)
-      h.addBot(2, level)
-      h.addBot(3, level)
+      addSoloBots(h, level)
       h.startGame()
     } catch (e) {
       soloStarting = false
@@ -286,7 +294,6 @@
   }
 
   const send = (a: Action) => {
-    // The host applies its own actions in place: no intent doc round trip.
     if (host) return host.submit({ kind: 'act', action: a })
     err = ''
     session?.act(a).catch((e) => {
@@ -321,6 +328,7 @@
   // Raw: the engine structuredClones the match, which a deep $state proxy breaks.
   let replay = $state.raw<{
     match: KjnMatch
+    steps: State[]
     kjn: string
     at?: Date
     seat: number
@@ -331,11 +339,11 @@
   function onReplay(e: HistoryEntry) {
     err = ''
     try {
-      const label = new Date(e.finishedAt).toLocaleString($lang === 'nl' ? 'nl-BE' : 'en-GB', {
+      const label = new Date(e.finishedAt).toLocaleString(localeOf($lang), {
         dateStyle: 'medium',
         timeStyle: 'short',
       })
-      replay = { match: loadKjn(e.kjn), kjn: e.kjn, at: new Date(e.finishedAt), seat: e.seat, names: e.names, label }
+      replay = { ...loadKjn(e.kjn), kjn: e.kjn, at: new Date(e.finishedAt), seat: e.seat, names: e.names, label }
     } catch {
       err = $t.invalidKjn
     }
@@ -344,9 +352,9 @@
   async function onOpenFile(file: File) {
     err = ''
     try {
-      const match = await readKjnFile(file)
+      const { match, steps } = await readKjnFile(file)
       // The parsed match, not the raw file text: clean line endings, no BOM.
-      replay = { match, kjn: serializeKjn(match), seat: 0, names: [], label: file.name }
+      replay = { match, steps, kjn: serializeKjn(match), seat: 0, names: [], label: file.name }
     } catch {
       // The current replay stays open; Replay shows the error.
       err = $t.invalidKjn
@@ -371,12 +379,13 @@
       <div class="settings-pop panel">
         {#if view?.room}
           {@const r = view.room}
-          {@const hostCtl = r.hostUid !== uid}
+          {@const notHost = r.hostUid !== uid}
+          {@const roomOpts = r.opts ?? DEFAULT_ROOM_OPTS}
           <label>
             <input
               type="checkbox"
-              checked={r.opts?.info ?? true}
-              disabled={hostCtl}
+              checked={roomOpts.info}
+              disabled={notHost}
               onchange={(e) => host?.setOption('info', e.currentTarget.checked)}
             />
             {$t.showInfo}
@@ -384,8 +393,8 @@
           <label>
             <input
               type="checkbox"
-              checked={r.opts?.score ?? false}
-              disabled={hostCtl}
+              checked={roomOpts.score}
+              disabled={notHost}
               onchange={(e) => host?.setOption('score', e.currentTarget.checked)}
             />
             {$t.showScore}
@@ -402,7 +411,7 @@
     {/if}
   </div>
   <button class="icon-btn" title={$t.rules} aria-label={$t.rules} onclick={() => (showRules = true)}>📖</button>
-  <div class="segmented lang" role="group" aria-label="Language">
+  <div class="segmented lang" role="group" aria-label={$t.language}>
     <button class:active={$lang === 'nl'} onclick={() => ($lang = 'nl')}>NL</button>
     <button class:active={$lang === 'en'} onclick={() => ($lang = 'en')}>EN</button>
   </div>
@@ -418,7 +427,7 @@
 </header>
 
 <main class="main">
-  {#if !uid}
+  {#if !uid || starting}
     <div class="connecting">
       {#if err}{err}{:else}<span class="spinner"></span>{$t.connection}{/if}
     </div>
@@ -427,6 +436,7 @@
     {#key replay.match}
       <Replay
         match={replay.match}
+        steps={replay.steps}
         kjn={replay.kjn}
         at={replay.at}
         seat={replay.seat}
