@@ -517,12 +517,12 @@ describe('bot leads', () => {
   })
 
   it('keeps a side ace in a sweep while an opponent may still hold trump', () => {
-    const hand = [C('H', '9'), C('S', 'A'), C('D', 'K'), C('C', '10'), C('D', '9')]
+    const hand = [C('H', '9'), C('S', 'A'), C('D', 'Q'), C('C', '10'), C('D', '9')]
     const sweep = { tricksPlayed: 1, tricksWon: [0, 1] as [number, number] }
     for (const level of TACTICS) {
       // Bidder, partner and short defender alike: the highest card that is no ace.
       for (const bidder of [1, 3, 0]) {
-        expect(botAction(leadState(hand, bidder, sweep), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
+        expect(botAction(leadState(hand, bidder, sweep), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('D', 'Q') })
       }
     }
     // The trace says why the ace waits.
@@ -543,6 +543,41 @@ describe('bot leads', () => {
     for (const level of TACTICS) {
       expect(botAction(noTrumpOut, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('S', 'A') })
     }
+  })
+
+  it('keeps a king in a sweep while its ace is out (#194)', () => {
+    const sweep = { tricksPlayed: 1, tricksWon: [0, 1] as [number, number] }
+    const hand = [C('D', 'K'), C('C', 'Q'), C('S', '10'), C('H', '9')]
+    for (const level of LEVELS) {
+      // Bidder, partner and short defender alike: DK would feed DA, so the next highest card.
+      for (const bidder of [1, 3, 0]) {
+        expect(botAction(leadState(hand, bidder, sweep), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', 'Q') })
+      }
+      // With its own ace the king tops the suit; the ace waits (a beginner cashes it).
+      const ownAce = leadState([C('D', 'A'), C('D', 'K'), C('C', 'Q'), C('H', '9')], 3, sweep)
+      const top = level === 'easy' ? C('D', 'A') : C('D', 'K')
+      expect(botAction(ownAce, 1, smart, level)).toEqual({ type: 'play', seat: 1, card: top })
+      // Only kings left beside the kept trump: the highest card still goes.
+      const onlyKings = leadState([C('D', 'K'), C('C', 'K'), C('H', '9')], 3, sweep)
+      expect(botAction(onlyKings, 1, smart, level)).toMatchObject({ type: 'play', card: { r: 'K' } })
+    }
+    const trace: BotTrace = { candidates: [], notes: [] }
+    createAlgorithm('heuristic:hard').decide(observe(leadState(hand, 3, sweep), 1), smart, trace)
+    expect(trace.notes).toEqual(['sweep: highest card, keeps trump, the king waits: its ace is out'])
+    // Trick 1 drew DA: a hard bot remembers it, so DK tops the diamonds.
+    // The other levels do not remember side aces.
+    const aceGone = leadState(hand, 3, {
+      ...sweep,
+      log: [
+        { t: 'card', seat: 1, card: C('D', '9') },
+        { t: 'card', seat: 2, card: C('D', 'A') },
+        { t: 'card', seat: 3, card: C('H', 'J') },
+        { t: 'card', seat: 0, card: C('D', 'J') },
+        { t: 'trick', seat: 3 },
+      ],
+    })
+    expect(botAction(aceGone, 1, smart, 'hard')).toEqual({ type: 'play', seat: 1, card: C('D', 'K') })
+    expect(botAction(aceGone, 1, smart, 'normal')).toEqual({ type: 'play', seat: 1, card: C('C', 'Q') })
   })
 
   it('leads a low trump before the last plain aces, also in a sweep', () => {
