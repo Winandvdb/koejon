@@ -4,6 +4,7 @@ import type { Action, Card, State } from '../engine'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
 import { DEFAULT_ROOM_OPTS } from './net-types'
 import { addHistory } from './history'
+import { discardRoom } from './host'
 import { safeStorage, type KeyValueStore } from './storage'
 import type { GuestLink, HostLink } from './transport'
 
@@ -224,6 +225,13 @@ export async function resumeRoom(code: string, uid: string, name: string): Promi
   if (!snap.exists()) return null
   const room = snap.data() as RoomDoc
   return seatOf(room, uid) >= 0 ? enterRoom(room, code, uid, name) : null
+}
+
+/** Delete a paused room of ours from Home, where no host runs. Firestore
+ *  only: a host link without guests has no data channels to close. */
+export async function endRoom(code: string): Promise<void> {
+  const [, , { FirestoreHostLink }] = await links()
+  await discardRoom(code, new FirestoreHostLink(code))
 }
 
 async function enterRoom(room: RoomDoc, code: string, uid: string, name: string): Promise<RoomSession> {

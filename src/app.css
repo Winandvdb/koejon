@@ -520,6 +520,22 @@ input[type='checkbox'] {
   gap: 10px;
 }
 
+.paused-panel {
+  gap: 10px;
+}
+
+.paused-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.paused-label {
+  flex: 1 1 140px;
+  font-weight: 600;
+}
+
 .divider {
   display: flex;
   align-items: center;
