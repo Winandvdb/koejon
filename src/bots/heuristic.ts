@@ -356,10 +356,17 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
     if (aces.length && !oppMayTrump) return because(why, 'sweep: safe ace, opponents hold no trump', aces[0])
     if (aces.length && !tactics) return because(why, 'sweep: beginner cashes an ace', aces[0])
     if (beforeAces) return because(why, `sweep: only aces left: low trump, ${acesWait}`, beforeAces)
-    // From here on any ace waits.
+    // From here on any ace waits. With tactics a king waits too while its ace
+    // is out: it would feed the ace. The highest other card still goes, as
+    // the normal low lead benched weaker in a sweep (#194).
     const keep = partner || shortDefender ? trumps : []
-    const rest = legal.filter((c) => !keep.includes(c) && !aces.includes(c))
-    const note = aces.length ? `, ${acesWait}` : ''
+    const feedsAce = (c: Card) =>
+      tactics && c.s !== trump && c.r === 'K' && !read.acesGone.has(c.s) && !aces.some((a) => a.s === c.s)
+    const free = legal.filter((c) => !keep.includes(c) && !aces.includes(c))
+    const noFeed = free.filter((c) => !feedsAce(c))
+    const rest = noFeed.length ? noFeed : free
+    const kingWaits = rest.length < free.length ? ', the king waits: its ace is out' : ''
+    const note = (aces.length ? `, ${acesWait}` : '') + kingWaits
     if (keep.length && rest.length) return because(why, `sweep: highest card, keeps trump${note}`, highest(rest))
     if (rest.length) return because(why, `sweep: highest card${note}`, highest(rest))
     return because(why, 'sweep: highest card', highest(legal))
