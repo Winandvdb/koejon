@@ -13,7 +13,7 @@ export interface TableQuote {
 export const QUOTES = {
   /** Won a trick while the other team was on a kapot run. */
   gouwe: ['Da was ne gouwe!', 'Gouden slag!'],
-  /** Someone just called play. */
+  /** Someone just called play. `tried` answers the second line. */
   play: ["'Tzijn de goei!", 'We gaan proberen'],
   /** The hand is lost. */
   lost: ['De kaarten moeten draaien'],
@@ -93,7 +93,9 @@ export const QUOTES = {
 function hash(...ns: number[]): number {
   let h = 0
   for (const n of ns) h = Math.imul(h ^ (n + 0x9e3779b9), 0x85ebca6b) >>> 0
-  return h
+  // Fold the high bits in: without it the low bits follow the low bits of
+  // the inputs, so `% 4` would repeat every 4 hands.
+  return (h ^ (h >>> 16)) >>> 0
 }
 
 /** A pseudo-random seat of `team` (its two seats are `team` and `team + 2`). */
@@ -195,6 +197,26 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
   const trump = pub.trump
   const hand = pub.handNumber
 
+  // The boomke is done: a word from each side of the table. The host rolls
+  // only once at the end, so these two do not share that roll with the
+  // lines of the last hand.
+  if (pub.phase === 'GAME_OVER' && pub.winner !== null) {
+    const hl = hash(hand, 14)
+    const hw = hash(hand, 15)
+    return [
+      {
+        key: 'ml',
+        seat: teamSeat(1 - pub.winner, hl),
+        text: QUOTES.matchLost[(hl >>> 4) % QUOTES.matchLost.length],
+      },
+      {
+        key: 'mw',
+        seat: teamSeat(pub.winner, hw),
+        text: QUOTES.matchWon[(hw >>> 4) % QUOTES.matchWon.length],
+      },
+    ]
+  }
+
   // "Ik ga" just fell: the caller speaks until the first card lands.
   if (
     pub.phase === 'PLAYING' &&
@@ -205,23 +227,27 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
     out.push({ key: `p${hand}`, seat: pub.bidder, text: playLine(hand) })
   }
 
-  // The match starts with the draw for the first dealer.
-  if (pub.phase === 'DEALER_DRAW') {
-    out.push({ key: 'b', seat: hash(17) % 4, text: QUOTES.start[0] })
+  // The match starts. The first drawn card is the only thing in the public
+  // state that differs per match, so the speaker changes with it.
+  const drawn = pub.phase === 'DEALER_DRAW' ? pub.dealerDraw?.draws[0]?.card : undefined
+  if (drawn) {
+    const h = hash('SHDC'.indexOf(drawn.s), RANK_ORDER[drawn.r], 17)
+    out.push({ key: 'b', seat: h % 4, text: QUOTES.start[0] })
   }
 
   if (pub.phase === 'CUTTING') {
     // Everybody passed: the next hand counts double.
     if (pub.log[pub.log.length - 1]?.t === 'all-pass') {
-      const h = hash(hand, 18)
+      const h = hash(hand, pub.lines[0], pub.lines[1], 18)
       out.push({
         key: `ap${hand}`,
         seat: h % 4,
         text: QUOTES.allPass[(h >>> 4) % QUOTES.allPass.length],
       })
     }
-    // Small talk on one cut in four.
-    const h = hash(hand, 16)
+    // Small talk on one cut in four. The lines left vary the hash, else
+    // every match would repeat the same talk at the same cuts.
+    const h = hash(hand, pub.lines[0], pub.lines[1], 16)
     if (h % 4 === 0) {
       out.push({
         key: `c${hand}`,
@@ -389,10 +415,12 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
           text: QUOTES.countTrump[(h >>> 4) % QUOTES.countTrump.length],
         })
       }
-      // The winner trumped the trick that the partner already had.
+      // The winner trumped, as the last card, the trick that the partner
+      // already had: with nobody left to play, the trump only took it away.
       const wi = last.findIndex((tc) => tc.seat === pub.leader)
       const pi = last.findIndex((tc) => tc.seat === partnerOf(pub.leader))
       if (
+        wi === 3 &&
         last[wi].card.s === trump &&
         pi < wi &&
         trickWinnerIndex(last.slice(0, wi), trump) === pi
@@ -467,10 +495,10 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
       out.push({ key: `iz${hand}`, seat: teamSeat(wt, hash(hand, 22)), text: QUOTES.narrowWin[0] })
     }
     // "We gaan proberen" really fired, and the bidders made it.
-    if (wt === r.playingTeam && fired.has(`p${hand}`) && playLine(hand) === 'We gaan proberen') {
+    if (wt === r.playingTeam && fired.has(`p${hand}`) && playLine(hand) === QUOTES.play[1]) {
       out.push({ key: `z${hand}`, seat: teamSeat(1 - wt, hash(hand, 23)), text: QUOTES.tried[0] })
     }
-    // A loser who played two aces or more this hand.
+    // Two aces or more and still lost: the cards were not to blame.
     const deal = pub.log.findLastIndex((e) => e.t === 'deal')
     const aces = [0, 0, 0, 0]
     for (const e of pub.log.slice(deal + 1)) {
@@ -482,9 +510,9 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
     }
   }
 
-  // A scored hand, the match goes on: someone checks the boomke.
+  // Not at the end of the match: there is no boomke left to keep.
   if (pub.phase === 'SCORED') {
-    const h = hash(hand, 24)
+    const h = hash(hand, pub.lines[0], pub.lines[1], 24)
     out.push({
       key: `y${hand}`,
       seat: h % 4,
@@ -505,22 +533,6 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
         })
       }
     }
-  }
-
-  // The boomke is done: a word from each side of the table.
-  if (pub.phase === 'GAME_OVER' && pub.winner !== null) {
-    const hl = hash(hand, 14)
-    out.push({
-      key: 'ml',
-      seat: teamSeat(1 - pub.winner, hl),
-      text: QUOTES.matchLost[(hl >>> 4) % QUOTES.matchLost.length],
-    })
-    const hw = hash(hand, 15)
-    out.push({
-      key: 'mw',
-      seat: teamSeat(pub.winner, hw),
-      text: QUOTES.matchWon[(hw >>> 4) % QUOTES.matchWon.length],
-    })
   }
 
   return out

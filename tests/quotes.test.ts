@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apply, createMatch, toPublic } from '../src/engine'
+import { apply, createMatch, legalActions, toPublic } from '../src/engine'
 import type { BoomkeMark, HandResult, TrickCard } from '../src/engine'
 import { activeQuotes, hurryQuote, QUOTES, QUOTE_SEAT_GAP_MS, QuoteBook } from '../src/lib/quotes'
 import { C, playingState } from './helpers'
@@ -541,9 +541,15 @@ describe('table quotes', () => {
     expect(QUOTES.hurry).toContain('Wast weer audit opt werk vandaag?')
   })
 
-  it('someone wishes luck when the match starts', () => {
-    const qs = activeQuotes(toPublic(apply(createMatch(1), { type: 'start', seat: 0 })))
-    expect(qs.find((q) => q.key === 'b')!.text).toBe(QUOTES.start[0])
+  it('someone wishes luck at the first drawn card, not always the same seat', () => {
+    const drawn = (seed: number) => {
+      const s = apply(createMatch(seed), { type: 'start', seat: 0 })
+      expect(activeQuotes(toPublic(s)).some((q) => q.key === 'b')).toBe(false)
+      return activeQuotes(toPublic(apply(s, legalActions(s, 0)[0]))).find((q) => q.key === 'b')!
+    }
+    const qs = Array.from({ length: 12 }, (_, i) => drawn(i + 1))
+    for (const q of qs) expect(q.text).toBe(QUOTES.start[0])
+    expect(new Set(qs.map((q) => q.seat)).size).toBeGreaterThan(1)
   })
 
   it('a round of passes draws a comment at the cut', () => {
@@ -572,6 +578,9 @@ describe('table quotes', () => {
     expect(hits.length).toBeGreaterThan(0)
     expect(hits.length).toBeLessThan(cuts.length / 2)
     for (const q of hits) expect(QUOTES.chat).toContain(q!.text)
+    // Not a fixed rhythm of every 4th cut.
+    const at = chat.flatMap((q, i) => (q ? [i] : []))
+    expect(new Set(at.map((i) => i % 4)).size).toBeGreaterThan(1)
     // Deterministic: every client and every reload sees the same line.
     expect(cuts.map((pub) => activeQuotes(pub).find((q) => q.key.startsWith('c')))).toEqual(chat)
   })
@@ -652,33 +661,47 @@ describe('table quotes', () => {
   })
 
   it('a player who trumps the partner’s trick hears about it', () => {
-    const bought = (third: TrickCard, winner: number) =>
+    const bought = (last: TrickCard, winner: number) =>
       activeQuotes(
         toPublic(
           playingState({
             trump: 'H',
             tricksPlayed: 1,
-            tricksWon: [1, 0],
+            tricksWon: [winner % 2 === 0 ? 1 : 0, winner % 2],
             leader: winner,
-            lastTrick: [{ seat: 0, card: C('S', 'K') }, { seat: 1, card: C('S', '9') }, third, { seat: 3, card: C('S', '10') }],
+            lastTrick: [{ seat: 0, card: C('S', '9') }, { seat: 1, card: C('S', 'K') }, { seat: 2, card: C('S', '10') }, last],
           }),
         ),
       )
-    const j = bought({ seat: 2, card: C('H', '9') }, 2).find((q) => q.key === 'j1-1')
+    const j = bought({ seat: 3, card: C('H', '9') }, 3).find((q) => q.key === 'j1-1')
     expect(j).toBeDefined()
-    expect(j!.seat).toBe(0)
+    expect(j!.seat).toBe(1)
     expect(QUOTES.ownTrick).toContain(j!.text)
 
-    // Seat 2 follows suit and seat 0 keeps the trick: no complaint.
-    expect(bought({ seat: 2, card: C('S', 'Q') }, 0).some((q) => q.key.startsWith('j'))).toBe(false)
+    // Seat 3 follows suit and seat 1 keeps the trick: no complaint.
+    expect(bought({ seat: 3, card: C('S', 'Q') }, 1).some((q) => q.key.startsWith('j'))).toBe(false)
+
+    // A trump before the last card can keep the trick from the opponent after it.
+    const guarded = activeQuotes(
+      toPublic(
+        playingState({
+          trump: 'H',
+          tricksPlayed: 1,
+          tricksWon: [1, 0],
+          leader: 2,
+          lastTrick: [{ seat: 0, card: C('S', 'K') }, { seat: 1, card: C('S', '9') }, { seat: 2, card: C('H', '9') }, { seat: 3, card: C('S', '10') }],
+        }),
+      ),
+    )
+    expect(guarded.some((q) => q.key.startsWith('j'))).toBe(false)
   })
 
   it('"We gaan proberen" comes back only when it fired and the bidders won', () => {
     const line = (hand: number) =>
       activeQuotes(toPublic(playingState({ handNumber: hand, bidder: 1 })))[0].text
     const hands = Array.from({ length: 20 }, (_, i) => i + 1)
-    const tried = hands.find((h) => line(h) === 'We gaan proberen')!
-    const other = hands.find((h) => line(h) !== 'We gaan proberen')!
+    const tried = hands.find((h) => line(h) === QUOTES.play[1])!
+    const other = hands.find((h) => line(h) !== QUOTES.play[1])!
     const scored = (hand: number, winnerTeam: number) =>
       toPublic(
         playingState({
@@ -736,6 +759,8 @@ describe('table quotes', () => {
       }),
     )
     const qs = activeQuotes(over)
+    // The last hand's lines would share the one roll at the end: left out.
+    expect(qs.map((q) => q.key).sort()).toEqual(['ml', 'mw'])
     const congrats = qs.find((q) => q.key === 'ml')
     expect(congrats!.seat % 2).toBe(0)
     expect(QUOTES.matchLost).toContain(congrats!.text)
