@@ -162,8 +162,9 @@ export class HostGame {
   static async attach(code: string, uid: string, link: HostLink, opts?: HostOptions): Promise<HostGame> {
     const h = new HostGame(code, uid, link, opts)
     await h.lockTab()
+    let docInLobby: boolean
     try {
-      await h.load()
+      docInLobby = await h.load()
     } catch (e) {
       // The link stays usable: the caller may retry attach on it.
       h.releaseLock?.()
@@ -180,8 +181,9 @@ export class HostGame {
       h.armHurry()
     }, h.heartbeatMs)
     // After a reload: one publish gives this tab and every guest the current
-    // state (own hand included) without waiting for the next move.
-    if (h.state.phase !== 'LOBBY') h.enqueue(() => h.commit())
+    // state (own hand included) without waiting for the next move. A room doc
+    // that missed the move back to the lobby gets it too, or nobody can join.
+    if (h.state.phase !== 'LOBBY' || !docInLobby) h.enqueue(() => h.commit())
     h.scheduleBots()
     // Records left by an offline match or an earlier session.
     globalThis.addEventListener?.('online', h.onOnline)
@@ -189,7 +191,8 @@ export class HostGame {
     return h
   }
 
-  private async load(): Promise<void> {
+  /** True when the room doc shows the lobby. */
+  private async load(): Promise<boolean> {
     const room = await this.link.load()
     if (!room) throw new Error('room-not-found')
     if (room.hostUid !== this.uid) throw new Error('not-host')
@@ -216,6 +219,7 @@ export class HostGame {
     // After a reload the last event shows again: its linger starts anew.
     this.lastEvent = JSON.stringify(this.state.log[this.state.log.length - 1] ?? null)
     this.eventAt = Date.now()
+    return inLobby
   }
 
   /** One host tab per room: a second one would answer the same guests. */
@@ -368,6 +372,9 @@ export class HostGame {
   toLobby(): void {
     this.enqueue(async () => {
       if (this.state.phase !== 'GAME_OVER') return
+      // A player who left keeps a claim on their seat only while a match runs:
+      // in the lobby a leave clears the seat.
+      this.seats = this.seats.map((s) => (s?.bot && !s.uid.startsWith(BOT_UID_PREFIX) ? null : s))
       this.state = createMatch((this.rand() * 2 ** 31) | 0)
       this.quoteBook.reset()
       this.quoteLog = []
