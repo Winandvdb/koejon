@@ -473,7 +473,14 @@
     <div class="alert">{$t.kicked}</div>
   {:else}
     {#if err}<div class="alert">{err}</div>{/if}
-    <Table {view} {send} isHost={view.room.hostUid === uid} onnewmatch={onNewMatch} onkick={(i) => host?.kickSeat(i)} />
+    <Table
+      {view}
+      {send}
+      isHost={view.room.hostUid === uid}
+      onnewmatch={onNewMatch}
+      onlobby={session.code === SOLO_CODE ? undefined : () => host?.toLobby()}
+      onkick={(i) => host?.kickSeat(i)}
+    />
   {/if}
 </main>
 

@@ -363,6 +363,19 @@ export class HostGame {
     })
   }
 
+  /** After GAME_OVER: back to the lobby with the same seats, so the table can
+   *  reseat or take new players without a new room. The record is already out. */
+  toLobby(): void {
+    this.enqueue(async () => {
+      if (this.state.phase !== 'GAME_OVER') return
+      this.state = createMatch((this.rand() * 2 ** 31) | 0)
+      this.quoteBook.reset()
+      this.quoteLog = []
+      this.finalKjn = null
+      await this.commit()
+    })
+  }
+
   /** A fresh match, started into the dealer draw. Each team's drawing player
    *  is a human seat when the team has one. */
   private async beginMatch(seed: number): Promise<void> {
