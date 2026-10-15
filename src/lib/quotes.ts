@@ -1,4 +1,4 @@
-import { partnerOf, RANK_ORDER, teamOf, trickPoints } from '../engine'
+import { partnerOf, RANK_ORDER, teamOf, trickPoints, trickWinnerIndex } from '../engine'
 import type { PublicState, TrickCard } from '../engine'
 import type { QuoteEvent } from './net-types'
 
@@ -32,7 +32,7 @@ export const QUOTES = {
   /** A player cannot follow suit and must pick something else. */
   forgot: ['Wat was ook alweer troef?'],
   /** A seat keeps the table waiting. */
-  hurry: ['Geeft hem is nen duw', "'Tis uw beurt he"],
+  hurry: ['Geeft hem is nen duw', "'Tis uw beurt he", 'Wast weer audit opt werk vandaag?'],
   /** A team reaches 21 points mid-hand by feeding fat cards. */
   there: ['We zijn er al se'],
   /** A trick worth more than 10 points. */
@@ -49,6 +49,43 @@ export const QUOTES = {
   madeIt: ['Wij zijn er nog denk', "'T is nog van ons, telt maar na"],
   /** A team still has not crossed off a single mark. */
   noMarks: ['Wanneer gaan de kaarten draaien?'],
+  /** All players passed: the next hand counts double. */
+  allPass: ['Rondje pas', 'De eerste zullen de tweede zijn', 'Wie onthoudt het dat het dubbel is?'],
+  /** A hand is scored and the match goes on. */
+  scored: ['Was dat dubbel of enkel?', 'Vergeet ge niet te vegen?', 'Hoeveel moeten we er nog?'],
+  /** The match starts. */
+  start: ['Succes allemaal, maar niet veel te veel he'],
+  /** Small talk while the deck is cut. */
+  chat: [
+    'Ik zen vandaag om 6u opgestaan',
+    'Doede gij volgende week ook mee?',
+    'Wie is uwe vaste maat normaal?',
+    'Van waar zijde gij?',
+    'Van wie zijde gij er ene?',
+  ],
+  /** The winners of a kapot praise each other. */
+  kapotWon: ['Ge weet het goed genoeg'],
+  /** The losers of a kapot. */
+  kapotLost: ['Niks tegen te doen'],
+  /** A hand won by a narrow margin. */
+  narrowWin: ['Dat was goed gespeeld'],
+  /** The partner led a side ace and the opponents trumped it. */
+  countTrump: ['Ge moet wel troef tellen he!', 'Telde gij eigenlijk wel?'],
+  /** The partner trumped a trick that the speaker already had. */
+  ownTrick: ['Allee voorwa doede dat nu', 'Allee ge weet nu toch datk dat heb'],
+  /** "We gaan proberen" fired and the bidding team won the hand. */
+  tried: ['We gaan proberen zegt ie dan'],
+  /** Lost the hand after playing two aces or more. */
+  goodCards: ['Ik had goei speelkaarten, maar kon niks doen'],
+  /** The match is over: the losers congratulate the winners. */
+  matchLost: [
+    'Allee proficiat, wat drinkt gullie?',
+    'Gullie wordt kermiskampioen',
+    'Allemaal van den Herman geleerd zeker?',
+    'Dju toch, de kaarten waren gedraaid',
+  ],
+  /** The match is over: the winners stay sporting. */
+  matchWon: ['Goed gespeeld', 'Plezant matchke', 'Plezant boomke'],
 } as const
 
 /** Deterministic hash: the same state always gives the same speaker and line.
@@ -77,6 +114,8 @@ export function hurryQuote(
 
 /** A met condition produces a line only this often — table talk stays rare. */
 const QUOTE_CHANCE = 0.5
+/** A hand won with at most this many points was a close call. */
+const NARROW_WIN = 22
 /** One seat talks at most this often. */
 export const QUOTE_SEAT_GAP_MS = 60_000
 
@@ -88,6 +127,8 @@ export const QUOTE_SEAT_GAP_MS = 60_000
 export class QuoteBook {
   /** Lines already spoken this match — a text never repeats, whoever said it. */
   private said = new Set<string>()
+  /** Keys of the quotes fired this match — some lines answer an earlier one. */
+  private fired = new Set<string>()
   /** Last time each seat spoke, epoch ms. */
   private spokeAt = [0, 0, 0, 0]
   /** Fired-quote counter; keeps climbing across matches so clients dedup. */
@@ -96,6 +137,7 @@ export class QuoteBook {
   /** A fresh match: lines may be said again. */
   reset(): void {
     this.said.clear()
+    this.fired.clear()
     this.spokeAt = [0, 0, 0, 0]
   }
 
@@ -108,12 +150,13 @@ export class QuoteBook {
   /** At most one candidate fires per call: it must survive the chance roll,
    *  its line must be new this match and its seat quiet for a minute. */
   pick(pub: PublicState, now = Date.now(), rand: () => number = Math.random): QuoteEvent | null {
-    const ok = activeQuotes(pub).filter(
+    const ok = activeQuotes(pub, this.fired).filter(
       (q) => !this.said.has(q.text) && !this.cooling(q.seat, now),
     )
     if (ok.length === 0 || rand() >= QUOTE_CHANCE) return null
     const q = ok[Math.floor(rand() * ok.length)]
     this.said.add(q.text)
+    this.fired.add(q.key)
     this.spokeAt[q.seat] = now
     return { n: ++this.n, seat: q.seat, text: q.text, at: now }
   }
@@ -127,21 +170,27 @@ export class QuoteBook {
     return { n: ++this.n, seat: q.seat, text: q.text, at: now }
   }
 
-  toJSON(): { said: string[]; spokeAt: number[]; n: number } {
-    return { said: [...this.said], spokeAt: this.spokeAt, n: this.n }
+  toJSON(): { said: string[]; fired: string[]; spokeAt: number[]; n: number } {
+    return { said: [...this.said], fired: [...this.fired], spokeAt: this.spokeAt, n: this.n }
   }
 
-  static fromJSON(d: { said: string[]; spokeAt: number[]; n: number }): QuoteBook {
+  /** `fired` is missing in a save from an older build. */
+  static fromJSON(d: { said: string[]; fired?: string[]; spokeAt: number[]; n: number }): QuoteBook {
     const b = new QuoteBook()
     b.said = new Set(d.said)
+    b.fired = new Set(d.fired ?? [])
     b.spokeAt = d.spokeAt
     b.n = d.n
     return b
   }
 }
 
-/** Sayings that apply right now, derived purely from the shared public state. */
-export function activeQuotes(pub: PublicState): TableQuote[] {
+/** The "Ik ga" line of a hand. */
+const playLine = (hand: number) => QUOTES.play[hash(hand, 1) % QUOTES.play.length]
+
+/** Sayings that apply right now, derived purely from the shared public state
+ *  and `fired`, the keys of the quotes that already fired this match. */
+export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new Set()): TableQuote[] {
   const out: TableQuote[] = []
   const trump = pub.trump
   const hand = pub.handNumber
@@ -153,8 +202,33 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
     pub.tricksPlayed === 0 &&
     pub.trick.length === 0
   ) {
-    const h = hash(hand, 1)
-    out.push({ key: `p${hand}`, seat: pub.bidder, text: QUOTES.play[h % QUOTES.play.length] })
+    out.push({ key: `p${hand}`, seat: pub.bidder, text: playLine(hand) })
+  }
+
+  // The match starts with the draw for the first dealer.
+  if (pub.phase === 'DEALER_DRAW') {
+    out.push({ key: 'b', seat: hash(17) % 4, text: QUOTES.start[0] })
+  }
+
+  if (pub.phase === 'CUTTING') {
+    // Everybody passed: the next hand counts double.
+    if (pub.log[pub.log.length - 1]?.t === 'all-pass') {
+      const h = hash(hand, 18)
+      out.push({
+        key: `ap${hand}`,
+        seat: h % 4,
+        text: QUOTES.allPass[(h >>> 4) % QUOTES.allPass.length],
+      })
+    }
+    // Small talk on one cut in four.
+    const h = hash(hand, 16)
+    if (h % 4 === 0) {
+      out.push({
+        key: `c${hand}`,
+        seat: (h >>> 2) % 4,
+        text: QUOTES.chat[(h >>> 4) % QUOTES.chat.length],
+      })
+    }
   }
 
   // The opening lead just landed.
@@ -305,6 +379,32 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.goodTrick[0],
       })
     }
+    if (trump !== null && last[0].card.s !== trump) {
+      // A side ace only loses to a trump: the leader forgot one was still out.
+      if (last[0].card.r === 'A' && wt !== teamOf(last[0].seat)) {
+        const h = hash(hand, pub.tricksPlayed, 19)
+        out.push({
+          key: `t${hand}-${pub.tricksPlayed}`,
+          seat: partnerOf(last[0].seat),
+          text: QUOTES.countTrump[(h >>> 4) % QUOTES.countTrump.length],
+        })
+      }
+      // The winner trumped the trick that the partner already had.
+      const wi = last.findIndex((tc) => tc.seat === pub.leader)
+      const pi = last.findIndex((tc) => tc.seat === partnerOf(pub.leader))
+      if (
+        last[wi].card.s === trump &&
+        pi < wi &&
+        trickWinnerIndex(last.slice(0, wi), trump) === pi
+      ) {
+        const h = hash(hand, pub.tricksPlayed, 20)
+        out.push({
+          key: `j${hand}-${pub.tricksPlayed}`,
+          seat: last[pi].seat,
+          text: QUOTES.ownTrick[(h >>> 4) % QUOTES.ownTrick.length],
+        })
+      }
+    }
     // A loser of the trick grumbles.
     {
       const h = hash(hand, pub.tricksPlayed, 11)
@@ -358,6 +458,38 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         text: QUOTES.revenge[(hr >> 4) % QUOTES.revenge.length],
       })
     }
+    const wt = r.winnerTeam
+    if (r.kapot) {
+      const h = hash(hand, 21)
+      out.push({ key: `iw${hand}`, seat: teamSeat(wt, h), text: QUOTES.kapotWon[0] })
+      out.push({ key: `il${hand}`, seat: teamSeat(1 - wt, h >>> 1), text: QUOTES.kapotLost[0] })
+    } else if (r.points[wt] <= NARROW_WIN) {
+      out.push({ key: `iz${hand}`, seat: teamSeat(wt, hash(hand, 22)), text: QUOTES.narrowWin[0] })
+    }
+    // "We gaan proberen" really fired, and the bidders made it.
+    if (wt === r.playingTeam && fired.has(`p${hand}`) && playLine(hand) === 'We gaan proberen') {
+      out.push({ key: `z${hand}`, seat: teamSeat(1 - wt, hash(hand, 23)), text: QUOTES.tried[0] })
+    }
+    // A loser who played two aces or more this hand.
+    const deal = pub.log.findLastIndex((e) => e.t === 'deal')
+    const aces = [0, 0, 0, 0]
+    for (const e of pub.log.slice(deal + 1)) {
+      if (e.t === 'card' && e.card?.r === 'A') aces[e.seat!]++
+    }
+    const unlucky = [0, 1, 2, 3].find((s) => teamOf(s) !== wt && aces[s] >= 2)
+    if (unlucky !== undefined) {
+      out.push({ key: `3${hand}`, seat: unlucky, text: QUOTES.goodCards[0] })
+    }
+  }
+
+  // A scored hand, the match goes on: someone checks the boomke.
+  if (pub.phase === 'SCORED') {
+    const h = hash(hand, 24)
+    out.push({
+      key: `y${hand}`,
+      seat: h % 4,
+      text: QUOTES.scored[(h >>> 4) % QUOTES.scored.length],
+    })
   }
 
   // A hand is scored and a team still has not crossed off one mark — it asks
@@ -373,6 +505,22 @@ export function activeQuotes(pub: PublicState): TableQuote[] {
         })
       }
     }
+  }
+
+  // The boomke is done: a word from each side of the table.
+  if (pub.phase === 'GAME_OVER' && pub.winner !== null) {
+    const hl = hash(hand, 14)
+    out.push({
+      key: 'ml',
+      seat: teamSeat(1 - pub.winner, hl),
+      text: QUOTES.matchLost[(hl >>> 4) % QUOTES.matchLost.length],
+    })
+    const hw = hash(hand, 15)
+    out.push({
+      key: 'mw',
+      seat: teamSeat(pub.winner, hw),
+      text: QUOTES.matchWon[(hw >>> 4) % QUOTES.matchWon.length],
+    })
   }
 
   return out
