@@ -49,6 +49,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `pimc.ts` — algorithm `pimc`. It takes card play and the troefke but no bids or dealer's choice, so a bot with it needs a second rule for those. A rule `when: { phase: 'play' }` leaves the troefke to the next rule. Option `anchor` (an algorithm spec) with `margin`: pimc plays the anchor's card unless its own best card is more than `margin` lines better on the same worlds; cards only, not the troefke.
 - `mcts.ts` — algorithms `mcts` (determinized MCTS) and `ismcts` (SO-ISMCTS). They search every decision of the hand on `Hand`, a bitmask copy of the rules, because the engine's `apply` is far too slow for that. **Rule:** `tests/mcts.test.ts` compares `Hand` with the engine, so a rule change in `src/engine/` must show up in `Hand`.
 - `conventions.ts` — the troefke convention shared by all algorithms: `troefkeHand` (may ask), `troefkeLead` (obey), `troefkeWeight` (read). When to ask stays per algorithm. **Rule:** a convention, not an engine rule: the partner may ignore it.
+- `analysis.ts` — `rateDecision`: rates one decision of a replay, not a bot. Cards get the `pimc` value of every legal card; bids (go / pass, troefke, dealer's choice) get rollouts played by `heuristic:hard`. The loss maps to a class through `LOSS_LIMITS`. **Rule:** it reads only `observe(state, seat)`, and all randomness comes from its `seed`.
 - `heuristic.ts` — algorithm `heuristic:easy|normal|hard`. Constants in `HEURISTIC_DEFAULTS` (tuned with `npm run tune`, except the ones marked `fixed` in `PARAMS`); `LEVEL_OPTIONS` overrides them per level. Option `skill` overrides the level's share of smart cards; it is not a tuning constant, so it stays out of `HEURISTIC_DEFAULTS` and `PARAMS`.
 
 ### `src/lib/`
@@ -61,6 +62,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `firebase.ts` — Firebase init, emulator auto-connect. **Rule:** reach it only by dynamic import, so a solo player never downloads the SDK.
 - `games.ts` — `saveGame`: one finished match as write-once `games/{id}`. `App.svelte` passes it to the host by dynamic import.
 - `kjn.ts` — KJN/1 game records: build, serialize, parse, replay, load from a file. Format spec in `README.md`. **Rules:** KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. A record error must never stop a match. Only a match that a human played to the end gets a record (`finishRecord` in `host.ts`: a seat still `human` at `GAME_OVER`; `mixed` does not count); else no upload, no `room.kjn`, no history entry and no download.
+- `analysis.ts`, `analysis-worker.ts` — the replay analysis: `stepDecisions` (the decisions behind a replay step, from `replayMoves` in `kjn.ts`), `matchSeed`, and `Analyzer`, which asks the Web Worker for one step at a time and keeps the results. **Rule:** ratings run only in the worker, and the worker uses no network.
 - `history.ts` — the last 20 finished matches on this device. **Rule:** device only: never uploaded, no Firestore reads; seat names stay out of the KJN text.
 - `stats.ts` — personal statistics from the history. **Rule:** no engine state and no network.
 - `download.ts` — the `.kjn` file of a match (share sheet or download). No network.
@@ -68,6 +70,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `quotes.ts` — table talk: `activeQuotes` finds candidates, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
 - `i18n.ts` — all UI text, Dutch (`nl`, default) and English (`en`). **Rule:** every new UI string goes in both languages.
 - `table.ts` — what the live table and the replay both show (bids, bubbles, trick shown, fly directions). **Rule:** public state only; both screens call these, never copy them.
+- `replay.ts` — the replay's move list model: `replayMoves` (per hand its bids and tricks, each item with its step in `replaySteps`, trick winner, own flag, `rating` slot for move ratings). **Rule:** pure, no DOM; `tests/replay.test.ts` checks it.
 - `prefs.ts`, `theme.ts` — per-device preferences as stores that save every change. **Rule:** use `safeStorage`. Components use the stores, never the keys (`koejon-name`, `koejon-bot-level`, `koejon-lang`, `koejon-sort-mode`, `koejon-theme`). Keep the keys: saved values must stay valid.
 - `storage.ts` — `safeStorage` (never throws), `KeyValueStore`, `readJson`. **Rule:** use it for app storage; never touch `localStorage` outside a try/catch.
 - `devsettings.ts` — dev build test shortcuts (`DevPanel.svelte`). **Rules:** production builds use `DEV_DEFAULTS`. The host uploads no KJN record for a match with another tree length or with autoplay.
@@ -76,7 +79,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 
 ### Other paths
 
-- `src/components/` — Svelte UI. `App.svelte`: startup and routing. `Table.svelte`: the game table. `Replay.svelte`: read-only replay. `Nameplate`, `Avatar`, `TurnedCards`, `Opponent`, `TrickArea` and `ResultPanel` are shared by both. **Rules:** must work at phone width. Replay sends no intents and uses no network. A change to a table part goes in the shared component, not in one screen.
+- `src/components/` — Svelte UI. `App.svelte`: startup and routing. `Table.svelte`: the game table. `Replay.svelte`: read-only replay in a game-review layout (table plus a panel with `ReplayOverview` and `ReplayMoves`). `Nameplate`, `Avatar`, `TurnedCards`, `Opponent`, `TrickArea` and `ResultPanel` are shared by both. **Rules:** must work at phone width. Replay sends no intents and uses no network. A change to a table part goes in the shared component, not in one screen.
 - `src/app.css` — all styles and colour tokens.
 - `public/` — manifest, icons (`icon.svg` is the source of the PNGs), `robots.txt`. Copied to `dist/` as is.
 - `pwa/` — service worker template and precache list; dev build name and icons. **Rule:** the worker never caches other origins (Firebase). Registered in production builds only.

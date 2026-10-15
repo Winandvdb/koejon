@@ -1,4 +1,5 @@
 import { derived } from 'svelte/store'
+import type { RatingClass } from '../bots/analysis'
 import type { BotLevel } from '../bots/bot'
 import type { Card, Suit } from '../engine'
 import { lang } from './prefs'
@@ -153,6 +154,33 @@ const dict = {
     pause: 'Pauze',
     allPassed: 'Iedereen past',
     replayOf: 'Herspeling van',
+    analysing: 'Analyseren…',
+    rateBest: 'Beste',
+    rateGood: 'Goed',
+    rateInaccuracy: 'Onnauwkeurig',
+    rateMistake: 'Fout',
+    rateBlunder: 'Blunder',
+    bestChoice: 'Beste keuze',
+    noChoice: 'Geen keuze bij deze stap',
+    noTroefke: 'Geen troefke',
+    winChance: 'Winkans',
+    expectedLines: 'Verwacht (lijnen)',
+    breakEven: 'Nodig om te gaan',
+    lostLines: 'lijnen verloren',
+    biddingLabel: 'Bieden',
+    cardsLabel: 'Kaarten',
+    thisHand: 'Deze hand',
+    wholeMatch: 'Hele potje',
+    analysisFailed: 'De analyse is mislukt',
+    overview: 'Overzicht',
+    moves: 'Zetten',
+    replayStart: 'Herspeel vanaf het begin',
+    linesPerHand: 'Lijnen per hand',
+    linesLeft: 'lijnen over',
+    matchWon: 'Gewonnen',
+    matchLost: 'Verloren',
+    trickWon: 'wint de slag',
+    expand: 'Uitklappen',
   },
   en: {
     title: 'Koejonnen',
@@ -301,6 +329,33 @@ const dict = {
     pause: 'Pause',
     allPassed: 'Everybody passed',
     replayOf: 'Replay of',
+    analysing: 'Analysing…',
+    rateBest: 'Best',
+    rateGood: 'Good',
+    rateInaccuracy: 'Inaccuracy',
+    rateMistake: 'Mistake',
+    rateBlunder: 'Blunder',
+    bestChoice: 'Best choice',
+    noChoice: 'No choice at this step',
+    noTroefke: 'No troefke',
+    winChance: 'Win chance',
+    expectedLines: 'Expected (lines)',
+    breakEven: 'Needed to go',
+    lostLines: 'lines lost',
+    biddingLabel: 'Bidding',
+    cardsLabel: 'Cards',
+    thisHand: 'This hand',
+    wholeMatch: 'Whole match',
+    analysisFailed: 'The analysis failed',
+    overview: 'Overview',
+    moves: 'Moves',
+    replayStart: 'Replay from the start',
+    linesPerHand: 'Lines per hand',
+    linesLeft: 'lines left',
+    matchWon: 'Won',
+    matchLost: 'Lost',
+    trickWon: 'wins the trick',
+    expand: 'Expand',
   },
 } as const
 
@@ -324,6 +379,25 @@ export const seatName = (d: { player: string }, name: string | null | undefined,
   name || `${d.player} ${i + 1}`
 
 export const SUIT_GLYPH: Record<Suit, string> = { S: '♠', H: '♥', D: '♦', C: '♣' }
+
+/** Chess-style marks of the replay analysis classes. */
+export const RATING_GLYPH: Record<RatingClass, string> = {
+  best: '✦',
+  good: '✓',
+  inaccuracy: '?!',
+  mistake: '?',
+  blunder: '??',
+}
+
+export const ratingNames = (
+  d: Record<'rateBest' | 'rateGood' | 'rateInaccuracy' | 'rateMistake' | 'rateBlunder', string>,
+): Record<RatingClass, string> => ({
+  best: d.rateBest,
+  good: d.rateGood,
+  inaccuracy: d.rateInaccuracy,
+  mistake: d.rateMistake,
+  blunder: d.rateBlunder,
+})
 
 export function suitName(s: Suit, l: Lang): string {
   const names = {
