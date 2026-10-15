@@ -73,6 +73,9 @@ const kjnKey = (code: string) => `koejon-kjn-${code}`
 const finalKey = (code: string) => `koejon-kjn-final-${code}`
 /** Every per-room key: destroyRoom removes them all. */
 const ROOM_KEYS = [engineKey, seqKey, quotesKey, seatsKey, kjnKey, finalKey]
+/** The seats with a hand doc to delete. */
+const humanUids = (seats: (SeatInfo | null)[]) => seats.flatMap((s) => (s && !s.bot ? [s.uid] : []))
+
 function removeRoomKeys(storage: KeyValueStore, code: string): void {
   try {
     for (const key of ROOM_KEYS) storage.removeItem(key(code))
@@ -86,7 +89,9 @@ function removeRoomKeys(storage: KeyValueStore, code: string): void {
 export async function discardRoom(code: string, link: HostLink, storage: KeyValueStore = safeStorage): Promise<void> {
   try {
     const room = await link.load()
-    if (room) await link.destroy(room.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
+    // The saved seats, as `load` prefers them: the P2P room doc can trail them.
+    const saved = readJson<(SeatInfo | null)[] | null>(storage, seatsKey(code), null)
+    if (room) await link.destroy(humanUids(saved ?? room.seats))
     removeRoomKeys(storage, code)
   } finally {
     link.dispose()
@@ -426,7 +431,7 @@ export class HostGame {
   async destroyRoom(): Promise<void> {
     this.dispose()
     await this.busy.catch(() => {})
-    await this.link.destroy(this.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
+    await this.link.destroy(humanUids(this.seats))
     removeRoomKeys(this.storage, this.code)
   }
 

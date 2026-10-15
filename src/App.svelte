@@ -54,8 +54,8 @@
   let showSettings = $state(false)
 
   /** What this host left mid-match, for the resume card on Home. */
-  const readPaused = () => ({ room: pausedRoom.get(), solo: soloPaused(safeStorage) })
-  let paused = $state(readPaused())
+  const readPaused = () => ({ room: pausedRoom.get(), solo: soloPaused(safeStorage, uid) })
+  let paused = $state({ room: null as string | null, solo: false })
 
   let authed = false
 
@@ -66,6 +66,7 @@
     try {
       const { signIn } = await import('./lib/firebase')
       uid = await signIn()
+      paused = readPaused()
       authed = true
       safeStorage.setItem('koejon-uid', uid)
       return true
@@ -90,6 +91,7 @@
 
   onMount(async () => {
     uid = offlineUid()
+    paused = readPaused()
     const name = get(playerName)
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
@@ -214,6 +216,8 @@
             h.dispose()
             throw new Error('session-gone')
           }
+          // Hosting again, by the card or by the link: no longer paused.
+          if (pausedRoom.get() === s.code) pausedRoom.clear()
           return (host = h)
         })
         .catch((e) => {
@@ -247,6 +251,7 @@
       // One paused room per device: a new one ends the old one for its guests too.
       const old = pausedRoom.get()
       if (old) {
+        if (!confirm($t.endGameAsk)) return
         await endRoom(old).catch((e) => console.warn('[room] could not end paused room', e))
         pausedRoom.clear()
       }
@@ -265,7 +270,10 @@
     try {
       // A new solo match replaces the paused one, engine keys included.
       const old = localLinks(uid, safeStorage)
-      if (old) await discardRoom(SOLO_CODE, old.host)
+      if (old) {
+        if (paused.solo && !confirm($t.endGameAsk)) return
+        await discardRoom(SOLO_CODE, old.host)
+      }
       const links = localLinks(uid, safeStorage, newRoomDoc(SOLO_CODE, uid, name))!
       if (seed !== null) {
         soloRand = hostRand(seed, SOLO_CODE)
@@ -350,9 +358,9 @@
         if (!code) return
         if (!(await ensureAuth())) return void (err = $t.offline)
         const resumed = await resumeRoom(code, uid, get(playerName))
-        // Back in, or the room is gone: either way the marker is done.
-        pausedRoom.clear()
+        // The host attach clears the marker; a room that is gone clears it here.
         if (resumed) attach(resumed)
+        else pausedRoom.clear()
       }
     } catch (e) {
       showErr(e, hostErrText(e), true)

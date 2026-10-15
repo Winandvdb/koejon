@@ -89,5 +89,9 @@ export function localLinks(
 
 const read = (storage: KeyValueStore) => readJson<Saved | null>(storage, KEY, null)
 
-/** A saved solo match that is under way, to resume from Home. */
-export const soloPaused = (storage: KeyValueStore): boolean => pausable(read(storage)?.room.pub?.phase)
+/** A saved solo match of `uid` that is under way, to resume from Home. A save
+ *  of an earlier uid (offline, before the first sign-in) cannot attach a host. */
+export function soloPaused(storage: KeyValueStore, uid: string): boolean {
+  const room = read(storage)?.room
+  return room?.hostUid === uid && pausable(room.pub?.phase)
+}
