@@ -90,15 +90,23 @@ export function createBot(config: BotConfig | AlgorithmSpec): Bot {
  * The `hard` bot plays the `heuristic:hard` card unless pimc finds one more
  * than this many lines better: with few worlds pimc's choice is often close
  * to a coin flip, and players find those cards strange, as partner too (#178).
+ * The largest margin benched that keeps the level's strength (#183). Hand
+ * values are whole lines, so with 10 worlds the gain is a multiple of 0.1.
  */
-export const HARD_ANCHOR_MARGIN = 0.25
+export const HARD_ANCHOR_MARGIN = 0.4
 
 /**
  * The pimc options of the `hard` bot. Worlds per decision, and of its partner
  * model in a troefke decision: few enough that a phone host decides within
- * 2 s (#172). Its cards anchored to `heuristic:hard` (`HARD_ANCHOR_MARGIN`).
+ * 2 s (#172). Its cards anchored to `heuristic:hard` (`HARD_ANCHOR_MARGIN`),
+ * without its lazy dumps: a planned mistake is no card to keep (#183).
  */
-export const HARD_PIMC = { samples: 10, partnerSamples: 2, anchor: 'heuristic:hard', margin: HARD_ANCHOR_MARGIN }
+export const HARD_PIMC = {
+  samples: 10,
+  partnerSamples: 2,
+  anchor: { id: 'heuristic:hard', skill: 1 },
+  margin: HARD_ANCHOR_MARGIN,
+}
 
 /** The bot of each level: `hard` plays its cards and the troefke with pimc and bids with `heuristic:hard`. */
 export const LEVEL_CONFIGS: Record<BotLevel, BotConfig | AlgorithmSpec> = {

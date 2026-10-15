@@ -667,17 +667,23 @@ function decide(
  * The hand-written bot as algorithm `heuristic:<level>`. It decides every real
  * decision (bids, troefke, the dealer's choice, card play) from the
  * observation only. Options override the level's values (`LEVEL_OPTIONS`
- * over `HEURISTIC_DEFAULTS`).
+ * over `HEURISTIC_DEFAULTS`). Option `skill` overrides the profile's skill:
+ * an anchor with `skill: 1` never plays a lazy dump (#183). It is not a
+ * tuning constant, so it stays out of `HEURISTIC_DEFAULTS`.
  */
 export function createHeuristic(variant: string | undefined, options: Record<string, unknown>): Algorithm {
   if (!BOT_LEVELS.includes(variant as BotLevel)) throw new Error(`unknown heuristic level: ${variant}`)
-  for (const [k, v] of Object.entries(options)) {
+  const { skill, ...constants } = options
+  if (skill !== undefined && (typeof skill !== 'number' || !(skill >= 0 && skill <= 1)))
+    throw new Error('heuristic option skill must be a number in [0, 1]')
+  for (const [k, v] of Object.entries(constants)) {
     if (!Object.hasOwn(HEURISTIC_DEFAULTS, k)) throw new Error(`unknown heuristic option: ${k}`)
     // A string from a JSON file would turn the sums into string concatenation.
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`heuristic option ${k} must be a number`)
   }
-  const profile = BOT_PROFILES[variant as BotLevel]
-  const opt: HeuristicOptions = { ...levelOptions(variant as BotLevel), ...options }
+  const level = BOT_PROFILES[variant as BotLevel]
+  const profile: BotProfile = skill === undefined ? level : { ...level, skill }
+  const opt: HeuristicOptions = { ...levelOptions(variant as BotLevel), ...constants }
   return {
     id: `heuristic:${variant}`,
     supports: () => true,

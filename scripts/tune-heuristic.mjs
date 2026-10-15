@@ -72,7 +72,7 @@ const JOBS = Math.min(MATCHES, positiveInt('jobs'), availableParallelism())
 /**
  * @typedef {{
  *   id: number, wins?: number, n?: number, error?: string,
- *   defaults?: Record<string, number>, levelPimc?: { samples: number, partnerSamples: number, anchor?: string, margin?: number },
+ *   defaults?: Record<string, number>, levelPimc?: { samples: number, partnerSamples: number, anchor?: import('../src/bots/algorithm.ts').AlgorithmSpec, margin?: number },
  * }} Reply
  */
 
@@ -126,7 +126,7 @@ function ask(w, task) {
 const defaults = await ask(workers[0], { defaults: true })
 const start = /** @type {Record<string, number>} */ (defaults.defaults)
 // The bot that ships: the level's worlds, whatever --samples the tuner played.
-const levelPimc = PIMC ? /** @type {{ samples: number, partnerSamples: number, anchor?: string, margin?: number }} */ (defaults.levelPimc) : null
+const levelPimc = PIMC ? /** @type {{ samples: number, partnerSamples: number, anchor?: import('../src/bots/algorithm.ts').AlgorithmSpec, margin?: number }} */ (defaults.levelPimc) : null
 const missing = Object.keys(start).filter((k) => !PARAMS.some((p) => p.key === k))
 if (missing.length) die(new Error(`no search range in tune-spsa.mjs for: ${missing.join(', ')}`))
 const stale = PARAMS.filter((p) => !Object.hasOwn(start, p.key)).map((p) => p.key)

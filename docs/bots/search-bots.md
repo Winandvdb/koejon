@@ -134,8 +134,38 @@ card is more than `margin` lines better on the same worlds. Each margin with
 | 0.5 | 11.3% | 12.0% | 40.6% ± 3.0% |
 
 The first two columns come from 8 seeded matches per margin, all four seats with the
-anchored bot. A margin of 0.5 fails the bench rule: the small gains add up over a match. The
-`hard` level uses 0.25 (`HARD_ANCHOR_MARGIN`), the largest margin tried that passes.
+anchored bot. A margin of 0.5 fails the bench rule: the small gains add up over a match. #178
+gave the `hard` level 0.25, the largest margin tried that passes. #183 changed it (below).
+
+### No lazy dump as the anchor card, and a wider margin (#183)
+
+`heuristic:hard` plays about 5% of its cards as a lazy dump (`skill: 0.95`): a planned
+mistake. As the anchor card, pimc kept such a card when its own card was not more than the
+margin better. The anchor is now `{ id: 'heuristic:hard', skill: 1 }`: the heuristic option
+`skill` overrides the level's skill, and with 1 it never dumps. On `normal` and `hard` a lazy
+dump draws no extra random number, so `skill` changes only the dumps, not the rest of the
+match. On `easy` a lazy card is a random card, which draws one more number.
+
+Hand values are whole lines, so with 10 worlds pimc's gain is a multiple of 0.1: a margin of
+0.25 acts as 0.2, 0.3 and 0.35 act the same, and 0.45 acts as 0.4.
+
+The probe is `node scripts/bot-probe.mjs --bot <spec>` (seeds 1 to 8, all four seats the
+same bot; `--ref` sets the reference). "Plain" is the reference `heuristic:hard`, "skill 1"
+is `{"id":"heuristic:hard","skill":1}`. The bench is `npm run bench -- --matches 500 --level
+hard --a <spec>` against `develop` after #178 (anchor `heuristic:hard`, margin 0.25).
+
+| Anchor, margin | Another card than plain / skill 1 | Another card with other worlds | Win rate against `develop` (1000 matches) |
+|---|---|---|---|
+| `heuristic:hard`, 0.25 (`develop`) | 21.0% / 19.5% | 18.5% | – |
+| skill 1, 0.25 | 22.0% / 20.4% | 17.4% | – |
+| skill 1, 0.3 | 18.6% / – | 15.9% | same as 0.35 |
+| skill 1, 0.35 | 18.6% / 16.5% | 15.9% | 49.7% ± 3.1% |
+| skill 1, 0.4 | 15.5% / 13.9% | 13.0% | 47.7% ± 3.1% |
+
+Both benched margins pass the bench rule. The `hard` level uses 0.4 (`HARD_ANCHOR_MARGIN`),
+the largest margin tried that passes: its card changes with other worlds in 13% of the
+choices, against 18.5% before. The win rate falls with the margin, and 0.4 passes by 0.8
+points only: do not widen it further without a new bench.
 
 ## 6. Decision
 
