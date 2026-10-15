@@ -3,6 +3,7 @@
   import { get } from 'svelte/store'
   import {
     createRoom,
+    endRoom,
     joinRoom,
     newRoomDoc,
     resumeRoom,
@@ -10,11 +11,12 @@
     type SessionView,
   } from './lib/room'
   import { saveGame } from './lib/games'
-  import { addSoloBots, localLinks, SOLO_CODE } from './lib/link-local'
+  import { addSoloBots, localLinks, SOLO_CODE, soloPaused } from './lib/link-local'
+  import { pausable, pausedRoom } from './lib/paused'
   import { appUrl } from './lib/url'
   import { DEFAULT_ROOM_OPTS, type RoomDoc } from './lib/net-types'
   import type { BotLevel } from './bots/bot'
-  import { HostGame } from './lib/host'
+  import { discardRoom, HostGame } from './lib/host'
   import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
   import { lang, localeOf, t } from './lib/i18n'
   import { SORT_LABEL, SORT_MODES, playerName, sortMode } from './lib/prefs'
@@ -51,6 +53,10 @@
   let showRules = $state(false)
   let showSettings = $state(false)
 
+  /** What this host left mid-match, for the resume card on Home. */
+  const readPaused = () => ({ room: pausedRoom.get(), solo: soloPaused(safeStorage, uid) })
+  let paused = $state({ room: null as string | null, solo: false })
+
   let authed = false
 
   // Multiplayer needs a Firebase uid; solo does not. Signing in loads the
@@ -60,6 +66,7 @@
     try {
       const { signIn } = await import('./lib/firebase')
       uid = await signIn()
+      paused = readPaused()
       authed = true
       safeStorage.setItem('koejon-uid', uid)
       return true
@@ -84,6 +91,7 @@
 
   onMount(async () => {
     uid = offlineUid()
+    paused = readPaused()
     const name = get(playerName)
     // This tab's URL decides first: it survives a refresh and, unlike
     // localStorage, no other tab can change it. The stored code is the
@@ -179,6 +187,7 @@
     hadRoom = false
     soloStarting = false
     err = ''
+    paused = readPaused()
     history.replaceState(null, '', appUrl())
   }
 
@@ -207,6 +216,8 @@
             h.dispose()
             throw new Error('session-gone')
           }
+          // Hosting again, by the card or by the link: no longer paused.
+          if (pausedRoom.get() === s.code) pausedRoom.clear()
           return (host = h)
         })
         .catch((e) => {
@@ -237,6 +248,13 @@
     err = ''
     if (!(await ensureAuth())) return void (err = $t.offline)
     try {
+      // One paused room per device: a new one ends the old one for its guests too.
+      const old = pausedRoom.get()
+      if (old) {
+        if (!confirm($t.endGameAsk)) return
+        await endRoom(old).catch((e) => console.warn('[room] could not end paused room', e))
+        pausedRoom.clear()
+      }
       attach(await createRoom(uid, name))
     } catch (e) {
       showErr(e, '', true)
@@ -250,6 +268,12 @@
   async function onSolo(name: string, level: BotLevel) {
     err = ''
     try {
+      // A new solo match replaces the paused one, engine keys included.
+      const old = localLinks(uid, safeStorage)
+      if (old) {
+        if (paused.solo && !confirm($t.endGameAsk)) return
+        await discardRoom(SOLO_CODE, old.host)
+      }
       const links = localLinks(uid, safeStorage, newRoomDoc(SOLO_CODE, uid, name))!
       if (seed !== null) {
         soloRand = hostRand(seed, SOLO_CODE)
@@ -304,9 +328,12 @@
 
   async function onLeave() {
     try {
-      if (host) {
-        // The host's room dies with the host: delete it instead of
-        // leaving a zombie room the others cannot continue.
+      if (host && pausable(view?.room?.pub?.phase)) {
+        // Mid-match the room and engine state stay: Home offers to resume.
+        if (session && session.code !== SOLO_CODE) pausedRoom.set(session.code)
+      } else if (host) {
+        // A lobby or a finished match has nothing to return to: delete it
+        // instead of leaving a zombie room.
         await host.destroyRoom().catch(() => {})
       } else {
         // Never let a dead Firestore path trap the user in the room.
@@ -317,6 +344,49 @@
       }
     } finally {
       teardown()
+    }
+  }
+
+  async function onResume(solo: boolean) {
+    err = ''
+    try {
+      if (solo) {
+        const links = localLinks(uid, safeStorage)
+        if (links) attach(new RoomSession(SOLO_CODE, uid, links.guest, links.host))
+      } else {
+        const code = pausedRoom.get()
+        if (!code) return
+        if (!(await ensureAuth())) return void (err = $t.offline)
+        const resumed = await resumeRoom(code, uid, get(playerName))
+        // The host attach clears the marker; a room that is gone clears it here.
+        if (resumed) attach(resumed)
+        else pausedRoom.clear()
+      }
+    } catch (e) {
+      showErr(e, hostErrText(e), true)
+    } finally {
+      paused = readPaused()
+    }
+  }
+
+  async function onEndPaused(solo: boolean) {
+    err = ''
+    if (!confirm($t.endGameAsk)) return
+    try {
+      if (solo) {
+        const links = localLinks(uid, safeStorage)
+        if (links) await discardRoom(SOLO_CODE, links.host)
+      } else {
+        const code = pausedRoom.get()
+        if (!code) return
+        if (!(await ensureAuth())) return void (err = $t.offline)
+        await endRoom(code)
+        pausedRoom.clear()
+      }
+    } catch (e) {
+      showErr(e, '', true)
+    } finally {
+      paused = readPaused()
     }
   }
 
@@ -448,7 +518,16 @@
       />
     {/key}
   {:else if !session}
-    <Home error={err} oncreate={onCreate} onjoin={onJoin} onsolo={onSolo} onreplay={onReplay} />
+    <Home
+      error={err}
+      {paused}
+      oncreate={onCreate}
+      onjoin={onJoin}
+      onsolo={onSolo}
+      onreplay={onReplay}
+      onresume={onResume}
+      onendpaused={onEndPaused}
+    />
   {:else if !view || !view.room}
     <!-- Attaching, or the room doc just vanished — teardown runs in the
          effect; never mount Home here or the invite view flashes. -->

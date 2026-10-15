@@ -1,6 +1,7 @@
 import type { BotLevel } from '../bots/bot'
 import type { HostGame } from './host'
 import type { HandDoc, Intent, RoomDoc } from './net-types'
+import { pausable } from './paused'
 import { readJson, type KeyValueStore } from './storage'
 import type { GuestEvents, GuestLink, HostLink } from './transport'
 
@@ -87,3 +88,10 @@ export function localLinks(
 }
 
 const read = (storage: KeyValueStore) => readJson<Saved | null>(storage, KEY, null)
+
+/** A saved solo match of `uid` that is under way, to resume from Home. A save
+ *  of an earlier uid (offline, before the first sign-in) cannot attach a host. */
+export function soloPaused(storage: KeyValueStore, uid: string): boolean {
+  const room = read(storage)?.room
+  return room?.hostUid === uid && pausable(room.pub?.phase)
+}

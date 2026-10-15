@@ -15,16 +15,23 @@
 
   let {
     error = '',
+    paused = { room: null, solo: false },
     oncreate,
     onjoin,
     onsolo,
     onreplay,
+    onresume,
+    onendpaused,
   }: {
     error?: string
+    /** What this device hosts and left mid-match. */
+    paused?: { room: string | null; solo: boolean }
     oncreate: (name: string) => void
     onjoin: (code: string, name: string) => void
     onsolo: (name: string, level: BotLevel) => void
     onreplay: (entry: HistoryEntry) => void
+    onresume: (solo: boolean) => void
+    onendpaused: (solo: boolean) => void
   } = $props()
 
   // Invite links land as ?room=CODE — show a dedicated join-only view.
@@ -139,6 +146,13 @@
       <button class="link-btn" onclick={backToHome}>← {$t.title}</button>
     </div>
   {:else}
+    {#if paused.room || paused.solo}
+      <div class="panel home-panel paused-panel">
+        <h2>{$t.pausedTitle}</h2>
+        {#if paused.room}{@render pausedRow(false, `🌐 ${$t.roomCode} ${paused.room}`, online)}{/if}
+        {#if paused.solo}{@render pausedRow(true, `🤖 ${$t.pausedSolo}`, true)}{/if}
+      </div>
+    {/if}
     <div class="home-cols">
     <div class="panel home-panel">
       <label class="field">
@@ -230,6 +244,14 @@
     </div>
   {/if}
 </div>
+
+{#snippet pausedRow(solo: boolean, label: string, can: boolean)}
+  <div class="paused-row">
+    <span class="paused-label">{label}</span>
+    <button class="btn primary" disabled={!can} onclick={() => onresume(solo)}>{$t.resumeGame}</button>
+    <button class="btn" disabled={!can} onclick={() => onendpaused(solo)}>{$t.endGame}</button>
+  </div>
+{/snippet}
 
 {#snippet statCards()}
   <div class="stat-cards">
