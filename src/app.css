@@ -3106,6 +3106,7 @@ button.tag {
   .seat-p1 .np-name,
   .seat-p3 .np-name {
     max-width: 52px;
+    text-align: center;
   }
 
   /* Long table-talk lines must wrap. */
