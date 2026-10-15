@@ -31,6 +31,12 @@
   --fab-contrast: #17211c;
   --cta: #1f6fc4;
   --cta-contrast: #ffffff;
+  --rate-best: #1d8a5a;
+  --rate-good: #5f8f2f;
+  --rate-inaccuracy: #e0ac2e;
+  --rate-mistake: #e67e22;
+  --rate-blunder: #c0392b;
+  --rate-text: #ffffff;
   --radius: 14px;
   --card: clamp(54px, 7vw, 94px);
   color-scheme: light;
@@ -63,6 +69,12 @@
   --fab-contrast: #e4ebe7;
   --cta: #5aa2e8;
   --cta-contrast: #06121f;
+  --rate-best: #3fae74;
+  --rate-good: #8cc152;
+  --rate-inaccuracy: #e8b53a;
+  --rate-mistake: #f0913a;
+  --rate-blunder: #e25c4d;
+  --rate-text: #0b1410;
   color-scheme: dark;
 }
 
@@ -1687,42 +1699,129 @@ button.tag {
   margin-top: calc(var(--cw) * -1);
 }
 
-.replay-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  grid-template-areas: 'title controls close';
+/* Replay: a game-review layout. Phones: the table on top, the panel as a
+   bottom sheet, the controls fixed at the bottom. Wide: a side panel. */
+.replay {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(52px + env(safe-area-inset-bottom));
+}
+
+.replay-side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.replay-head {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px 0;
+  gap: 2px;
+  padding: 4px 6px;
   flex: none;
 }
 
 .replay-title {
-  grid-area: title;
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.85rem;
+  padding-left: 4px;
+}
+
+.replay-sheet {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 34dvh;
+}
+
+.sheet-closed .replay-sheet {
+  display: none;
+}
+
+.replay-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 6px;
+  flex: none;
+}
+
+.replay-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 10px 10px;
 }
 
 .replay-controls {
-  grid-area: controls;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 2px;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  background: var(--panel);
+  border-top: 1px solid var(--border);
 }
 
 .replay-controls .icon-btn {
   font-size: 18px;
 }
 
-.replay-end {
-  grid-area: close;
-  justify-self: end;
-  display: flex;
-  align-items: center;
+.replay-controls .icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+@media (min-width: 900px) {
+  .replay {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    padding-bottom: 0;
+  }
+
+  /* Cards sized to the table column, not the whole window. */
+  .replay-board {
+    --card: clamp(54px, calc((100vw - 360px) * 0.07), 94px);
+  }
+
+  .replay-side {
+    margin-top: 0;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  .replay-fold {
+    display: none;
+  }
+
+  .replay-sheet,
+  .sheet-closed .replay-sheet {
+    display: flex;
+    flex: 1;
+    max-height: none;
+  }
+
+  .replay-controls {
+    position: static;
+    padding: 6px;
+  }
 }
 
 .replay-menu {
@@ -1742,18 +1841,8 @@ button.tag {
 }
 
 .replay-alert {
-  margin: 6px 10px 0;
+  margin: 0 10px 6px;
   flex: none;
-}
-
-/* Phones: the title gets its own row above the controls. */
-@media (max-width: 560px) {
-  .replay-bar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'title close'
-      'controls controls';
-  }
 }
 
 .replay-label {
@@ -1763,9 +1852,480 @@ button.tag {
   white-space: nowrap;
 }
 
-.replay-bar .icon-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
+/* Overview: match result, score graph and hand list. */
+.rv-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rv-result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+
+.rv-result strong {
+  font-size: 1.1rem;
+}
+
+.rv-result.won strong {
+  color: var(--accent);
+}
+
+.rv-graph {
+  margin: 0;
+}
+
+.rv-graph figcaption {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.rv-graph svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.rv-key::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.rv-key.us {
+  color: var(--accent);
+}
+
+.rv-key.them {
+  color: var(--team-decl);
+}
+
+.rv-axis {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.rv-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.rv-line.us {
+  stroke: var(--accent);
+}
+
+.rv-line.them {
+  stroke: var(--team-decl);
+}
+
+.rv-now {
+  fill: color-mix(in srgb, var(--gold) 22%, transparent);
+}
+
+.rv-hit {
+  fill: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.rv-hit:hover,
+.rv-hit:focus-visible {
+  fill: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.rv-start {
+  align-self: stretch;
+}
+
+.rv-hands {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rv-hand,
+.mv-head {
+  width: 100%;
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.rv-hand {
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr) 1.4em 2.6em minmax(0, 1.3fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.rv-hand:hover,
+.mv-head:hover {
+  background: var(--panel-2);
+}
+
+.rv-hand.current,
+.mv-head.current {
+  border-color: var(--gold);
+}
+
+.rv-n {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.rv-who,
+.rv-res,
+.mv-seat {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-who.own {
+  font-weight: 700;
+}
+
+.rv-res {
+  color: var(--muted);
+  text-align: right;
+}
+
+.rv-trump.red,
+.mv-head .red,
+.mv-card.red .mv-c {
+  color: var(--suit-red);
+}
+
+/* Move list: per hand the bids, then one row per trick. */
+.mv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mv-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mv-hand.open {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.mv-sub {
+  padding: 4px 8px 2px;
+}
+
+.mv-bids {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.mv-trick {
+  display: grid;
+  grid-template-columns: 1.8em repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  align-items: center;
+  padding: 2px 4px;
+}
+
+.mv-trick .mv-sub {
+  padding: 0;
+  text-align: center;
+}
+
+.mv-item {
+  appearance: none;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 6px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.mv-bid {
+  display: inline-flex;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.mv-bid .mv-seat {
+  color: var(--muted);
+}
+
+.mv-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+
+/* The trick winner's check sits inside the card's top right corner. */
+.mv-win {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.mv-c {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.mv-card .mv-seat {
+  max-width: 100%;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.mv-item.own {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.mv-card.win .mv-seat {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.mv-item.current {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.mv-rate {
+  font-size: 0.75rem;
+}
+
+/* A rated move: the class glyph as a small coloured badge. */
+.mv-item.rated .mv-rate {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3em;
+  padding: 0 3px;
+  border-radius: 6px;
+  color: var(--rate-text);
+  line-height: 1.3;
+}
+
+.mv-item.rated-best .mv-rate {
+  background: var(--rate-best);
+}
+
+.mv-item.rated-good .mv-rate {
+  background: var(--rate-good);
+}
+
+.mv-item.rated-inaccuracy .mv-rate {
+  background: var(--rate-inaccuracy);
+}
+
+.mv-item.rated-mistake .mv-rate {
+  background: var(--rate-mistake);
+}
+
+.mv-item.rated-blunder .mv-rate {
+  background: var(--rate-blunder);
+}
+
+/* A forced move: only one legal option, nothing to judge. */
+.mv-item.rated-forced .mv-rate {
+  background: var(--muted);
+  opacity: 0.7;
+}
+
+/* On a card, the class badge sits inside its top left corner. */
+.mv-card.rated .mv-rate {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  font-size: 0.65rem;
+}
+
+/* ---------- Replay analysis ---------- */
+
+.analysis-panel {
+  flex: none;
+  max-height: 45%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0 10px 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chip.rate {
+  color: var(--rate-text);
+}
+
+.chip.rate-best {
+  background: var(--rate-best);
+}
+
+.chip.rate-good {
+  background: var(--rate-good);
+}
+
+.chip.rate-inaccuracy {
+  background: var(--rate-inaccuracy);
+  color: var(--gold-contrast);
+}
+
+.chip.rate-mistake {
+  background: var(--rate-mistake);
+  color: var(--gold-contrast);
+}
+
+.chip.rate-blunder {
+  background: var(--rate-blunder);
+}
+
+.an-muted {
+  color: var(--muted);
+}
+
+/* The rated move on one line; the card itself is on the table. */
+.an-move {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.an-verdict {
+  flex: 1;
+  min-width: 0;
+}
+
+.an-who {
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.an-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.an-val {
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+/* Played: solid green border. Best: gold dotted border. Played and best: both, green inside. */
+.an-val.played,
+.an-bids tr.played td {
+  border-color: var(--accent);
+  font-weight: 800;
+}
+
+.an-val.best,
+.an-bids tr.best td {
+  border-style: dotted;
+  border-color: var(--gold);
+}
+
+.an-val.played.best,
+.an-bids tr.played.best td {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.an-bids td {
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+}
+
+.an-bids,
+.an-sum {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.an-bids th,
+.an-bids td {
+  padding: 1px 8px 1px 0;
+  text-align: left;
+  font-weight: inherit;
+}
+
+.an-bids th {
+  color: var(--muted);
+}
+
+.an-sum {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.an-sum caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 2px;
+}
+
+.an-sum th,
+.an-sum td {
+  padding: 1px 3px;
+  text-align: center;
+}
+
+.an-sum tr.first {
+  border-top: 1px solid var(--border);
+}
+
+.an-sum .an-name {
+  text-align: left;
+  max-width: 7em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* The dealer's turned cards sit at the dealer's seat during bidding. */

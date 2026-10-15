@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scale } from 'svelte/transition'
-  import { t } from '../lib/i18n'
+  import type { RatingClass } from '../bots/analysis'
+  import { RATING_GLYPH, ratingNames, t } from '../lib/i18n'
   import Avatar from './Avatar.svelte'
 
   let {
@@ -15,6 +16,7 @@
     bid,
     troef,
     say,
+    rating,
     animate = true,
     onkick,
   }: {
@@ -35,6 +37,8 @@
     troef: boolean
     /** Table talk bubble. */
     say?: string
+    /** Replay analysis: the class of the move this seat just made. */
+    rating?: RatingClass
     /** The replay shows the bubbles at once. */
     animate?: boolean
     /** Shows a remove button. */
@@ -52,6 +56,7 @@
   {#if dealer}<span class="chip dealer" title={$t.dealerTag}>D</span>{/if}
   {#if bidder}<span class="chip bidder" title={$t.bidderTag}>★</span>{/if}
   {#if tricks !== null}<span class="chip tricks">{tricks}</span>{/if}
+  {#if rating}<span class="chip rate rate-{rating}" title={ratingNames($t)[rating]}>{RATING_GLYPH[rating]}</span>{/if}
   <div class="bubbles" class:has-say={!!say}>
     {#if bid}<span class="bubble" in:scale={pop}>{bid === 'pass' ? $t.pass : $t.play}</span>{/if}
     {#if troef}<span class="bubble troef" in:scale={pop}>{$t.troefWanted}</span>{/if}
