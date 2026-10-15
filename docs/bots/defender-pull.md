@@ -5,9 +5,10 @@ bidders, who very likely hold more trumps, and is that a good lead?
 
 ## The rule
 
-`leadCard` in `src/bots/heuristic.ts`: a defender with the minority of the trumps
-(`shortDefender`) and a side ace leads its lowest trump, so that the bidders' trumps fall before
-its aces go (#153). Trump is always allowed, so a side ace is not safe while a bidder holds trump.
+`leadCard` in `src/bots/heuristic.ts`: a defender with no more trumps than the other three
+players hold together, its partner included (`shortDefender`), and a side ace leads its lowest
+trump, so that the bidders' trumps fall before its aces go (#153). Trump is always allowed, so a
+side ace is not safe while a bidder holds trump.
 
 The cost: on a trump lead the defender's partner must also play a trump, the bidders keep the
 majority, and they usually win the trick and the lead.
@@ -41,9 +42,10 @@ and the deal luck cancels out. Value: the lines the defenders cross minus the li
 cross (`handValue`), ± the 95% interval of the paired difference.
 
 The pull with one side ace is most of the trump leads, and without it the defenders lose nothing
-measurable. The pull with two or more side aces is rare but worth about 0.02 lines per hand, so it
-stays. Most changed hands swing by 5 lines: the lead decides whether the contract is made or lost
-with a koei.
+measurable. Without the pull with two or more side aces as well, the bot fails the bench rule, so
+that pull stays. The gap between the two variants (about 0.02 lines per hand) is not significant
+on its own: both were measured against `develop`, not against each other. Most changed hands
+swing by 5 lines: the lead decides whether the contract is made or lost with a koei.
 
 With the chosen variant:
 
