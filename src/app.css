@@ -1243,6 +1243,10 @@ button.tag {
   gap: 10px;
 }
 
+.fab-row.pair {
+  flex-wrap: nowrap;
+}
+
 .fab {
   pointer-events: auto;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -3155,6 +3159,13 @@ button.tag {
   .boomke-wrap {
     bottom: 10px;
     right: 8px;
+  }
+
+  /* One row: a second row lifts the result card into the scored boomke. */
+  .fab-row.pair .fab {
+    min-width: 0;
+    padding-inline: 14px;
+    font-size: 0.9rem;
   }
 
   .boomke {
