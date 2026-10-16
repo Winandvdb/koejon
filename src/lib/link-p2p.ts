@@ -10,7 +10,7 @@ import {
 import { db } from './firebase'
 import { FirestoreGuestLink, FirestoreHostLink } from './link-firestore'
 import type { HandDoc, Intent, PeerMsg, RoomDoc, RtcDoc } from './net-types'
-import { HEARTBEAT_MS, type GuestEvents, type GuestLink, type HostLink, type RoomUpdate } from './transport'
+import { DEAD_MS, HEARTBEAT_MS, PING_MS, type GuestEvents, type GuestLink, type HostLink, type RoomUpdate } from './transport'
 
 const rtcRef = (code: string, uid: string) => doc(db, 'rooms', code, 'rtc', uid)
 const rtcCol = (code: string) => collection(db, 'rooms', code, 'rtc')
@@ -52,6 +52,10 @@ interface Peer {
   pc: RTCPeerConnection
   ch: RTCDataChannel | null
   offerTs: number
+  /** Last message from this guest. */
+  heard: number
+  /** The guest pings, so a silent channel is dead and not just an old build. */
+  pinging: boolean
 }
 
 /**
@@ -59,6 +63,8 @@ interface Peer {
  * straight from this tab; Firestore only carries the room for guests without
  * one, plus the lobby view (seats, options, started) that join and reclaim
  * read. The host's own session is fed in-tab through `guest`.
+ * A channel can stay `open` after its path died, so guests ping and the host
+ * drops a guest that pings and then goes quiet (`PING_MS`, `DEAD_MS`).
  */
 export class P2PHostLink implements HostLink {
   readonly guest: GuestLink
@@ -74,6 +80,7 @@ export class P2PHostLink implements HostLink {
   private fsShape = ''
   private fsQueue: Promise<void> = Promise.resolve()
   private unsub: Unsubscribe | null = null
+  private liveness: ReturnType<typeof setInterval> | null = null
 
   constructor(
     private code: string,
@@ -112,6 +119,7 @@ export class P2PHostLink implements HostLink {
       return cb(uid, intent)
     })
     if (!this.p2p) return
+    this.liveness = setInterval(() => this.dropSilent(), PING_MS)
     this.unsub = onSnapshot(
       rtcCol(this.code),
       (snap) => {
@@ -132,7 +140,7 @@ export class P2PHostLink implements HostLink {
     const old = this.peers.get(uid)
     if (old) this.drop(uid, old)
     const pc = new RTCPeerConnection(RTC_CONFIG)
-    const peer: Peer = { pc, ch: null, offerTs: d.offerTs }
+    const peer: Peer = { pc, ch: null, offerTs: d.offerTs, heard: Date.now(), pinging: false }
     this.peers.set(uid, peer)
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed' || pc.connectionState === 'closed') this.drop(uid, peer)
@@ -141,13 +149,19 @@ export class P2PHostLink implements HostLink {
       const ch = e.channel
       ch.onopen = () => {
         peer.ch = ch
+        peer.heard = Date.now()
         this.sendState(uid, ch)
         // This guest left the Firestore path: drop its hand doc there.
         this.syncFirestore().catch(() => {})
       }
       ch.onmessage = (m) => {
         const msg = JSON.parse(m.data as string) as PeerMsg
+        peer.heard = Date.now()
         if (msg.t === 'intent') void this.intentCb?.(uid, msg.intent)
+        else if (msg.t === 'ping') {
+          peer.pinging = true
+          this.send(ch, { t: 'pong' })
+        }
       }
       ch.onclose = () => this.drop(uid, peer)
     }
@@ -159,6 +173,18 @@ export class P2PHostLink implements HostLink {
       answer: JSON.stringify(pc.localDescription),
       answerFor: d.offerTs,
     })
+  }
+
+  /** An open channel can be dead without a close event. A guest that pings
+   *  and then goes quiet is put on Firestore, as if its channel had closed. */
+  private dropSilent(): void {
+    const now = Date.now()
+    for (const [uid, peer] of this.peers) {
+      if (peer.pinging && now - peer.heard > DEAD_MS) {
+        console.warn('[p2p] guest channel silent, back to Firestore', uid)
+        this.drop(uid, peer)
+      }
+    }
   }
 
   /** A closed channel puts the guest back on Firestore, which must be current. */
@@ -175,7 +201,10 @@ export class P2PHostLink implements HostLink {
 
   private sendState(uid: string, ch: RTCDataChannel): void {
     if (!this.room) return
-    const msg: PeerMsg = { t: 'state', room: this.room, hand: this.lastHands.get(uid) ?? null }
+    this.send(ch, { t: 'state', room: this.room, hand: this.lastHands.get(uid) ?? null })
+  }
+
+  private send(ch: RTCDataChannel, msg: PeerMsg): void {
     try {
       ch.send(JSON.stringify(msg))
     } catch {
@@ -233,6 +262,8 @@ export class P2PHostLink implements HostLink {
   }
 
   dispose(): void {
+    if (this.liveness) clearInterval(this.liveness)
+    this.liveness = null
     this.unsub?.()
     this.unsub = null
     for (const p of this.peers.values()) p.pc.close()
@@ -257,6 +288,11 @@ export class P2PGuestLink implements GuestLink {
   private retry: ReturnType<typeof setTimeout> | null = null
   private unsub: Unsubscribe | null = null
   private disposed = false
+  private pinger: ReturnType<typeof setInterval> | null = null
+  /** Last message from the host on this channel. */
+  private heard = 0
+  /** The host answered a ping, so it knows them: silence now means dead. */
+  private ponged = false
   /** Newest game seq shown, and the seq of the last Firestore room. The host
    *  skips Firestore writes while our channel is open, so after a drop that
    *  copy can be old: showing it would undo plays we already saw. */
@@ -330,10 +366,16 @@ export class P2PGuestLink implements GuestLink {
       if (this.ch !== ch) return
       this.fails = 0
       this.ev?.hostStale(false)
+      this.heard = Date.now()
+      this.ponged = false
+      this.pinger = setInterval(() => this.ping(ch), PING_MS)
+      this.ping(ch)
     }
     ch.onmessage = (m) => {
       if (this.ch !== ch) return
       const msg = JSON.parse(m.data as string) as PeerMsg
+      this.heard = Date.now()
+      if (msg.t === 'pong') this.ponged = true
       if (msg.t !== 'state') return
       // The channel is in order and straight from the host: always current.
       this.shownSeq = msg.room.seq ?? 0
@@ -370,6 +412,22 @@ export class P2PGuestLink implements GuestLink {
     }, OPEN_TIMEOUT_MS)
   }
 
+  /** Pings the host, or gives up on a channel that is open but dead. */
+  private ping(ch: RTCDataChannel): void {
+    if (this.ch !== ch || !this.open) return
+    if (this.ponged && Date.now() - this.heard > DEAD_MS) {
+      console.warn('[p2p] host channel silent, retrying')
+      this.ev?.hostStale(true)
+      this.scheduleRetry()
+      return
+    }
+    try {
+      ch.send(JSON.stringify({ t: 'ping' } satisfies PeerMsg))
+    } catch {
+      // Closing under us: onclose retries.
+    }
+  }
+
   private scheduleRetry(): void {
     if (this.disposed || this.retry) return
     this.close()
@@ -391,6 +449,8 @@ export class P2PGuestLink implements GuestLink {
 
   private close(): void {
     const { pc, ch } = this
+    if (this.pinger) clearInterval(this.pinger)
+    this.pinger = null
     this.pc = null
     this.ch = null
     ch?.close()

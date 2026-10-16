@@ -78,5 +78,9 @@ export interface RtcDoc {
 export type PeerMsg =
   | { t: 'state'; room: RoomDoc; hand: HandDoc | null }
   | { t: 'intent'; intent: Intent }
+  /** Liveness: the guest pings, the host answers. A build that does not know
+   *  them ignores them, so each side times out only after the first one. */
+  | { t: 'ping' }
+  | { t: 'pong' }
 
 export const BOT_UID_PREFIX = 'bot:'
