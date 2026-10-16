@@ -102,6 +102,24 @@ describe('bot seed scans', () => {
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 
+  it.each(LEVELS)('%s: a short defender with one side ace does not lead trump', (level) => {
+    let found = 0
+    scanMatches(level, SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || notes.includes('lazy dump') || s.trick.length > 0) return
+      const trump = s.trump!
+      const seat = a.seat
+      if (seat % 2 === s.bidder! % 2 || !oppMayTrump(s, seat)) return
+      const hand = s.hands[seat]
+      const mine = hand.filter((c) => c.s === trump).length
+      const out = 6 - mine - playedThisHand(s).filter((p) => p.card.s === trump).length
+      const plain = hand.filter((c) => c.s !== trump)
+      if (mine === 0 || mine > out || plain.filter((c) => c.r === 'A').length !== 1 || plain.length < 2) return
+      found++
+      expect(a.card.s, `lead ${a.card.r}${a.card.s} (${notes.join('; ')}), seed scan at ${level}`).not.toBe(trump)
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
   it('easy: a lead with a side ace in hand cashes an ace, unless it pulls with the boss trump', () => {
     let found = 0
     scanMatches('easy', SEEDS, (s, a, notes) => {

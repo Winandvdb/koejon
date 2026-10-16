@@ -386,9 +386,9 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
     (nextOut === undefined || RANK_ORDER[top.r] > RANK_ORDER[nextOut])
   )
     return because(why, 'low trump to draw the trump ace', lowest(trumps))
-  // A short defender with side aces pulls with a low trump, so the bidders'
-  // trumps fall before the aces go.
-  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length)
+  // A short defender with two side aces pulls with a low trump, so the bidders'
+  // trumps fall before the aces go. With one ace the pull gains nothing (#195).
+  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length >= 2)
     return because(why, 'defender pull: low trump, keeps the boss', lowest(lowTrumps))
   // Trump is always allowed, also on a suit an opponent can follow: cash an
   // ace only once no opponent may hold trump.
