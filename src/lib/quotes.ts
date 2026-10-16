@@ -367,7 +367,7 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
       out.push({
         key: `g${hand}-${pub.tricksPlayed}`,
         seat: teamSeat(wt, h),
-        text: QUOTES.gouwe[(h >> 4) % QUOTES.gouwe.length],
+        text: QUOTES.gouwe[(h >>> 4) % QUOTES.gouwe.length],
       })
     }
     if (
@@ -439,7 +439,7 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
       out.push({
         key: `x${hand}-${pub.tricksPlayed}`,
         seat: teamSeat(1 - wt, h),
-        text: QUOTES.trickLost[(h >> 4) % QUOTES.trickLost.length],
+        text: QUOTES.trickLost[(h >>> 4) % QUOTES.trickLost.length],
       })
     }
     for (const t of [0, 1]) {
@@ -457,7 +457,7 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
           out.push({
             key: `u${hand}-${t}`,
             seat: teamSeat(t, h),
-            text: QUOTES.madeIt[(h >> 4) % QUOTES.madeIt.length],
+            text: QUOTES.madeIt[(h >>> 4) % QUOTES.madeIt.length],
           })
         }
       }
@@ -483,7 +483,7 @@ export function activeQuotes(pub: PublicState, fired: ReadonlySet<string> = new 
       out.push({
         key: `r${hand}`,
         seat: teamSeat(r.winnerTeam, hr),
-        text: QUOTES.revenge[(hr >> 4) % QUOTES.revenge.length],
+        text: QUOTES.revenge[(hr >>> 4) % QUOTES.revenge.length],
       })
     }
     const wt = r.winnerTeam

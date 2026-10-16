@@ -541,6 +541,31 @@ describe('table quotes', () => {
     expect(QUOTES.hurry).toContain('Wast weer audit opt werk vandaag?')
   })
 
+  it('every candidate has a line, whatever the hash', () => {
+    const states = Array.from({ length: 64 }, (_, i) => i + 1).flatMap((hand) => [
+      // gouwe and trickLost
+      playingState({ handNumber: hand, tricksPlayed: 3, tricksWon: [1, 2], leader: 0, lastTrick: TRICK }),
+      // madeIt
+      playingState({ handNumber: hand, tricksPlayed: 6, tricksWon: [3, 3], leader: 0, points: [22, 18], lastTrick: TRICK }),
+      // revenge
+      playingState({
+        phase: 'SCORED',
+        handNumber: hand,
+        tricksPlayed: 6,
+        lastResult: RESULT(),
+        marks: [CROSSED(0, hand - 1)],
+      }),
+    ])
+    const keys = new Set<string>()
+    for (const s of states) {
+      for (const q of activeQuotes(toPublic(s))) {
+        expect(typeof q.text, q.key).toBe('string')
+        keys.add(q.key[0])
+      }
+    }
+    for (const k of ['g', 'x', 'u', 'r']) expect(keys).toContain(k)
+  })
+
   it('someone wishes luck at the first drawn card, not always the same seat', () => {
     const drawn = (seed: number) => {
       const s = apply(createMatch(seed), { type: 'start', seat: 0 })
