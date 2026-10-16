@@ -517,7 +517,7 @@
             </button>
           </div>
         {:else if pub.phase === 'GAME_OVER' && isHost}
-          <div class="fab-row" in:fly={{ y: 10, duration: 200 }}>
+          <div class="fab-row pair" in:fly={{ y: 10, duration: 200 }}>
             {#if onlobby}<button class="fab" onclick={onlobby}>{$t.toLobby}</button>{/if}
             <button class="fab primary" onclick={onnewmatch}>{$t.newMatch}</button>
           </div>
