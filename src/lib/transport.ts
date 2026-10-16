@@ -5,9 +5,9 @@ export const HEARTBEAT_MS = 15_000
 
 /** A guest pings its host this often over the data channel. The channel can
  *  stay `open` after the path is dead, so only traffic proves it works. */
-export const PING_MS = 5_000
+export const PING_MS = 2_000
 /** A side that pings and gets nothing for this long closes the channel. */
-export const DEAD_MS = 20_000
+export const DEAD_MS = 6_000
 
 /** What the host changes on every commit; the link adds its own heartbeat. */
 export type RoomUpdate = Pick<RoomDoc, 'seats' | 'pub' | 'version' | 'seq' | 'opts' | 'quotes' | 'kjn'>
