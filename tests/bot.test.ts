@@ -595,6 +595,13 @@ describe('bot leads', () => {
     }
   })
 
+  it('a defender with one side ace and few trumps keeps its trumps', () => {
+    const hand = [C('H', '9'), C('H', 'J'), C('S', 'A'), C('D', '10'), C('C', '9'), C('C', 'J')]
+    for (const level of TACTICS) {
+      expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', '9') })
+    }
+  })
+
   it('draws out the ace: a low card under its king while the ace is out', () => {
     // S10 gives no points away; a jack or queen under the king would.
     const hand = [C('S', 'K'), C('S', '10'), C('D', '9'), C('C', '9'), C('D', 'J'), C('C', 'J')]

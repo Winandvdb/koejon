@@ -20,8 +20,8 @@ A bot change that moves a level must keep both targets.
 
 - `tactics: false`: no knijpen, no troefke, no weighing of the dealer's choice, and no lead
   tactics. Easy cashes an ace at once, also when an opponent may trump it. It does no length
-  pull, no low trump to draw the trump ace, no defender pull and no draw-out of an ace under
-  its king. It keeps the pull with the boss trump.
+  pull, no low trump to draw the trump ace, no defender pull (`defender-pull.md`) and no
+  draw-out of an ace under its king. It keeps the pull with the boss trump.
 - `lazy: 'random'`: the lazy move (45% of card decisions) plays any legal card. The other
   levels play the cheapest dump.
 - `memory: 'none'` and the bid constants of `LEVEL_OPTIONS.easy`, as before.
