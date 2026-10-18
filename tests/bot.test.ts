@@ -115,6 +115,48 @@ describe('bot bidding', () => {
     // Beginners do not weigh other suits.
     expect(botAction(bidState(hand), 1, never, 'easy')).toEqual({ type: 'bid', seat: 1, play: true })
   })
+
+  describe('the dealer keeps the turned trump', () => {
+    // 14.5 rated for hearts: exactly the 1st card threshold.
+    const hand = [C('H', 'K'), C('H', 'Q'), C('H', '10'), C('S', 'A'), C('D', 'K'), C('D', '9')]
+    const ace = { first: C('H', 'A'), second: C('S', '9'), secondUp: false }
+    const byOpponent = bidState(hand, { dealer: 0, bidIndex: 0, turned: ace })
+    const byPartner = bidState(hand, { dealer: 3, bidIndex: 1, turned: ace })
+    const bid = (s: State, options: Record<string, number>, level: BotLevel = 'hard') => {
+      const trace: BotTrace = { candidates: [], notes: [] }
+      const a = createBot({ id: `heuristic:${level}`, ...options }).decide(s, 1, never, trace)
+      return { a, notes: trace.notes.join('\n') }
+    }
+    const adjust = { turnedOpponent: 2, turnedPartner: 2 }
+
+    it('a turned ace passes the hand with an opponent dealer and bids it with a partner dealer', () => {
+      expect(bid(byOpponent, adjust).a).toEqual({ type: 'bid', seat: 1, play: false })
+      expect(bid(byPartner, adjust).a).toEqual({ type: 'bid', seat: 1, play: true })
+      expect(bid(byOpponent, adjust).notes).toContain('bid: rating 14.5 vs threshold 16.5, turned A +2')
+      expect(bid(byPartner, adjust).notes).toContain('bid: rating 14.5 vs threshold 12.5, turned A -2')
+    })
+
+    it('a lower turned card counts by its points, a 9 not at all', () => {
+      const king = { first: C('H', 'K'), second: C('S', '9'), secondUp: false }
+      const kingHand = [C('H', 'A'), ...hand.slice(1)]
+      expect(bid(bidState(kingHand, { turned: king }), adjust).notes).toContain('vs threshold 16, turned K +1.5')
+      const nine = { first: C('H', '9'), second: C('S', '9'), secondUp: false }
+      const nineHand = [C('H', 'A'), ...hand.slice(1)]
+      expect(bid(bidState(nineHand, { turned: nine }), adjust).notes).toMatch(/vs threshold 14\.5$/)
+    })
+
+    it('at 0 the turned card changes nothing', () => {
+      const zero = { turnedOpponent: 0, turnedPartner: 0 }
+      for (const s of [byOpponent, byPartner]) {
+        expect(bid(s, zero).a).toEqual({ type: 'bid', seat: 1, play: true })
+        expect(bid(s, zero).notes).toBe('bid: rating 14.5 vs threshold 14.5')
+      }
+    })
+
+    it('easy does not read the turned card', () => {
+      for (const s of [byOpponent, byPartner]) expect(bid(s, {}, 'easy').notes).not.toContain('turned')
+    })
+  })
 })
 
 describe('bot troefke', () => {
