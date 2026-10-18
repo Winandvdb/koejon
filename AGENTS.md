@@ -67,7 +67,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `stats.ts` — personal statistics from the history. **Rule:** no engine state and no network.
 - `download.ts` — the `.kjn` file of a match (share sheet or download). No network.
 - `deckstack.ts` — how the next deck forms at the cut, and the deal animation timing (`DEAL_MS`, which the host waits for). **Rule:** must move the cards as the engine does (`cutDeck`, `allPassed`, `doDeal`); `tests/deckstack.test.ts` checks it. Public state only.
-- `quotes.ts` — table talk: `activeQuotes` finds candidates, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
+- `quotes.ts` — table talk: `activeQuotes` finds candidates from the public state and the keys that already fired this match, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
 - `i18n.ts` — all UI text, Dutch (`nl`, default) and English (`en`). **Rule:** every new UI string goes in both languages.
 - `table.ts` — what the live table and the replay both show (bids, bubbles, trick shown, fly directions). **Rule:** public state only; both screens call these, never copy them.
 - `replay.ts` — the replay's move list model: `replayMoves` (per hand its bids and tricks, each item with its step in `replaySteps`, trick winner, own flag, `rating` slot for move ratings). **Rule:** pure, no DOM; `tests/replay.test.ts` checks it.
