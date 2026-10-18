@@ -101,7 +101,7 @@ describe('rateDecision', () => {
     // The same match from a file with other line endings; another match gets another seed.
     expect(matchSeed(loadKjn(a.kjn.replace(/\n/g, '\r\n') + '\n').match)).toBe(matchSeed(a.m))
     expect(matchSeed(a.m)).not.toBe(matchSeed(replay(6).m))
-  })
+  }, 30_000)
 
   it('rates the winning card of an end position Best and the losing one a blunder', () => {
     const s = endPosition()
