@@ -56,7 +56,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 
 - `host.ts` — `HostGame`: the authoritative loop (intents, bots, publish, KJN upload via `HostOptions.saveGame`). **Rule:** imports no transport implementation.
 - `room.ts` — `RoomSession` (client side: view, intents), `createRoom`, `joinRoom`, `resumeRoom`. **Rule:** no static imports of `firebase/*`, `firebase.ts`, `link-p2p.ts` or `link-firestore.ts`: they load by dynamic import, so the start bundle has no Firebase code.
-- `transport.ts` — `HostLink` / `GuestLink` and `HEARTBEAT_MS`. **Rule:** transport only: no game records, no URLs.
+- `transport.ts` — `HostLink` / `GuestLink`, `HEARTBEAT_MS` and the data channel liveness times `PING_MS` / `DEAD_MS` (`link-p2p.ts`: the guest pings, the host answers; a side that got a reply once and then hears nothing for `DEAD_MS` drops the channel, so the guest moves to Firestore). **Rule:** transport only: no game records, no URLs.
 - `link-local.ts` (solo, `localStorage`, no network), `link-p2p.ts` (WebRTC; Firestore for lobby and signaling), `link-firestore.ts` (fallback when WebRTC fails). **Rule:** keep Firestore reads and writes low (cost).
 - `net-types.ts` — wire types shared by host, guests and all links. **Rule:** a change must stay readable by builds still in use (shared database).
 - `firebase.ts` — Firebase init, emulator auto-connect. **Rule:** reach it only by dynamic import, so a solo player never downloads the SDK.
