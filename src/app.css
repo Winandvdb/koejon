@@ -532,8 +532,14 @@ input[type='checkbox'] {
 }
 
 .paused-label {
-  flex: 1 1 140px;
+  flex: 1 1 auto;
   font-weight: 600;
+}
+
+/* The two buttons wrap as one group: never one of them alone on a line. */
+.paused-btns {
+  display: flex;
+  gap: 8px;
 }
 
 .divider {

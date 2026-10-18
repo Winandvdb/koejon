@@ -248,8 +248,10 @@
 {#snippet pausedRow(solo: boolean, label: string, can: boolean)}
   <div class="paused-row">
     <span class="paused-label">{label}</span>
-    <button class="btn primary" disabled={!can} onclick={() => onresume(solo)}>{$t.resumeGame}</button>
-    <button class="btn" disabled={!can} onclick={() => onendpaused(solo)}>{$t.endGame}</button>
+    <div class="paused-btns">
+      <button class="btn primary" disabled={!can} onclick={() => onresume(solo)}>{$t.resumeGame}</button>
+      <button class="btn" disabled={!can} onclick={() => onendpaused(solo)}>{$t.endGame}</button>
+    </div>
   </div>
 {/snippet}
 
