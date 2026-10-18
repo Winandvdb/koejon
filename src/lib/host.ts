@@ -73,6 +73,31 @@ const kjnKey = (code: string) => `koejon-kjn-${code}`
 const finalKey = (code: string) => `koejon-kjn-final-${code}`
 /** Every per-room key: destroyRoom removes them all. */
 const ROOM_KEYS = [engineKey, seqKey, quotesKey, seatsKey, kjnKey, finalKey]
+/** The seats with a hand doc to delete. */
+const humanUids = (seats: (SeatInfo | null)[]) => seats.flatMap((s) => (s && !s.bot ? [s.uid] : []))
+
+function removeRoomKeys(storage: KeyValueStore, code: string): void {
+  try {
+    for (const key of ROOM_KEYS) storage.removeItem(key(code))
+  } catch {
+    // Storage blocked: nothing to clean up.
+  }
+}
+
+/** Delete a room that no host runs now (a paused match ended from Home):
+ *  what `destroyRoom` does, without loading the engine or starting the bots. */
+export async function discardRoom(code: string, link: HostLink, storage: KeyValueStore = safeStorage): Promise<void> {
+  try {
+    const room = await link.load()
+    // The saved seats, as `load` prefers them: the P2P room doc can trail them.
+    const saved = readJson<(SeatInfo | null)[] | null>(storage, seatsKey(code), null)
+    if (room) await link.destroy(humanUids(saved ?? room.seats))
+    removeRoomKeys(storage, code)
+  } finally {
+    link.dispose()
+  }
+}
+
 /** Finished records not uploaded yet, from any room: a new match never drops one. */
 const PENDING_KEY = 'koejon-games-pending'
 const PENDING_MAX = 20
@@ -426,12 +451,8 @@ export class HostGame {
   async destroyRoom(): Promise<void> {
     this.dispose()
     await this.busy.catch(() => {})
-    await this.link.destroy(this.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
-    try {
-      for (const key of ROOM_KEYS) this.storage.removeItem(key(this.code))
-    } catch {
-      // Storage blocked: nothing to clean up.
-    }
+    await this.link.destroy(humanUids(this.seats))
+    removeRoomKeys(this.storage, this.code)
   }
 
   // ---- intents from players ----

@@ -3,6 +3,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -17,6 +18,7 @@ export const roomRef = (code: string) => doc(db, 'rooms', code)
 export const handRef = (code: string, uid: string) => doc(db, 'rooms', code, 'hands', uid)
 export const actionRef = (code: string, uid: string) => doc(db, 'rooms', code, 'actions', uid)
 export const actionsCol = (code: string) => collection(db, 'rooms', code, 'actions')
+const rtcCol = (code: string) => collection(db, 'rooms', code, 'rtc')
 
 const STALE_MS = 3 * HEARTBEAT_MS
 
@@ -109,7 +111,11 @@ export class FirestoreHostLink implements HostLink {
   }
 
   async destroy(humanUids: string[]): Promise<void> {
+    // Intents and offers that guests wrote while no host read them (a paused
+    // match): once the room doc is gone, the rules let the host delete none.
+    const left = await Promise.all([actionsCol, rtcCol].map((col) => getDocs(col(this.code)).catch(() => null)))
     const batch = writeBatch(db)
+    for (const snap of left) snap?.forEach((d) => void batch.delete(d.ref))
     for (const uid of humanUids) batch.delete(handRef(this.code, uid))
     batch.delete(roomRef(this.code))
     await batch.commit()
