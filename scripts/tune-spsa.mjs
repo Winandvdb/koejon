@@ -21,6 +21,8 @@ export const PARAMS = [
   { key: 'betterSuit', lo: 0, hi: 6, step: 0.5 },
   { key: 'clearBid', lo: 0, hi: 8, step: 0.5 },
   { key: 'loneTrumpMin', lo: 8, hi: 18, step: 0.5 },
+  { key: 'turnedOpponent', lo: 0, hi: 6, step: 0.5 },
+  { key: 'turnedPartner', lo: 0, hi: 6, step: 0.5 },
   { key: 'knijpMin', lo: 0, hi: 12, step: 0.5 },
   { key: 'knijpChance', lo: 0, hi: 1, step: 0.01 },
   { key: 'troefkeChance', lo: 0, hi: 1, step: 0.01 },

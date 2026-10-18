@@ -53,6 +53,14 @@ export interface HeuristicOptions {
   clearBid: number
   /** A bid with one trump (K or A) asks at least this rating. */
   loneTrumpMin: number
+  /**
+   * The dealer keeps the turned trump card: a turned ace raises the bid
+   * threshold by `turnedOpponent` when the dealer is an opponent, and lowers
+   * it by `turnedPartner` when the dealer is the partner. A lower card counts
+   * by its points, so a 9 or 10 counts nothing.
+   */
+  turnedOpponent: number
+  turnedPartner: number
   /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
   knijpMin: number
   knijpChance: number
@@ -72,15 +80,19 @@ export interface HeuristicOptions {
 
 /**
  * Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93),
- * except the values marked as set by hand (`fixed` in `PARAMS`).
+ * except the values marked as set by hand (`fixed` in `PARAMS`). The bid
+ * thresholds and the turned card constants were tuned again together, with
+ * the other constants fixed (#170).
  */
 export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   bidThreshold1: 14.5,
-  bidThreshold2: 11.5,
-  bidThreshold4: 10.5,
+  bidThreshold2: 11,
+  bidThreshold4: 11.5,
   betterSuit: 5.5,
   clearBid: 7.5,
   loneTrumpMin: 14.5,
+  turnedOpponent: 2.5,
+  turnedPartner: 3,
   knijpMin: 1.5,
   knijpChance: 0.79,
   troefkeChance: 0.73,
@@ -110,6 +122,9 @@ const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
     betterSuit: 2,
     clearBid: 3,
     loneTrumpMin: 13,
+    // Beginners do not read the dealer's turned card.
+    turnedOpponent: 0,
+    turnedPartner: 0,
     knijpMin: 4,
     knijpChance: 0.85,
     troefkeChance: 0.9,
@@ -601,8 +616,12 @@ function decide(
       // A hand worth all remaining lines deserves a looser bid.
       const stakes = r1 ? s.multiplier : 2
       const decisive = s.lines[myTeam] <= stakes || (!r1 && oppLines <= 2)
+      const shown = r1 ? s.turned!.first : s.turned!.second!
+      const turned =
+        (s.dealer === partnerOf(seat) ? -opt.turnedPartner : opt.turnedOpponent) *
+        (RANK_POINTS[shown.r] / RANK_POINTS.A)
       const threshold =
-        stakes >= 4 ? opt.bidThreshold4 : stakes >= 2 ? opt.bidThreshold2 : opt.bidThreshold1
+        (stakes >= 4 ? opt.bidThreshold4 : stakes >= 2 ? opt.bidThreshold2 : opt.bidThreshold1) + turned
       // On the 1st card two low trumps are pulled at once: ask a K or A.
       const solid =
         !r1 || trumps.length !== 2 || trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K'])
@@ -616,7 +635,8 @@ function decide(
           ((knijpen && (rating >= opt.knijpMin || rand() < opt.knijpChance)) ||
             (decisive && solid && rating >= threshold - 2)))
       why.push(
-        `bid: rating ${rating} vs threshold ${threshold}` +
+        `bid: rating ${rating} vs threshold ${Number(threshold.toFixed(2))}` +
+          (turned ? `, turned ${shown.r} ${turned > 0 ? '+' : ''}${Number(turned.toFixed(2))}` : '') +
           (waits ? ', waits for the 2nd card' : '') +
           (!solid ? ', two low trumps' : '') +
           (knijpen ? ', knijpen' : '') +

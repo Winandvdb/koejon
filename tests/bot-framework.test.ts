@@ -142,7 +142,7 @@ describe('createAlgorithm', () => {
     const s = playingState({ phase: 'BIDDING_R1', hands, turned: { first: C('H', 'Q'), second: C('S', '9'), secondUp: false }, trump: null, bidder: null })
     const obs = observe(s, 1)
     expect(createAlgorithm('heuristic:normal').decide(obs, () => 0.99)).toEqual({ type: 'bid', seat: 1, play: false })
-    expect(createAlgorithm({ id: 'heuristic:normal', bidThreshold1: 5 }).decide(obs, () => 0.99)).toEqual({
+    expect(createAlgorithm({ id: 'heuristic:normal', bidThreshold1: 4 }).decide(obs, () => 0.99)).toEqual({
       type: 'bid',
       seat: 1,
       play: true,
