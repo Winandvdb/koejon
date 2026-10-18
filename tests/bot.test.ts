@@ -780,16 +780,18 @@ describe('bot partner signal', () => {
     return playingState({ bidder: 3, turn: 1, trick, hands, ...over })
   }
 
-  it('throws a low card of the suit with the ace, not points of another suit', () => {
-    // The partner's HA is safe: without the signal the bot feeds the DQ.
-    const s = discardState(C('H', 'A'), [C('C', 'A'), C('C', '10'), C('D', 'Q'), C('S', '9')])
+  it('throws a low card of the suit with the ace instead of another card without points', () => {
+    // HK may still lose to the HA, so no points go: without the signal the bot dumps the S9.
+    const s = discardState(C('H', 'K'), [C('S', '9'), C('C', '10'), C('C', 'A')])
     for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('C', '10')))
-    expect(botAction(s, 1, smart, 'easy')).toEqual(play(C('D', 'Q')))
+    expect(botAction(s, 1, smart, 'easy')).toEqual(play(C('S', '9')))
+    // The vet stays: the partner's HA is safe, so the DQ goes.
+    const vet = discardState(C('H', 'A'), [C('C', 'A'), C('C', '10'), C('D', 'Q'), C('S', '9')])
+    expect(botAction(vet, 1, smart, 'hard')).toEqual(play(C('D', 'Q')))
   })
 
-  it('does not discard from a suit without the highest card when it can choose', () => {
-    // HK may still lose to the HA: without the signal the bot dumps the D9.
-    const s = discardState(C('H', 'K'), [C('D', '9'), C('C', '10'), C('C', 'A')])
+  it('does not discard a low card from a suit without the highest card when it can choose', () => {
+    const s = discardState(C('H', 'K'), [C('D', '9'), C('S', '10'), C('D', 'Q'), C('C', '10'), C('C', 'A')])
     for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('C', '10')))
   })
 
@@ -802,16 +804,16 @@ describe('bot partner signal', () => {
         [3, C('H', '10')],
       ],
     ])
-    const s = discardState(C('H', 'A'), [C('C', 'K'), C('C', '9'), C('D', 'Q')], { log, tricksPlayed: 1, tricksWon: [0, 1] })
+    const s = discardState(C('H', 'K'), [C('D', '9'), C('C', 'K'), C('C', '9')], { log, tricksPlayed: 1, tricksWon: [0, 1] })
     expect(botAction(s, 1, smart, 'hard')).toEqual(play(C('C', '9')))
-    // Normal does not remember side aces: no top card known, it feeds the king.
-    expect(botAction(s, 1, smart, 'normal')).toEqual(play(C('C', 'K')))
+    // Normal does not remember side aces: no top card known.
+    expect(botAction(s, 1, smart, 'normal')).toEqual(play(C('D', '9')))
   })
 
   /**
    * Seat 1 (bidder) leads trick 4 with HK, D9 and C10. All other trumps fell.
    * Trick 2 is seat 3's discard `signal` on seat 1's HA; trick 3 seat 3's SQ
-   * (a signal in spades, a suit seat 1 does not hold).
+   * (a vet with points, not a signal).
    */
   function readState(signal: Card, opts: { first?: [number, Card][]; last?: Card; hand?: Card[] } = {}) {
     const hands: Card[][] = [[], [], [], []]
@@ -868,6 +870,10 @@ describe('bot partner signal', () => {
     const trace: BotTrace = { candidates: [], notes: [] }
     createAlgorithm('heuristic:hard').decide(observe(own, 1), smart, trace)
     expect(trace.notes).toEqual(['suit nobody else holds'])
+  })
+
+  it('does not read a card with points as a signal, except an ace', () => {
+    expect(botAction(readState(C('C', 'Q')), 1, smart, 'normal')).toEqual(play(C('D', '9')))
   })
 
   it('easy does not read the signal', () => {

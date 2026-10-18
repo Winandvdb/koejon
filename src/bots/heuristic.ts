@@ -281,10 +281,11 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
         }
       }
     }
-    // The partner's discard of a side suit on a trick we won says: I hold the
-    // highest card left in that suit (after an ace: maybe the king). It means
-    // nothing once that card fell or when it is ours. One card per signal, so
-    // also the side ranks that fell before it count here.
+    // The partner's discard of a side suit on a trick we won, a card without
+    // points or an ace, says: I hold the highest card left in that suit (after
+    // an ace: maybe the king). A card with points is a vet, not a signal. It
+    // means nothing once that card fell or when it is ours. One card per
+    // signal, so also the side ranks that fell before it count here.
     const partner = partnerOf(s.seat)
     const fellBy = (n: number, c: Card) => played.slice(0, n).some((tc) => tc.card.s === c.s && tc.card.r === c.r)
     for (let t = 0; t + 4 <= played.length - s.trick.length; t += 4) {
@@ -293,6 +294,7 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
       if (i < 0 || w[trickWinnerIndex(w, trump)].seat !== s.seat) continue
       const suit = w[i].card.s
       if (suit === trump || suit === w[0].card.s) continue
+      if (RANK_POINTS[w[i].card.r] > 0 && w[i].card.r !== 'A') continue
       const r = [...RANKS].reverse().find((r) => !fellBy(t + i + 1, { s: suit, r }))
       if (r && !fellBy(played.length, { s: suit, r }) && !s.hand.some((c) => c.s === suit && c.r === r))
         signals.push({ s: suit, r })
@@ -527,21 +529,19 @@ function followCard(
       }
       return because(why, 'forced to overtake partner', cheapest(legal, trump))
     }
-    // A discard tells the partner: I hold the highest card left in this suit.
-    // Throw a low card under that top card, never one of a suit without it.
+    // A discard without points tells the partner: I hold the highest card left
+    // in this suit. It replaces only a card without points, so the vet stays.
+    let signal: Card | null = null
     if (tactics && !legal.some((c) => c.s === s.trick[0].card.s)) {
       const has = (suit: Suit, r: Rank) => s.hand.some((c) => c.s === suit && c.r === r)
       const holdsTop = (suit: Suit) => has(suit, 'A') || (read.acesGone.has(suit) && has(suit, 'K'))
-      const signal = safe.filter(
-        (c) => c.s !== trump && holdsTop(c.s) && s.hand.filter((h) => h.s === c.s).length >= 2,
-      )
-      if (signal.length) {
-        const low = cheapest(signal, trump)
-        return because(why, `signal: low card under the top of ${low.s}`, low)
-      }
+      const low = safe.filter((c) => c.s !== trump && RANK_POINTS[c.r] === 0 && holdsTop(c.s))
+      if (low.length) signal = lowest(low)
     }
+    const quiet = (reason: string) =>
+      signal ? because(why, `signal: low card under the top of ${signal.s}`, signal) : because(why, reason, lowest(safe))
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
-    if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
+    if (pts.length === 0) return quiet('partner wins: no points to feed')
     const partnerSafe =
       oppToAct.length === 0 ||
       (pc.s === trump &&
@@ -554,7 +554,8 @@ function followCard(
       return because(why, 'partner safe: feed points', highestPoint(nonAce.length ? nonAce : pts))
     }
     const cheap = pts.filter((c) => RANK_POINTS[c.r] <= opt.vetMaxRisk)
-    return because(why, 'partner not safe: feed cheap points', cheap.length ? highestPoint(cheap) : lowest(safe))
+    if (cheap.length) return because(why, 'partner not safe: feed cheap points', highestPoint(cheap))
+    return quiet('partner not safe: feed cheap points')
   }
 
   // Opponent winning: fight for rich tricks, duck the rest.
