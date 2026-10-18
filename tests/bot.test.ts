@@ -136,6 +136,17 @@ describe('bot bidding', () => {
       expect(bid(byPartner, adjust).notes).toContain('bid: rating 14.5 vs threshold 12.5, turned A -2')
     })
 
+    it('in round 2 the turned 2nd card counts', () => {
+      const r2 = { first: C('S', '9'), second: C('H', 'A'), secondUp: true }
+      const opp = bidState(hand, { phase: 'BIDDING_R2', dealer: 0, bidIndex: 0, turned: r2 })
+      const mate = bidState(hand, { phase: 'BIDDING_R2', dealer: 3, bidIndex: 1, turned: r2 })
+      // Round 2 plays for 2 lines, so bidThreshold2 decides.
+      const r2Opt = { ...adjust, bidThreshold2: 13 }
+      expect(bid(opp, r2Opt).a).toEqual({ type: 'bid', seat: 1, play: false })
+      expect(bid(opp, r2Opt).notes).toContain('vs threshold 15, turned A +2')
+      expect(bid(mate, r2Opt).a).toEqual({ type: 'bid', seat: 1, play: true })
+    })
+
     it('a lower turned card counts by its points, a 9 not at all', () => {
       const king = { first: C('H', 'K'), second: C('S', '9'), secondUp: false }
       const kingHand = [C('H', 'A'), ...hand.slice(1)]

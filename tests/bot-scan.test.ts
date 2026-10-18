@@ -203,7 +203,6 @@ describe('bot seed scans', () => {
   }, 120_000)
 
   it('a turned ace raises the bid threshold with an opponent dealer and lowers it with a partner dealer', () => {
-    const adjust = { turnedOpponent: 3, turnedPartner: 3 }
     const base = levelOptions('hard')
     const found = { opponent: 0, partner: 0 }
     scanMatches('hard', SEEDS, (s, a, notes) => {
@@ -215,8 +214,8 @@ describe('bot seed scans', () => {
       const partner = s.dealer === partnerOf(a.seat)
       const threshold =
         (stakes >= 4 ? base.bidThreshold4 : stakes >= 2 ? base.bidThreshold2 : base.bidThreshold1) +
-        (partner ? -adjust.turnedPartner : adjust.turnedOpponent) * (RANK_POINTS[shown.r] / RANK_POINTS.A)
-      expect(Number(m[2]), notes.join('; ')).toBeCloseTo(threshold, 2)
+        (partner ? -base.turnedPartner : base.turnedOpponent) * (RANK_POINTS[shown.r] / RANK_POINTS.A)
+      expect(Number(m[2]), notes.join('; ')).toBe(Number(threshold.toFixed(2)))
       if (shown.r !== 'A') return
       const rating = Number(m[1])
       const note = notes.join('; ')
@@ -228,7 +227,7 @@ describe('bot seed scans', () => {
         found.partner++
         expect(a.play, note).toBe(true)
       }
-    }, createBot({ id: 'heuristic:hard', ...adjust }))
+    })
     expect(found.opponent).toBeGreaterThanOrEqual(MIN_FOUND)
     expect(found.partner).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
