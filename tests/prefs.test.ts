@@ -1,6 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { get } from 'svelte/store'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { arrangeHand, cardKey, moveCard } from '../src/lib/prefs'
+import { arrangeHand, CARD_BACKS, cardKey, moveCard } from '../src/lib/prefs'
 import { C, memoryStore } from './helpers'
 
 const hand = [C('H', '9'), C('S', 'K'), C('H', 'A'), C('S', '9'), C('D', 'J'), C('H', '10')]
@@ -86,7 +87,9 @@ describe('saved preferences', () => {
     expect(get(prefs.botLevel)).toBe('normal')
     expect(get(prefs.playerName)).toBe('')
     expect(get(prefs.sortMode)).toBeNull()
+    expect(get(prefs.cardBack)).toBe('classic')
     expect(store.getItem('koejon-lang')).toBeNull()
+    expect(store.getItem('koejon-card-back')).toBeNull()
   })
 
   test('the language survives a reload', async () => {
@@ -108,8 +111,22 @@ describe('saved preferences', () => {
     expect(get(prefs.sortMode)).toBe('low')
   })
 
+  test('the card back survives a reload', async () => {
+    const first = await fresh()
+    first.prefs.cardBack.set('chimay')
+    expect(first.store.getItem('koejon-card-back')).toBe('chimay')
+    const second = await fresh({ 'koejon-card-back': 'chimay' })
+    expect(get(second.prefs.cardBack)).toBe('chimay')
+  })
+
   test('unknown saved values fall back', async () => {
-    const { prefs } = await fresh({ 'koejon-lang': 'fr', 'koejon-bot-level': 'god', 'koejon-sort-mode': 'x' })
+    const { prefs } = await fresh({
+      'koejon-lang': 'fr',
+      'koejon-bot-level': 'god',
+      'koejon-sort-mode': 'x',
+      'koejon-card-back': 'duvel',
+    })
+    expect(get(prefs.cardBack)).toBe('classic')
     expect(get(prefs.lang)).toBe('nl')
     expect(get(prefs.botLevel)).toBe('normal')
     expect(get(prefs.sortMode)).toBeNull()
@@ -129,5 +146,15 @@ describe('saved preferences', () => {
     const { store, prefs } = await fresh()
     prefs.playerName.set('Jef')
     expect(store.getItem('koejon-name')).toBe('Jef')
+  })
+})
+
+describe('card backs', () => {
+  const css = readFileSync('src/app.css', 'utf8')
+
+  test.each(CARD_BACKS.filter((b) => b !== 'classic'))('%s has a rule and a local image', (b) => {
+    expect(css).toContain(`:root[data-back='${b}'],\n.card-back.back-${b} {`)
+    expect(css).toContain(`url('./assets/backs/${b}.svg')`)
+    expect(existsSync(`src/assets/backs/${b}.svg`)).toBe(true)
   })
 })

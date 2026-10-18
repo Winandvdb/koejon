@@ -19,7 +19,18 @@
   import { discardRoom, HostGame } from './lib/host'
   import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
   import { lang, localeOf, t } from './lib/i18n'
-  import { SORT_LABEL, SORT_MODES, TABLE_LABEL, TABLE_STYLES, playerName, sortMode, tableStyle } from './lib/prefs'
+  import {
+    CARD_BACK_LABEL,
+    CARD_BACKS,
+    SORT_LABEL,
+    SORT_MODES,
+    TABLE_LABEL,
+    TABLE_STYLES,
+    cardBack,
+    playerName,
+    sortMode,
+    tableStyle,
+  } from './lib/prefs'
   import { safeStorage } from './lib/storage'
   import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
@@ -490,6 +501,18 @@
           <div class="segmented" role="group" aria-label={$t.table}>
             {#each TABLE_STYLES as s (s)}
               <button class:active={$tableStyle === s} onclick={() => tableStyle.set(s)}>{$t[TABLE_LABEL[s]]}</button>
+            {/each}
+          </div>
+          <span>{$t.cardBack}</span>
+          <div class="back-picker" role="group" aria-label={$t.cardBack}>
+            {#each CARD_BACKS as b (b)}
+              <button
+                class:active={$cardBack === b}
+                aria-pressed={$cardBack === b}
+                aria-label={$t[CARD_BACK_LABEL[b]]}
+                title={$t[CARD_BACK_LABEL[b]]}
+                onclick={() => cardBack.set(b)}
+              ><span class="card-back back-{b}"></span></button>
             {/each}
           </div>
         {/if}
