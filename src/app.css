@@ -93,21 +93,25 @@
   --felt-3: #081322;
 }
 
-/* A café table: rosewood laminate with a thin black edge. The wavy grain is
-   SVG noise cut into bands (gradients cannot draw it), inline, so no request. */
+/* A café table: a photo of a varnished table top (Poly Haven "Wood Table 001",
+   CC0), lightened and warmed. In public/, so the service worker precaches it.
+   The felt colours match it while it loads. */
 [data-table='wood'] {
-  --felt-1: #d17a3a;
-  --felt-2: #b2602a;
-  --felt-3: #743a17;
+  --felt-1: #8a4f24;
+  --felt-2: #6e3c1a;
+  --felt-3: #4a260f;
   --felt-edge: #140b05;
-  --felt-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 500' width='800' height='500' preserveAspectRatio='xMidYMid slice'%3E%3Cfilter id='g' x='0' y='0' width='100%' height='100%' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.004 .02' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 .12 0 0 0 0 .04 0 0 0 0 .01 1.8 0 0 0 -.4'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='800' height='500' filter='url(%23g)'/%3E%3C/svg%3E") center / cover no-repeat;
+  --felt-grain: url('/table-wood.webp') center / cover no-repeat padding-box;
 }
 
 [data-theme='dark'][data-table='wood'] {
-  --felt-1: #8e4c22;
-  --felt-2: #73391a;
-  --felt-3: #3f1f0d;
+  --felt-1: #4a2a13;
+  --felt-2: #3a200e;
+  --felt-3: #241307;
   --felt-edge: #050302;
+  --felt-grain:
+    linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)) padding-box,
+    url('/table-wood.webp') center / cover no-repeat padding-box;
 }
 
 * {
@@ -1154,14 +1158,18 @@ button.tag {
     '. me .';
   gap: 6px;
   margin: 10px 10px 0;
-  padding: 12px 12px calc(var(--card) * 0.5);
+  padding: 5px 5px calc(var(--card) * 0.5 - 7px);
+  /* The rim is a real border and the surface stops inside it (padding-box),
+     with the rim colour under both: at the rounded corners the edge pixels
+     can only mix dark rim colours, so no felt or wood shows past the rim. */
+  border: 7px solid var(--felt-edge);
   border-radius: 32px;
   background:
     var(--felt-grain),
-    radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%);
+    radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%) padding-box,
+    var(--felt-edge);
   box-shadow:
-    inset 0 0 0 7px var(--felt-edge),
-    inset 0 0 0 9px rgba(0, 0, 0, 0.25),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.25),
     inset 0 0 80px rgba(0, 0, 0, 0.35),
     var(--shadow);
   transition: background 0.3s;
@@ -3171,7 +3179,7 @@ button.tag {
   .felt {
     grid-template-columns: 62px minmax(0, 1fr) 62px;
     margin: 6px 6px 0;
-    padding: 8px;
+    padding: 1px;
     border-radius: 20px;
   }
 
