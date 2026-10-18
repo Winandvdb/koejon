@@ -2,6 +2,7 @@ import {
   RANK_ORDER,
   RANK_POINTS,
   RANKS,
+  sameCard,
   SUITS,
   teamOf,
   trickPoints,
@@ -281,23 +282,26 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
         }
       }
     }
-    // The partner's discard of a side suit on a trick we won, a card without
-    // points or an ace, says: I hold the highest card left in that suit (after
-    // an ace: maybe the king). A card with points is a vet, not a signal. It
-    // means nothing once that card fell or when it is ours. One card per
-    // signal, so also the side ranks that fell before it count here.
+    // The partner's discard of a side suit on a trick we won and played before
+    // it, a card without points or an ace, says: I hold the highest card
+    // left in that suit, the ace or after it the king. A card with points is a
+    // vet, not a signal. It ends once that card fell, the partner showed out of
+    // the suit, or when the card is ours.
     const partner = partnerOf(s.seat)
-    const fellBy = (n: number, c: Card) => played.slice(0, n).some((tc) => tc.card.s === c.s && tc.card.r === c.r)
+    const fellBy = (n: number, c: Card) => played.slice(0, n).some((tc) => sameCard(tc.card, c))
     for (let t = 0; t + 4 <= played.length - s.trick.length; t += 4) {
       const w = played.slice(t, t + 4)
       const i = w.findIndex((tc) => tc.seat === partner)
-      if (i < 0 || w[trickWinnerIndex(w, trump)].seat !== s.seat) continue
+      const me = w.findIndex((tc) => tc.seat === s.seat)
+      if (i < me || w[trickWinnerIndex(w, trump)].seat !== s.seat) continue
       const suit = w[i].card.s
       if (suit === trump || suit === w[0].card.s) continue
       if (RANK_POINTS[w[i].card.r] > 0 && w[i].card.r !== 'A') continue
-      const r = [...RANKS].reverse().find((r) => !fellBy(t + i + 1, { s: suit, r }))
-      if (r && !fellBy(played.length, { s: suit, r }) && !s.hand.some((c) => c.s === suit && c.r === r))
-        signals.push({ s: suit, r })
+      const r = (['A', 'K'] as const).find((r) => !fellBy(t + i + 1, { s: suit, r }))
+      if (!r) continue
+      const top = { s: suit, r }
+      if (!fellBy(played.length, top) && !voids.has(`${partner}:${suit}`) && !s.hand.some((c) => sameCard(c, top)))
+        signals.push(top)
     }
   }
   const mine = s.hand.filter((c) => c.s === trump)
