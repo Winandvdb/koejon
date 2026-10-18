@@ -31,6 +31,7 @@
   import Table from './components/Table.svelte'
   import Replay from './components/Replay.svelte'
   import RulesDialog from './components/RulesDialog.svelte'
+  import ConfirmDialog from './components/ConfirmDialog.svelte'
   import DevPanel from './components/DevPanel.svelte'
 
   /** Dev builds (the vite dev server, or VITE_APP_VARIANT=dev: the dev
@@ -56,6 +57,10 @@
   /** What this host left mid-match, for the resume card on Home. */
   const readPaused = () => ({ room: pausedRoom.get(), solo: soloPaused(safeStorage, uid) })
   let paused = $state({ room: null as string | null, solo: false })
+
+  /** The open "end the paused game?" question: for a room or solo, and its answer. */
+  let endAsk = $state<{ solo: boolean; answer: (ok: boolean) => void } | null>(null)
+  const askEnd = (solo: boolean) => new Promise<boolean>((answer) => (endAsk = { solo, answer }))
 
   let authed = false
 
@@ -251,7 +256,7 @@
       // One paused room per device: a new one ends the old one for its guests too.
       const old = pausedRoom.get()
       if (old) {
-        if (!confirm($t.endGameAsk)) return
+        if (!(await askEnd(false))) return
         await endRoom(old).catch((e) => console.warn('[room] could not end paused room', e))
         pausedRoom.clear()
       }
@@ -271,7 +276,7 @@
       // A new solo match replaces the paused one, engine keys included.
       const old = localLinks(uid, safeStorage)
       if (old) {
-        if (paused.solo && !confirm($t.endGameAsk)) return
+        if (paused.solo && !(await askEnd(true))) return
         await discardRoom(SOLO_CODE, old.host)
       }
       const links = localLinks(uid, safeStorage, newRoomDoc(SOLO_CODE, uid, name))!
@@ -371,7 +376,7 @@
 
   async function onEndPaused(solo: boolean) {
     err = ''
-    if (!confirm($t.endGameAsk)) return
+    if (!(await askEnd(solo))) return
     try {
       if (solo) {
         const links = localLinks(uid, safeStorage)
@@ -557,3 +562,12 @@
 </main>
 
 {#if showRules}<RulesDialog onclose={() => (showRules = false)} />{/if}
+{#if endAsk}
+  {@const ask = endAsk}
+  <ConfirmDialog
+    title={$t.endGameAsk}
+    text={ask.solo ? $t.endGameNote : $t.endGameNoteRoom}
+    confirmLabel={$t.endGame}
+    onanswer={(ok) => ((endAsk = null), ask.answer(ok))}
+  />
+{/if}
