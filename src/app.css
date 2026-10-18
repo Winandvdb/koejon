@@ -1072,10 +1072,74 @@ button.tag {
   height: 100%;
   border-radius: calc(var(--cw, 60px) * 0.09);
   border: calc(var(--cw, 60px) * 0.06) solid var(--card-bg);
-  background:
+  background: var(
+    --back,
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.18) 0 18%, transparent 19%),
-    repeating-linear-gradient(45deg, var(--back-1) 0 5px, var(--back-2) 5px 10px);
+    repeating-linear-gradient(45deg, var(--back-1) 0 5px, var(--back-2) 5px 10px)
+  );
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* The chosen back (`data-back` on the root) for every card; a `back-*` class
+   for the previews in the settings, which show each back whatever the choice.
+   The image backs have no dark variant, so the dark theme dims them. */
+:root {
+  --back-dim: transparent;
+}
+
+[data-theme='dark'] {
+  --back-dim: rgba(0, 0, 0, 0.2);
+}
+
+.card-back.back-classic {
+  --back: initial;
+}
+
+:root[data-back='latrappe'],
+.card-back.back-latrappe {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/latrappe.svg') center / cover;
+}
+
+:root[data-back='chimay'],
+.card-back.back-chimay {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/chimay.svg') center / cover;
+}
+
+:root[data-back='leeuw'],
+.card-back.back-leeuw {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/leeuw.svg') center / cover;
+}
+
+:root[data-back='koe'],
+.card-back.back-koe {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/koe.svg') center / cover;
+}
+
+:root[data-back='cafe'],
+.card-back.back-cafe {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/cafe.svg') center / cover;
+}
+
+.back-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.back-picker button {
+  --cw: 30px;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.4);
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.back-picker button.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ---------- Table ---------- */
