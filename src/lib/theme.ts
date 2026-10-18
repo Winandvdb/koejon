@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store'
 import { safeStorage } from './storage'
+import { cardBack, tableStyle } from './prefs'
 
 export type Theme = 'light' | 'dark'
 const KEY = 'koejon-theme'
@@ -16,4 +17,12 @@ export const theme = writable<Theme>(load())
 theme.subscribe((v) => {
   document.documentElement.dataset.theme = v
   safeStorage.setItem(KEY, v)
+})
+
+tableStyle.subscribe((v) => {
+  document.documentElement.dataset.table = v
+})
+
+cardBack.subscribe((v) => {
+  document.documentElement.dataset.back = v
 })

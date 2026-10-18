@@ -49,6 +49,18 @@ export const botLevel = persisted<BotLevel>(
   'normal',
 )
 
+/** The table surface, per device. */
+export type TableStyle = 'green' | 'blue' | 'wood'
+
+export const TABLE_STYLES: TableStyle[] = ['green', 'blue', 'wood']
+export const TABLE_LABEL = { green: 'tableGreen', blue: 'tableBlue', wood: 'tableWood' } as const
+
+export const tableStyle = persisted<TableStyle>(
+  'koejon-table',
+  (v) => (TABLE_STYLES.includes(v as TableStyle) ? (v as TableStyle) : null),
+  'green',
+)
+
 /** The look of a face-down card. `app.css` draws each back. */
 export type CardBack = 'classic' | 'latrappe' | 'chimay' | 'leeuw' | 'koe' | 'cafe'
 

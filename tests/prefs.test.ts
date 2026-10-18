@@ -132,6 +132,16 @@ describe('saved preferences', () => {
     expect(get(prefs.sortMode)).toBeNull()
   })
 
+  test('the table surface: green felt by default, saved, unknown falls back', async () => {
+    const first = await fresh()
+    expect(get(first.prefs.tableStyle)).toBe('green')
+    expect(first.store.getItem('koejon-table')).toBeNull()
+    first.prefs.tableStyle.set('wood')
+    expect(first.store.getItem('koejon-table')).toBe('wood')
+    expect(get((await fresh({ 'koejon-table': 'wood' })).prefs.tableStyle)).toBe('wood')
+    expect(get((await fresh({ 'koejon-table': 'marble' })).prefs.tableStyle)).toBe('green')
+  })
+
   test('the name is saved', async () => {
     const { store, prefs } = await fresh()
     prefs.playerName.set('Jef')

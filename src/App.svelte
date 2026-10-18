@@ -19,7 +19,18 @@
   import { discardRoom, HostGame } from './lib/host'
   import { demoSeed, hostRand, SEED_ALLOWED } from './lib/seed'
   import { lang, localeOf, t } from './lib/i18n'
-  import { CARD_BACK_LABEL, CARD_BACKS, SORT_LABEL, SORT_MODES, cardBack, playerName, sortMode } from './lib/prefs'
+  import {
+    CARD_BACK_LABEL,
+    CARD_BACKS,
+    SORT_LABEL,
+    SORT_MODES,
+    TABLE_LABEL,
+    TABLE_STYLES,
+    cardBack,
+    playerName,
+    sortMode,
+    tableStyle,
+  } from './lib/prefs'
   import { safeStorage } from './lib/storage'
   import { devSettings } from './lib/devsettings'
   import { theme } from './lib/theme'
@@ -99,10 +110,6 @@
   // Until the first mount finishes a multiplayer resume may still be loading:
   // the connecting view covers that, like the startup sign-in did before.
   let starting = $state(true)
-
-  $effect(() => {
-    document.documentElement.dataset.back = $cardBack
-  })
 
   onMount(async () => {
     uid = offlineUid()
@@ -488,6 +495,12 @@
           <div class="segmented" role="group" aria-label={$t.sortHand}>
             {#each SORT_MODES as m (m)}
               <button class:active={$sortMode === m} onclick={() => sortMode.set(m)}>{$t[SORT_LABEL[m]]}</button>
+            {/each}
+          </div>
+          <span>{$t.table}</span>
+          <div class="segmented" role="group" aria-label={$t.table}>
+            {#each TABLE_STYLES as s (s)}
+              <button class:active={$tableStyle === s} onclick={() => tableStyle.set(s)}>{$t[TABLE_LABEL[s]]}</button>
             {/each}
           </div>
           <span>{$t.cardBack}</span>

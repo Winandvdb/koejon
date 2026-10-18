@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANKS, trickWinnerIndex } from '../src/engine'
+import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANK_POINTS, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
 import { createBot, HARD_ANCHOR_MARGIN, HARD_PIMC, LEVEL_CONFIGS } from '../src/bots/bot'
 import { troefkeHand } from '../src/bots/conventions'
-import { HEURISTIC_DEFAULTS } from '../src/bots/heuristic'
+import { HEURISTIC_DEFAULTS, levelOptions } from '../src/bots/heuristic'
 import { seededRandom } from '../src/lib/seed'
 import { scanMatches } from './helpers'
 
@@ -200,6 +200,36 @@ describe('bot seed scans', () => {
       expect(notes, `weak dealer choice, seed scan at ${level}`).toContain(`choose: go with chance ${HEURISTIC_DEFAULTS.dealerWeak}`)
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it('a turned ace raises the bid threshold with an opponent dealer and lowers it with a partner dealer', () => {
+    const base = levelOptions('hard')
+    const found = { opponent: 0, partner: 0 }
+    scanMatches('hard', SEEDS, (s, a, notes) => {
+      const m = notes.join('\n').match(/^bid: rating ([\d.]+) vs threshold ([\d.]+)/)
+      if (a.type !== 'bid' || !m) return
+      const r1 = s.phase === 'BIDDING_R1'
+      const shown = r1 ? s.turned!.first : s.turned!.second!
+      const stakes = r1 ? s.multiplier : 2
+      const partner = s.dealer === partnerOf(a.seat)
+      const threshold =
+        (stakes >= 4 ? base.bidThreshold4 : stakes >= 2 ? base.bidThreshold2 : base.bidThreshold1) +
+        (partner ? -base.turnedPartner : base.turnedOpponent) * (RANK_POINTS[shown.r] / RANK_POINTS.A)
+      expect(Number(m[2]), notes.join('; ')).toBe(Number(threshold.toFixed(2)))
+      if (shown.r !== 'A') return
+      const rating = Number(m[1])
+      const note = notes.join('; ')
+      if (!partner && rating < threshold && !/knijpen|decisive/.test(note)) {
+        found.opponent++
+        expect(a.play, note).toBe(false)
+      }
+      if (partner && rating >= threshold && !/waits|two low trumps/.test(note)) {
+        found.partner++
+        expect(a.play, note).toBe(true)
+      }
+    })
+    expect(found.opponent).toBeGreaterThanOrEqual(MIN_FOUND)
+    expect(found.partner).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 
   it('hard level: a card other than the anchor card beats it by more than the margin', () => {
