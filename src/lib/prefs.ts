@@ -61,6 +61,26 @@ export const tableStyle = persisted<TableStyle>(
   'green',
 )
 
+/** The look of a face-down card. `app.css` draws each back. */
+export type CardBack = 'classic' | 'latrappe' | 'chimay' | 'leeuw' | 'koe' | 'cafe' | 'stefmarijn'
+
+export const CARD_BACKS: CardBack[] = ['classic', 'latrappe', 'chimay', 'leeuw', 'koe', 'cafe', 'stefmarijn']
+export const CARD_BACK_LABEL = {
+  classic: 'backClassic',
+  latrappe: 'backLatrappe',
+  chimay: 'backChimay',
+  leeuw: 'backLeeuw',
+  koe: 'backKoe',
+  cafe: 'backCafe',
+  stefmarijn: 'backStefMarijn',
+} as const
+
+export const cardBack = persisted<CardBack>(
+  'koejon-card-back',
+  (v) => (CARD_BACKS.includes(v as CardBack) ? (v as CardBack) : null),
+  'classic',
+)
+
 /** The name of the player; '' when not set. Callers set it trimmed. */
 export const playerName = persisted<string>('koejon-name', (v) => v, '')
 
