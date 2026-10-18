@@ -93,47 +93,21 @@
   --felt-3: #081322;
 }
 
-/* A café table top: planks with grain lines, a darker wooden rim. Mid-dark
-   wood, so the white text with shadow on the table stays readable. */
+/* A café table: rosewood laminate with a thin black edge. The wavy grain is
+   SVG noise cut into bands (gradients cannot draw it), inline, so no request. */
 [data-table='wood'] {
-  --felt-1: #9c6a3c;
-  --felt-2: #7c5230;
-  --felt-3: #4f321b;
-  --felt-edge: #2e1a0b;
-  --felt-grain:
-    repeating-linear-gradient(0deg, rgba(30, 14, 4, 0.35) 0 2px, transparent 2px 88px),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 5px,
-      rgba(40, 20, 6, 0.12) 5px 6px,
-      transparent 6px 13px,
-      rgba(255, 220, 170, 0.06) 13px 15px,
-      transparent 15px 23px,
-      rgba(40, 20, 6, 0.1) 23px 24px,
-      transparent 24px 31px
-    ),
-    repeating-linear-gradient(90deg, rgba(60, 30, 10, 0.05) 0 1px, transparent 1px 47px);
+  --felt-1: #d17a3a;
+  --felt-2: #b2602a;
+  --felt-3: #743a17;
+  --felt-edge: #140b05;
+  --felt-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='500'%3E%3Cfilter id='g' x='0' y='0' width='100%' height='100%' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0028 .024' numOctaves='2' seed='11'/%3E%3CfeColorMatrix values='0 0 0 0 .12 0 0 0 0 .04 0 0 0 0 .01 1.8 0 0 0 -.4'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0 .9 .15 0 .55 0 0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect x='-100' y='-150' width='1000' height='800' filter='url(%23g)' transform='rotate(-7 400 250)'/%3E%3C/svg%3E") center / cover no-repeat;
 }
 
 [data-theme='dark'][data-table='wood'] {
-  --felt-1: #5e3f22;
-  --felt-2: #472f19;
-  --felt-3: #2a1b0d;
-  --felt-edge: #160c04;
-  /* Dark lines vanish on dark wood: the grain shows as light streaks here. */
-  --felt-grain:
-    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 88px),
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 5px,
-      rgba(255, 210, 150, 0.06) 5px 6px,
-      transparent 6px 13px,
-      rgba(0, 0, 0, 0.18) 13px 15px,
-      transparent 15px 23px,
-      rgba(255, 210, 150, 0.05) 23px 24px,
-      transparent 24px 31px
-    ),
-    repeating-linear-gradient(90deg, rgba(255, 210, 150, 0.03) 0 1px, transparent 1px 47px);
+  --felt-1: #8e4c22;
+  --felt-2: #73391a;
+  --felt-3: #3f1f0d;
+  --felt-edge: #050302;
 }
 
 * {
