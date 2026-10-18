@@ -84,7 +84,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `src/app.css` — all styles and colour tokens. The card back images (`cardBack` in `prefs.ts`) are SVGs in `src/assets/backs/`, not `public/`: the service worker precaches only top-level files of `public/`.
 - `public/` — manifest, icons (`icon.svg` is the source of the PNGs), `robots.txt`. Copied to `dist/` as is.
 - `pwa/` — service worker template and precache list; dev build name and icons. **Rule:** the worker never caches other origins (Firebase). Registered in production builds only.
-- `tests/` — vitest. `helpers.ts` has state builders (`playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`), `memoryStore`, `blockStorage`, `until`, and `scanMatches` for seed scans (scans live in `bot-scan.test.ts`). **Rule:** reuse the helpers.
+- `tests/` — vitest. `helpers.ts` has state builders (`playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`), `memoryStore`, `blockStorage`, `until`, and `scanMatches` with the shared scan constants and helpers for seed scans (scans live in `bot-scan-<topic>.test.ts`: `lead`, `follow`, `bid`, `search`; one file per topic, so vitest runs them in parallel). **Rule:** reuse the helpers.
 - `rules/` — game rules (NL, EN), shown in the app.
 - `RULE_ASSUMPTIONS.md` — rule choices the rules text does not specify. **Rule:** add an entry when you decide a new rule detail.
 - `firestore.rules` — deployed by CI from `main` only. **Rules:** prod, dev and PR previews share one database, so a rules change must accept every write of every build still in use. Keep the rules to auth, ownership, write-once and size limits; check the exact data shape in tests. To make a rule stricter, first release a build that writes the new shape, then tighten the rule in a later release.
@@ -105,7 +105,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - TypeScript strict. No new dependencies unless the task needs one. Pin exact versions.
 - Make the smallest change that meets the task. Do not refactor unrelated code.
 - For a bug: first write a test that fails, then fix it.
-- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to `tests/bot-scan.test.ts` with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
+- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to the `tests/bot-scan-<topic>.test.ts` file of its topic with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
 
 ## Git and GitHub
 
