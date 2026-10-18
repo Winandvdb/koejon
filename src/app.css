@@ -79,17 +79,18 @@
   color-scheme: dark;
 }
 
-/* Table surfaces (prefs `tableStyle`): the felt tokens per choice and theme. */
+/* Table surfaces (prefs `tableStyle`): the felt tokens per choice and theme.
+   Navy, not mid blue: the defenders' nameplates and --cta are mid blue. */
 [data-table='blue'] {
-  --felt-1: #2f78a8;
-  --felt-2: #1f5a82;
-  --felt-3: #123a57;
+  --felt-1: #2a4a78;
+  --felt-2: #1c3557;
+  --felt-3: #0f1f36;
 }
 
 [data-theme='dark'][data-table='blue'] {
-  --felt-1: #1b4a6b;
-  --felt-2: #12344d;
-  --felt-3: #091f2f;
+  --felt-1: #1a2f4d;
+  --felt-2: #122238;
+  --felt-3: #081322;
 }
 
 /* A café table top: planks with grain lines, a darker wooden rim. Mid-dark
@@ -119,6 +120,20 @@
   --felt-2: #472f19;
   --felt-3: #2a1b0d;
   --felt-edge: #160c04;
+  /* Dark lines vanish on dark wood: the grain shows as light streaks here. */
+  --felt-grain:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.45) 0 2px, transparent 2px 88px),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 5px,
+      rgba(255, 210, 150, 0.06) 5px 6px,
+      transparent 6px 13px,
+      rgba(0, 0, 0, 0.18) 13px 15px,
+      transparent 15px 23px,
+      rgba(255, 210, 150, 0.05) 23px 24px,
+      transparent 24px 31px
+    ),
+    repeating-linear-gradient(90deg, rgba(255, 210, 150, 0.03) 0 1px, transparent 1px 47px);
 }
 
 * {
