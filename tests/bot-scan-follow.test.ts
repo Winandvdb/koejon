@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { legalActions, RANK_ORDER, trickWinnerIndex } from '../src/engine'
-import { LEVELS, MIN_FOUND, scanMatches, SEEDS } from './helpers'
+import { legalActions, partnerOf, RANK_ORDER, RANK_POINTS, trickWinnerIndex } from '../src/engine'
+import type { Card } from '../src/engine'
+import { LEVELS, MIN_FOUND, oppMayTrump, playedThisHand, scanMatches, SEEDS } from './helpers'
 
 describe('bot seed scans: follow suit', () => {
   it.each(LEVELS)('%s: player 2 does not trump a plain lead with no points', (level) => {
@@ -44,5 +45,30 @@ describe('bot seed scans: follow suit', () => {
       expect(a.card.s, `overtake partner on a plain lead, seed scan at ${level}`).not.toBe(trump)
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it.each(LEVELS)('%s: a partner signal is a low card under the top card, read once no opponent may trump', (level) => {
+    let given = 0
+    let read = 0
+    // A signal lead needs a signal and no trump left at the opponents: rare.
+    scanMatches(level, 2 * SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || notes.includes('lazy dump')) return
+      const trump = s.trump!
+      const has = (r: Card['r']) => s.hands[a.seat].some((c) => c.s === a.card.s && c.r === r)
+      if (notes.some((n) => n.startsWith('signal: '))) {
+        given++
+        const aceGone = playedThisHand(s).some((p) => p.card.s === a.card.s && p.card.r === 'A')
+        const note = `signal ${a.card.s}${a.card.r}, seed scan at ${level}`
+        expect(s.trick[trickWinnerIndex(s.trick, trump)].seat, note).toBe(partnerOf(a.seat))
+        expect(a.card.s === trump || RANK_POINTS[a.card.r] > 0, note).toBe(false)
+        expect(has('A') || (aceGone && has('K')), note).toBe(true)
+      }
+      if (notes.some((n) => n.includes("partner's signal"))) {
+        read++
+        expect(oppMayTrump(s, a.seat), `signal lead, seed scan at ${level}`).toBe(false)
+      }
+    })
+    expect(given).toBeGreaterThanOrEqual(MIN_FOUND)
+    expect(read).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 })
