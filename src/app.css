@@ -2973,7 +2973,7 @@ button.tag {
 }
 
 .btn.danger:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: color-mix(in srgb, var(--danger) 88%, white);
 }
 
 @keyframes confirm-in {
