@@ -442,7 +442,8 @@ input[type='checkbox'] {
 }
 
 .settings-pop label + .dev-settings,
-.settings-pop .segmented + .dev-settings {
+.settings-pop .segmented + .dev-settings,
+.settings-pop .back-picker + .dev-settings {
   border-top: 1px solid var(--border);
   padding-top: 8px;
 }
@@ -1135,6 +1136,10 @@ button.tag {
   border-radius: 4px;
   background: none;
   cursor: pointer;
+}
+
+.back-picker .card-back {
+  display: block;
 }
 
 .back-picker button.active {
