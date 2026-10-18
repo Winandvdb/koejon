@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
+import { availableParallelism } from 'node:os'
 import { join } from 'node:path'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import type { Plugin } from 'vite'
@@ -64,5 +65,8 @@ export default defineConfig({
   test: {
     include: ['tests/**/*.test.ts', 'src/**/*.test.ts'],
     environment: 'node',
+    // Vitest keeps one core free for its main process, which idles while the
+    // CPU-bound bot tests run: on the 4-core CI runner that wastes a quarter.
+    maxWorkers: availableParallelism(),
   },
 })
