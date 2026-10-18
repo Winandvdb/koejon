@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apply } from '../src/engine'
+import { apply, legalActions, pendingSeats } from '../src/engine'
 import type { Card, State } from '../src/engine'
 import { troefkeIgnored, troefkeWeight } from '../src/bots/conventions'
 import { BOT_PROFILES, readHand } from '../src/bots/heuristic'
@@ -47,9 +47,18 @@ describe('ignored troefke', () => {
     expect(troefkeIgnored(observe(s, 0))).toBe(1)
   })
 
-  it('reads it also when a human ignores it with a trump in hand', () => {
-    const s = ignoredWithTrump()
+  it('reads it also when a human ignores it with a trump in hand, until that trump shows', () => {
+    let s = ignoredWithTrump()
     expect(readHand(observe(s, 0), 'full').voids.has(`1:${s.trump}`)).toBe(true)
+    // Play on until seat 1 plays a trump: the others take their first legal action.
+    while (!s.trick.some((tc) => tc.seat === 1 && tc.card.s === s.trump)) {
+      const seat = pendingSeats(s)[0]
+      const legal = legalActions(s, seat)
+      s = apply(s, legal.find((a) => seat === 1 && a.type === 'play' && a.card.s === s.trump) ?? legal[0])
+    }
+    expect(troefkeIgnored(observe(s, 0))).toBeNull()
+    expect(readHand(observe(s, 0), 'full').troefkeVoid).toBeNull()
+    expect(troefkeWeight(observe(s, 3))).toBeUndefined()
   })
 
   it('gives no new read to the partner itself, or after an obeyed troefke', () => {

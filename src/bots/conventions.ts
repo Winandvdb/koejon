@@ -40,13 +40,16 @@ const WEAK_TROEFKE = 0.1
  * Read: the partner of the bidder ignored the troefke, that is led a
  * non-trump to the first trick. A bot obeys whenever it holds a trump
  * (`troefkeLead`), so that partner (almost) surely has none. Its seat, or
- * null when no troefke was ignored.
+ * null when no troefke was ignored, or when a trump the partner played later
+ * proves that it ignored with trump.
  */
 export function troefkeIgnored(obs: Observation): number | null {
   if (!obs.troefkeAsked || obs.bidder === null || !obs.trump) return null
   const partner = partnerOf(obs.bidder)
-  const first = playedCards(obs)[0]
-  return first && first.seat === partner && first.card.s !== obs.trump ? partner : null
+  const played = playedCards(obs)
+  const first = played[0]
+  if (!first || first.seat !== partner || first.card.s === obs.trump) return null
+  return played.some((tc) => tc.seat === partner && tc.card.s === obs.trump) ? null : partner
 }
 
 /**
@@ -68,8 +71,7 @@ export function troefkeWeight(obs: Observation): ((world: State) => number) | un
     parts.push((world) => (troefkeHand([...world.hands[bidder], ...own], trump) ? 1 : WEAK_TROEFKE))
   }
   const ignored = troefkeIgnored(obs)
-  // A trump it played later proves it ignored with trump: every world agrees.
-  if (ignored !== null && ignored !== obs.seat && !played.some((tc) => tc.seat === ignored && tc.card.s === trump)) {
+  if (ignored !== null && ignored !== obs.seat) {
     parts.push((world) => (world.hands[ignored].some((c) => c.s === trump) ? WEAK_TROEFKE : 1))
   }
   if (parts.length === 0) return undefined
