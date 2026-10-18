@@ -2,6 +2,7 @@ import {
   RANK_ORDER,
   RANK_POINTS,
   RANKS,
+  sameCard,
   SUITS,
   teamOf,
   trickPoints,
@@ -9,7 +10,7 @@ import {
 } from '../engine'
 import type { Action, Card, Rank, Suit, TrickCard } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
-import { troefkeHand, troefkeLead } from './conventions'
+import { troefkeHand, troefkeIgnored, troefkeLead } from './conventions'
 import type { Observation } from './observation'
 
 const partnerOf = (seat: number) => (seat + 2) % 4
@@ -222,6 +223,8 @@ interface HandRead {
   suitSeen: Record<Suit, number>
   /** Suits whose ace fell this hand ('full' memory only, else empty). */
   acesGone: Set<Suit>
+  /** The trump void in `voids` that only an ignored troefke shows, not a card; null if none. */
+  troefkeVoid: string | null
 }
 
 /**
@@ -230,12 +233,13 @@ interface HandRead {
  * how many of a suit fell, and which aces), so the bot still misjudges some
  * tricks — like a human does.
  */
-function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
+export function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
   const trump = s.trump!
   const trumpsGone = new Set<Rank>()
   const voids = new Set<string>()
   const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
   const acesGone = new Set<Suit>()
+  let troefkeVoid: string | null = null
   if (memory !== 'none') {
     const playedThisHand = s.tricksPlayed * 4 + s.trick.length
     const played: TrickCard[] = []
@@ -278,6 +282,11 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
         }
       }
     }
+    const ignored = troefkeIgnored(s)
+    if (ignored !== null && ignored !== s.seat && !voids.has(`${ignored}:${trump}`)) {
+      troefkeVoid = `${ignored}:${trump}`
+      voids.add(troefkeVoid)
+    }
   }
   const mine = s.hand.filter((c) => c.s === trump)
   let bossOut: Rank | null = null
@@ -288,7 +297,7 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
       break
     }
   }
-  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone }
+  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone, troefkeVoid }
 }
 
 /** Highest trump of `cards` that still tops everything left outside our hand. */
@@ -569,8 +578,15 @@ function choosePlayCard(
   const legal = s.legal.flatMap((a) => (a.type === 'play' ? [a.card] : []))
   if (legal.length === 1) return because(why, 'only legal card', legal[0])
   const read = readHand(s, profile.memory)
-  const smart =
-    s.trick.length === 0 ? leadCard(s, legal, read, profile.tactics, why) : followCard(s, legal, read, opt, why)
+  const pick = (r: HandRead, w: string[]) =>
+    s.trick.length === 0 ? leadCard(s, legal, r, profile.tactics, w) : followCard(s, legal, r, opt, w)
+  const smart = pick(read, why)
+  if (read.troefkeVoid) {
+    const voids = new Set(read.voids)
+    voids.delete(read.troefkeVoid)
+    if (!sameCard(pick({ ...read, voids, troefkeVoid: null }, []), smart))
+      why.push('ignored troefke: the partner of the bidder has no trump')
+  }
   // Imperfect on purpose: sometimes fall back to a lazy card.
   if (rand() < profile.skill) return smart
   // The smart rule did not decide, so its reason stays out of the trace.

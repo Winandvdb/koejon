@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { apply, createMatch, legalActions, partnerOf, pendingSeats, RANK_ORDER, RANK_POINTS, RANKS, trickWinnerIndex } from '../src/engine'
 import type { Card, State } from '../src/engine'
 import { createBot, HARD_ANCHOR_MARGIN, HARD_PIMC, LEVEL_CONFIGS } from '../src/bots/bot'
-import { troefkeHand } from '../src/bots/conventions'
-import { HEURISTIC_DEFAULTS, levelOptions } from '../src/bots/heuristic'
+import { troefkeHand, troefkeIgnored, troefkeWeight } from '../src/bots/conventions'
+import { BOT_PROFILES, HEURISTIC_DEFAULTS, levelOptions, readHand } from '../src/bots/heuristic'
+import { observe } from '../src/bots/observation'
 import { seededRandom } from '../src/lib/seed'
 import { scanMatches } from './helpers'
 
@@ -67,6 +68,29 @@ describe('bot seed scans', () => {
       if (sealed || boss.length === 0) return
       found++
       expect(a.card, `troefke trick, seed scan at ${level}`).toEqual(lowest(boss))
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
+  it.each(LEVELS)('%s: every other seat reads an ignored troefke as no trump in the partner', (level) => {
+    let found = 0
+    // A lazy dump ignores the troefke also with trump in hand: the read is wrong then, on purpose.
+    let lazyLead = false
+    scanMatches(level, SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || !s.troefkeAsked) return
+      const partner = partnerOf(s.bidder!)
+      if (s.tricksPlayed === 0 && s.trick.length === 0) lazyLead = notes.includes('lazy dump')
+      const first = playedThisHand(s)[0]
+      if (!first || first.card.s === s.trump || a.seat === partner || lazyLead) return
+      const obs = observe(s, a.seat)
+      expect(troefkeIgnored(obs)).toBe(partner)
+      expect(readHand(obs, BOT_PROFILES[level].memory).voids.has(`${partner}:${s.trump}`)).toBe(true)
+      // Apart from a lazy dump, a bot ignores only without trump and asks only with a troefke hand: the real deal fits both reads.
+      if (s.tricksPlayed === 0 && s.trick.length === 1) {
+        found++
+        expect(s.hands[partner].some((c) => c.s === s.trump), `seed scan at ${level}`).toBe(false)
+        expect(troefkeWeight(obs)!(s)).toBe(1)
+      }
     })
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
