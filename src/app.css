@@ -16,6 +16,7 @@
   --felt-2: #1d6b45;
   --felt-3: #124530;
   --felt-edge: #5a3a1e;
+  --felt-grain: none;
   --card-bg: #fffdf7;
   --card-border: rgba(0, 0, 0, 0.2);
   --card-red: #c62828;
@@ -76,6 +77,48 @@
   --rate-blunder: #e25c4d;
   --rate-text: #0b1410;
   color-scheme: dark;
+}
+
+/* Table surfaces (prefs `tableStyle`): the felt tokens per choice and theme. */
+[data-table='blue'] {
+  --felt-1: #2f78a8;
+  --felt-2: #1f5a82;
+  --felt-3: #123a57;
+}
+
+[data-theme='dark'][data-table='blue'] {
+  --felt-1: #1b4a6b;
+  --felt-2: #12344d;
+  --felt-3: #091f2f;
+}
+
+/* A café table top: planks with grain lines, a darker wooden rim. Mid-dark
+   wood, so the white text with shadow on the table stays readable. */
+[data-table='wood'] {
+  --felt-1: #9c6a3c;
+  --felt-2: #7c5230;
+  --felt-3: #4f321b;
+  --felt-edge: #2e1a0b;
+  --felt-grain:
+    repeating-linear-gradient(0deg, rgba(30, 14, 4, 0.35) 0 2px, transparent 2px 88px),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 5px,
+      rgba(40, 20, 6, 0.12) 5px 6px,
+      transparent 6px 13px,
+      rgba(255, 220, 170, 0.06) 13px 15px,
+      transparent 15px 23px,
+      rgba(40, 20, 6, 0.1) 23px 24px,
+      transparent 24px 31px
+    ),
+    repeating-linear-gradient(90deg, rgba(60, 30, 10, 0.05) 0 1px, transparent 1px 47px);
+}
+
+[data-theme='dark'][data-table='wood'] {
+  --felt-1: #5e3f22;
+  --felt-2: #472f19;
+  --felt-3: #2a1b0d;
+  --felt-edge: #160c04;
 }
 
 * {
@@ -1107,7 +1150,7 @@ button.tag {
   user-select: none;
 }
 
-/* The green felt: seats on fixed grid slots — panels can never push a seat away. */
+/* The felt (or wood, by `data-table`): seats on fixed grid slots — panels can never push a seat away. */
 .felt {
   --cw: var(--card);
   flex: 1;
@@ -1124,7 +1167,9 @@ button.tag {
   margin: 10px 10px 0;
   padding: 12px 12px calc(var(--card) * 0.5);
   border-radius: 32px;
-  background: radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%);
+  background:
+    var(--felt-grain),
+    radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%);
   box-shadow:
     inset 0 0 0 7px var(--felt-edge),
     inset 0 0 0 9px rgba(0, 0, 0, 0.25),

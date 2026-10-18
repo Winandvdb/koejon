@@ -49,6 +49,18 @@ export const botLevel = persisted<BotLevel>(
   'normal',
 )
 
+/** The table surface, per device. */
+export type TableStyle = 'green' | 'blue' | 'wood'
+
+export const TABLE_STYLES: TableStyle[] = ['green', 'blue', 'wood']
+export const TABLE_LABEL = { green: 'tableGreen', blue: 'tableBlue', wood: 'tableWood' } as const
+
+export const tableStyle = persisted<TableStyle>(
+  'koejon-table',
+  (v) => (TABLE_STYLES.includes(v as TableStyle) ? (v as TableStyle) : null),
+  'green',
+)
+
 /** The name of the player; '' when not set. Callers set it trimmed. */
 export const playerName = persisted<string>('koejon-name', (v) => v, '')
 
