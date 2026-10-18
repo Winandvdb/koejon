@@ -128,6 +128,11 @@ environment deviations. Each entry lists the chosen behavior.
 - **Kicking a stuck player** — the host can remove a human seat (lobby: seat cleared;
   mid-game: a bot takes over, same as a voluntary leave). This covers players who
   close their tab without sending a leave intent.
+- **Back to the lobby** — after a finished match the host (not in solo) can take the
+  room back to the lobby with the same code and seats, to reseat or let new players
+  join. A seat that a player left during the match is cleared, as a leave in the
+  lobby does; a kicked seat stays a bot that the host can remove. The match record
+  is already saved at the end of the match.
 - **Intent outbox** — clients queue intents and write the next `actions/{uid}` doc
   only after the host deleted the previous one, so rapid actions cannot overwrite
   each other or be deleted unseen.

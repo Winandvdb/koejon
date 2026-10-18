@@ -115,6 +115,59 @@ describe('bot bidding', () => {
     // Beginners do not weigh other suits.
     expect(botAction(bidState(hand), 1, never, 'easy')).toEqual({ type: 'bid', seat: 1, play: true })
   })
+
+  describe('the dealer keeps the turned trump', () => {
+    // 14.5 rated for hearts: exactly the 1st card threshold.
+    const hand = [C('H', 'K'), C('H', 'Q'), C('H', '10'), C('S', 'A'), C('D', 'K'), C('D', '9')]
+    const ace = { first: C('H', 'A'), second: C('S', '9'), secondUp: false }
+    const byOpponent = bidState(hand, { dealer: 0, bidIndex: 0, turned: ace })
+    const byPartner = bidState(hand, { dealer: 3, bidIndex: 1, turned: ace })
+    const bid = (s: State, options: Record<string, number>, level: BotLevel = 'hard') => {
+      const trace: BotTrace = { candidates: [], notes: [] }
+      const a = createBot({ id: `heuristic:${level}`, ...options }).decide(s, 1, never, trace)
+      return { a, notes: trace.notes.join('\n') }
+    }
+    const adjust = { turnedOpponent: 2, turnedPartner: 2 }
+
+    it('a turned ace passes the hand with an opponent dealer and bids it with a partner dealer', () => {
+      expect(bid(byOpponent, adjust).a).toEqual({ type: 'bid', seat: 1, play: false })
+      expect(bid(byPartner, adjust).a).toEqual({ type: 'bid', seat: 1, play: true })
+      expect(bid(byOpponent, adjust).notes).toContain('bid: rating 14.5 vs threshold 16.5, turned A +2')
+      expect(bid(byPartner, adjust).notes).toContain('bid: rating 14.5 vs threshold 12.5, turned A -2')
+    })
+
+    it('in round 2 the turned 2nd card counts', () => {
+      const r2 = { first: C('S', '9'), second: C('H', 'A'), secondUp: true }
+      const opp = bidState(hand, { phase: 'BIDDING_R2', dealer: 0, bidIndex: 0, turned: r2 })
+      const mate = bidState(hand, { phase: 'BIDDING_R2', dealer: 3, bidIndex: 1, turned: r2 })
+      // Round 2 plays for 2 lines, so bidThreshold2 decides.
+      const r2Opt = { ...adjust, bidThreshold2: 13 }
+      expect(bid(opp, r2Opt).a).toEqual({ type: 'bid', seat: 1, play: false })
+      expect(bid(opp, r2Opt).notes).toContain('vs threshold 15, turned A +2')
+      expect(bid(mate, r2Opt).a).toEqual({ type: 'bid', seat: 1, play: true })
+    })
+
+    it('a lower turned card counts by its points, a 9 not at all', () => {
+      const king = { first: C('H', 'K'), second: C('S', '9'), secondUp: false }
+      const kingHand = [C('H', 'A'), ...hand.slice(1)]
+      expect(bid(bidState(kingHand, { turned: king }), adjust).notes).toContain('vs threshold 16, turned K +1.5')
+      const nine = { first: C('H', '9'), second: C('S', '9'), secondUp: false }
+      const nineHand = [C('H', 'A'), ...hand.slice(1)]
+      expect(bid(bidState(nineHand, { turned: nine }), adjust).notes).toMatch(/vs threshold 14\.5$/)
+    })
+
+    it('at 0 the turned card changes nothing', () => {
+      const zero = { turnedOpponent: 0, turnedPartner: 0 }
+      for (const s of [byOpponent, byPartner]) {
+        expect(bid(s, zero).a).toEqual({ type: 'bid', seat: 1, play: true })
+        expect(bid(s, zero).notes).toBe('bid: rating 14.5 vs threshold 14.5')
+      }
+    })
+
+    it('easy does not read the turned card', () => {
+      for (const s of [byOpponent, byPartner]) expect(bid(s, {}, 'easy').notes).not.toContain('turned')
+    })
+  })
 })
 
 describe('bot troefke', () => {
@@ -634,6 +687,13 @@ describe('bot leads', () => {
     }
   })
 
+  it('a defender with one side ace and few trumps keeps its trumps', () => {
+    const hand = [C('H', '9'), C('H', 'J'), C('S', 'A'), C('D', '10'), C('C', '9'), C('C', 'J')]
+    for (const level of TACTICS) {
+      expect(botAction(leadState(hand, 0), 1, smart, level)).toEqual({ type: 'play', seat: 1, card: C('C', '9') })
+    }
+  })
+
   it('draws out the ace: a low card under its king while the ace is out', () => {
     // S10 gives no points away; a jack or queen under the king would.
     const hand = [C('S', 'K'), C('S', '10'), C('D', '9'), C('C', '9'), C('D', 'J'), C('C', 'J')]
@@ -736,6 +796,180 @@ describe('bot leads', () => {
     // Easy keeps the pull with the boss trump.
     const boss = leadState([C('H', 'A'), C('H', '9'), C('S', '10'), C('D', '10'), C('C', '10'), C('C', 'J')], 1)
     expect(botAction(boss, 1, smart, 'easy')).toEqual({ type: 'play', seat: 1, card: C('H', 'A') })
+  })
+})
+
+describe('bot partner signal', () => {
+  const play = (card: Card) => ({ type: 'play', seat: 1, card })
+  /** Log events of whole tricks, each as [seat, card] in play order. */
+  const logOf = (tricks: [number, Card][][]): State['log'] =>
+    tricks.flatMap((t) => [
+      ...t.map(([seat, card]) => ({ t: 'card' as const, seat, card })),
+      { t: 'trick' as const, seat: t[0][0] },
+    ])
+
+  /** Seat 1 discards on the partner's trump lead; seat 2 still plays. */
+  const discardState = (lead: Card, hand: Card[], over: Partial<State> = {}) => {
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = hand
+    const trick = [
+      { seat: 3, card: lead },
+      { seat: 0, card: C('H', '9') },
+    ]
+    return playingState({ bidder: 3, turn: 1, trick, hands, ...over })
+  }
+
+  it('throws a low card of the suit with the ace instead of another card without points', () => {
+    // HK may still lose to the HA, so no points go: without the signal the bot dumps the S9.
+    const s = discardState(C('H', 'K'), [C('S', '9'), C('C', '10'), C('C', 'A')])
+    for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('C', '10')))
+    expect(botAction(s, 1, smart, 'easy')).toEqual(play(C('S', '9')))
+    // The vet stays: the partner's HA is safe, so the DQ goes.
+    const vet = discardState(C('H', 'A'), [C('C', 'A'), C('C', '10'), C('D', 'Q'), C('S', '9')])
+    expect(botAction(vet, 1, smart, 'hard')).toEqual(play(C('D', 'Q')))
+  })
+
+  it('does not discard a low card from a suit without the highest card when it can choose', () => {
+    const s = discardState(C('H', 'K'), [C('D', '9'), C('S', '10'), C('D', 'Q'), C('C', '10'), C('C', 'A')])
+    for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('C', '10')))
+  })
+
+  it('with full memory signals the king once the ace fell', () => {
+    const log = logOf([
+      [
+        [0, C('C', 'Q')],
+        [1, C('C', 'J')],
+        [2, C('C', 'A')],
+        [3, C('H', '10')],
+      ],
+    ])
+    const s = discardState(C('H', 'K'), [C('D', '9'), C('C', 'K'), C('C', '9')], { log, tricksPlayed: 1, tricksWon: [0, 1] })
+    expect(botAction(s, 1, smart, 'hard')).toEqual(play(C('C', '9')))
+    // Normal does not remember side aces: no top card known.
+    expect(botAction(s, 1, smart, 'normal')).toEqual(play(C('D', '9')))
+  })
+
+  /**
+   * Seat 1 (bidder) leads trick 4 with HK, D9 and C10. All other trumps fell.
+   * Trick 2 is seat 3's discard `signal` on seat 1's HA; trick 3 seat 3's SQ
+   * (a vet with points, not a signal).
+   */
+  function readState(signal: Card, opts: { first?: [number, Card][]; last?: Card; hand?: Card[] } = {}) {
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = opts.hand ?? [C('H', 'K'), C('D', '9'), C('C', '10')]
+    const log = logOf([
+      opts.first ?? [
+        [0, C('S', 'A')],
+        [1, C('S', '9')],
+        [2, C('S', '10')],
+        [3, C('S', 'J')],
+      ],
+      [
+        [0, C('H', '9')],
+        [1, C('H', 'A')],
+        [2, C('H', '10')],
+        [3, signal],
+      ],
+      [
+        [1, C('H', 'Q')],
+        [2, C('H', 'J')],
+        [3, C('S', 'Q')],
+        [0, opts.last ?? C('D', 'J')],
+      ],
+    ])
+    return playingState({ bidder: 1, turn: 1, leader: 1, tricksPlayed: 3, tricksWon: [1, 2], hands, log })
+  }
+
+  it('leads the signalled suit once no opponent may hold trump', () => {
+    const s = readState(C('C', '9'))
+    for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('C', '10')))
+  })
+
+  it('after an ace on its trick, counts that the partner can hold the king', () => {
+    const s = readState(C('C', 'A'))
+    for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('C', '10')))
+  })
+
+  it('ignores a signal whose card already fell or is in its own hand', () => {
+    // The signalled CA falls on trick 3.
+    const fell = readState(C('C', '9'), { last: C('C', 'A') })
+    for (const level of ['normal', 'hard'] as const) expect(botAction(fell, 1, smart, level)).toEqual(play(C('D', '9')))
+    // The CA fell on trick 1, so C9 signals the CK: seat 1 holds it.
+    const own = readState(C('C', '9'), {
+      first: [
+        [0, C('C', 'A')],
+        [1, C('C', 'J')],
+        [2, C('C', '10')],
+        [3, C('C', 'Q')],
+      ],
+      hand: [C('H', 'K'), C('D', '9'), C('C', 'K')],
+    })
+    expect(botAction(own, 1, smart, 'normal')).toEqual(play(C('D', '9')))
+    // Hard counts that nobody else holds clubs and leads the CK for that reason.
+    const trace: BotTrace = { candidates: [], notes: [] }
+    createAlgorithm('heuristic:hard').decide(observe(own, 1), smart, trace)
+    expect(trace.notes).toEqual(['suit nobody else holds'])
+  })
+
+  it('does not read a card with points as a signal, except an ace', () => {
+    expect(botAction(readState(C('C', 'Q')), 1, smart, 'normal')).toEqual(play(C('D', '9')))
+  })
+
+  it('does not read a discard the partner made before the bot held the trick', () => {
+    // Trick 1: the partner's C9 falls while an opponent still wins; seat 1 then takes it with the SA.
+    const s = readState(C('S', '9'), {
+      first: [
+        [2, C('S', '10')],
+        [3, C('C', '9')],
+        [0, C('S', 'J')],
+        [1, C('S', 'A')],
+      ],
+    })
+    for (const level of ['normal', 'hard'] as const) expect(botAction(s, 1, smart, level)).toEqual(play(C('D', '9')))
+  })
+
+  it('reads no signal below the king', () => {
+    // The CA and CK fell: the partner's C9 is a plain discard, not a CQ signal.
+    const s = readState(C('C', '9'), {
+      first: [
+        [0, C('C', 'A')],
+        [1, C('C', 'J')],
+        [2, C('C', 'K')],
+        [3, C('S', 'J')],
+      ],
+    })
+    expect(botAction(s, 1, smart, 'normal')).toEqual(play(C('D', '9')))
+  })
+
+  it('with full memory drops a signal once the partner shows out of the suit', () => {
+    const hands: Card[][] = [[], [], [], []]
+    hands[1] = [C('D', '9'), C('D', '10'), C('C', '10')]
+    const log = logOf([
+      [
+        [0, C('H', '9')],
+        [1, C('H', 'A')],
+        [2, C('H', '10')],
+        [3, C('C', '9')],
+      ],
+      [
+        [1, C('H', 'K')],
+        [2, C('H', 'J')],
+        [3, C('S', '9')],
+        [0, C('H', 'Q')],
+      ],
+      [
+        [1, C('C', 'K')],
+        [2, C('C', 'Q')],
+        [3, C('S', 'Q')],
+        [0, C('C', 'J')],
+      ],
+    ])
+    const s = playingState({ bidder: 1, turn: 1, leader: 1, tricksPlayed: 3, tricksWon: [1, 2], hands, log })
+    expect(botAction(s, 1, smart, 'hard')).toEqual(play(C('D', '9')))
+  })
+
+  it('easy does not read the signal', () => {
+    expect(botAction(readState(C('C', '9')), 1, smart, 'easy')).toEqual(play(C('D', '9')))
   })
 })
 

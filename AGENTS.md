@@ -56,22 +56,23 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 
 - `host.ts` — `HostGame`: the authoritative loop (intents, bots, publish, KJN upload via `HostOptions.saveGame`). **Rule:** imports no transport implementation.
 - `room.ts` — `RoomSession` (client side: view, intents), `createRoom`, `joinRoom`, `resumeRoom`. **Rule:** no static imports of `firebase/*`, `firebase.ts`, `link-p2p.ts` or `link-firestore.ts`: they load by dynamic import, so the start bundle has no Firebase code.
-- `transport.ts` — `HostLink` / `GuestLink` and `HEARTBEAT_MS`. **Rule:** transport only: no game records, no URLs.
+- `transport.ts` — `HostLink` / `GuestLink`, `HEARTBEAT_MS` and the data channel liveness times `PING_MS` / `DEAD_MS` (`link-p2p.ts`: the guest pings, the host answers; a side that got a reply once and then hears nothing for `DEAD_MS` drops the channel, so the guest moves to Firestore). **Rule:** transport only: no game records, no URLs.
 - `link-local.ts` (solo, `localStorage`, no network), `link-p2p.ts` (WebRTC; Firestore for lobby and signaling), `link-firestore.ts` (fallback when WebRTC fails). **Rule:** keep Firestore reads and writes low (cost).
 - `net-types.ts` — wire types shared by host, guests and all links. **Rule:** a change must stay readable by builds still in use (shared database).
 - `firebase.ts` — Firebase init, emulator auto-connect. **Rule:** reach it only by dynamic import, so a solo player never downloads the SDK.
 - `games.ts` — `saveGame`: one finished match as write-once `games/{id}`. `App.svelte` passes it to the host by dynamic import.
 - `kjn.ts` — KJN/1 game records: build, serialize, parse, replay, load from a file. Format spec in `README.md`. **Rules:** KJN/1 is frozen: an incompatible change needs a new format version. No names, UIDs or room codes in a record. A record error must never stop a match. Only a match that a human played to the end gets a record (`finishRecord` in `host.ts`: a seat still `human` at `GAME_OVER`; `mixed` does not count); else no upload, no `room.kjn`, no history entry and no download.
 - `analysis.ts`, `analysis-worker.ts` — the replay analysis: `stepDecisions` (the decisions behind a replay step, from `replayMoves` in `kjn.ts`), `matchSeed`, and `Analyzer`, which asks the Web Worker for one step at a time and keeps the results. **Rule:** ratings run only in the worker, and the worker uses no network.
+- `paused.ts` — a host who leaves mid-match pauses it (`pausable`): the room and engine state stay, and Home offers Resume and End game. `pausedRoom` keeps the one paused multiplayer room (`koejon-paused`); a paused solo match is its save (`soloPaused` in `link-local.ts`). `discardRoom` (`host.ts`) and `endRoom` (`room.ts`) end a room without a running host. **Rule:** only the host sets the marker, so a guest's Home never offers a resume; guests come back with the link or room code.
 - `history.ts` — the last 20 finished matches on this device. **Rule:** device only: never uploaded, no Firestore reads; seat names stay out of the KJN text.
 - `stats.ts` — personal statistics from the history. **Rule:** no engine state and no network.
 - `download.ts` — the `.kjn` file of a match (share sheet or download). No network.
 - `deckstack.ts` — how the next deck forms at the cut, and the deal animation timing (`DEAL_MS`, which the host waits for). **Rule:** must move the cards as the engine does (`cutDeck`, `allPassed`, `doDeal`); `tests/deckstack.test.ts` checks it. Public state only.
-- `quotes.ts` — table talk: `activeQuotes` finds candidates, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
+- `quotes.ts` — table talk: `activeQuotes` finds candidates from the public state and the keys that already fired this match, the host's `QuoteBook` decides which fire. **Rule:** quotes stay in Flemish dialect. Fired quotes ride on `room.quotes`, so all clients show the same line.
 - `i18n.ts` — all UI text, Dutch (`nl`, default) and English (`en`). **Rule:** every new UI string goes in both languages.
 - `table.ts` — what the live table and the replay both show (bids, bubbles, trick shown, fly directions). **Rule:** public state only; both screens call these, never copy them.
 - `replay.ts` — the replay's move list model: `replayMoves` (per hand its bids and tricks, each item with its step in `replaySteps`, trick winner, own flag, `rating` slot for move ratings). **Rule:** pure, no DOM; `tests/replay.test.ts` checks it.
-- `prefs.ts`, `theme.ts` — per-device preferences as stores that save every change. **Rule:** use `safeStorage`. Components use the stores, never the keys (`koejon-name`, `koejon-bot-level`, `koejon-lang`, `koejon-sort-mode`, `koejon-theme`). Keep the keys: saved values must stay valid.
+- `prefs.ts`, `theme.ts` — per-device preferences as stores that save every change. **Rule:** use `safeStorage`. Components use the stores, never the keys (`koejon-name`, `koejon-bot-level`, `koejon-lang`, `koejon-sort-mode`, `koejon-table`, `koejon-card-back`, `koejon-theme`). Keep the keys: saved values must stay valid.
 - `storage.ts` — `safeStorage` (never throws), `KeyValueStore`, `readJson`. **Rule:** use it for app storage; never touch `localStorage` outside a try/catch.
 - `devsettings.ts` — dev build test shortcuts (`DevPanel.svelte`). **Rules:** production builds use `DEV_DEFAULTS`. The host uploads no KJN record for a match with another tree length or with autoplay.
 - `seed.ts` — `?seed=N`: a solo game that repeats exactly. **Rule:** solo only, and only in the dev server or a build with `VITE_ALLOW_SEED=1`. Never set that flag in a deploy workflow: whoever knows the seed knows every hand.
@@ -80,14 +81,14 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 ### Other paths
 
 - `src/components/` — Svelte UI. `App.svelte`: startup and routing. `Table.svelte`: the game table. `Replay.svelte`: read-only replay in a game-review layout (table plus a panel with `ReplayOverview` and `ReplayMoves`). `Nameplate`, `Avatar`, `TurnedCards`, `Opponent`, `TrickArea` and `ResultPanel` are shared by both. **Rules:** must work at phone width. Replay sends no intents and uses no network. A change to a table part goes in the shared component, not in one screen.
-- `src/app.css` — all styles and colour tokens.
+- `src/app.css` — all styles and colour tokens. The card back images (`cardBack` in `prefs.ts`) are SVGs in `src/assets/backs/`, not `public/`: the service worker precaches only top-level files of `public/`.
 - `public/` — manifest, icons (`icon.svg` is the source of the PNGs), `robots.txt`. Copied to `dist/` as is.
 - `pwa/` — service worker template and precache list; dev build name and icons. **Rule:** the worker never caches other origins (Firebase). Registered in production builds only.
-- `tests/` — vitest. `helpers.ts` has state builders (`playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`), `memoryStore`, `blockStorage`, `until`, and `scanMatches` for seed scans (scans live in `bot-scan.test.ts`). **Rule:** reuse the helpers.
+- `tests/` — vitest. `helpers.ts` has state builders (`playingState`, `lastTrickState`, `biddingState`, `dealtState`, card helper `C`), `memoryStore`, `blockStorage`, `until`, and `scanMatches` with the shared scan constants and helpers for seed scans (scans live in `bot-scan-<topic>.test.ts`: `lead`, `follow`, `bid`, `search`; one file per topic, so vitest runs them in parallel). **Rule:** reuse the helpers.
 - `rules/` — game rules (NL, EN), shown in the app.
 - `RULE_ASSUMPTIONS.md` — rule choices the rules text does not specify. **Rule:** add an entry when you decide a new rule detail.
 - `firestore.rules` — deployed by CI from `main` only. **Rules:** prod, dev and PR previews share one database, so a rules change must accept every write of every build still in use. Keep the rules to auth, ownership, write-once and size limits; check the exact data shape in tests. To make a rule stricter, first release a build that writes the new shape, then tighten the rule in a later release.
-- `docs/bots/` — bot measurements and the choices made from them (`search-bots.md`: why the `hard` level uses `pimc`; `levels.md`: the targets for the gaps between the levels). **Rule:** read it before you change the algorithm of a level; add new bench results when they change a choice.
+- `docs/bots/` — bot measurements and the choices made from them (`search-bots.md`: why the `hard` level uses `pimc`; `levels.md`: the targets for the gaps between the levels; `defender-pull.md`: when a defender leads a low trump; `partner-signal.md`: the low-card signal to the partner). **Rule:** read it before you change the algorithm of a level; add new bench results when they change a choice.
 - `docs/spikes/` — the result of a spike (issue label `question`) is a write-up here, not code: `<issue>-<slug>.md`.
 - `IMPLEMENTATION_PROMPT.md` — the original build spec. Historical: where it differs, the code and README are correct.
 
@@ -104,7 +105,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - TypeScript strict. No new dependencies unless the task needs one. Pin exact versions.
 - Make the smallest change that meets the task. Do not refactor unrelated code.
 - For a bug: first write a test that fails, then fix it.
-- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to `tests/bot-scan.test.ts` with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
+- Prefer a seed scan to a check by hand: many game situations are very hard to get in a played match (a troefke with the trump ace, a kapot on the 5th trick). For a bot or game rule, add a scan to the `tests/bot-scan-<topic>.test.ts` file of its topic with `scanMatches`: find the situation in seeded matches and check the rule each time it occurs. Skip the decisions that the trace marks `lazy dump`, and require a minimum number of hits, so that a scan never passes on an empty set. Keep "Check by hand" in the PR for what only a person can judge: the UI, animations, a real network.
 
 ## Git and GitHub
 

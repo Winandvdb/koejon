@@ -16,6 +16,7 @@
   --felt-2: #1d6b45;
   --felt-3: #124530;
   --felt-edge: #5a3a1e;
+  --felt-grain: none;
   --card-bg: #fffdf7;
   --card-border: rgba(0, 0, 0, 0.2);
   --card-red: #c62828;
@@ -76,6 +77,41 @@
   --rate-blunder: #e25c4d;
   --rate-text: #0b1410;
   color-scheme: dark;
+}
+
+/* Table surfaces (prefs `tableStyle`): the felt tokens per choice and theme.
+   Navy, not mid blue: the defenders' nameplates and --cta are mid blue. */
+[data-table='blue'] {
+  --felt-1: #2a4a78;
+  --felt-2: #1c3557;
+  --felt-3: #0f1f36;
+}
+
+[data-theme='dark'][data-table='blue'] {
+  --felt-1: #1a2f4d;
+  --felt-2: #122238;
+  --felt-3: #081322;
+}
+
+/* A café table: a photo of a varnished table top (Poly Haven "Wood Table 001",
+   CC0), lightened and warmed. In public/, so the service worker precaches it.
+   The felt colours match it while it loads. */
+[data-table='wood'] {
+  --felt-1: #8a4f24;
+  --felt-2: #6e3c1a;
+  --felt-3: #4a260f;
+  --felt-edge: #140b05;
+  --felt-grain: url('/table-wood.webp') center / cover no-repeat padding-box;
+}
+
+[data-theme='dark'][data-table='wood'] {
+  --felt-1: #4a2a13;
+  --felt-2: #3a200e;
+  --felt-3: #241307;
+  --felt-edge: #050302;
+  --felt-grain:
+    linear-gradient(rgba(0, 0, 0, 0.45), rgba(0, 0, 0, 0.45)) padding-box,
+    url('/table-wood.webp') center / cover no-repeat padding-box;
 }
 
 * {
@@ -425,7 +461,19 @@ input[type='checkbox'] {
   flex-direction: column;
   gap: 8px;
   min-width: 220px;
+  /* The gear button is the containing block, so without a width the popover
+     shrinks to min-width and its controls wrap. */
+  width: max-content;
+  max-width: 380px;
   font-size: 0.9rem;
+}
+
+.settings-pop .segmented {
+  align-self: flex-start;
+}
+
+.settings-pop .segmented button {
+  white-space: nowrap;
 }
 
 .settings-pop label {
@@ -442,7 +490,8 @@ input[type='checkbox'] {
 }
 
 .settings-pop label + .dev-settings,
-.settings-pop .segmented + .dev-settings {
+.settings-pop .segmented + .dev-settings,
+.settings-pop .back-picker + .dev-settings {
   border-top: 1px solid var(--border);
   padding-top: 8px;
 }
@@ -518,6 +567,28 @@ input[type='checkbox'] {
 .home-actions {
   display: grid;
   gap: 10px;
+}
+
+.paused-panel {
+  gap: 10px;
+}
+
+.paused-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.paused-label {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+/* The two buttons wrap as one group: never one of them alone on a line. */
+.paused-btns {
+  display: flex;
+  gap: 8px;
 }
 
 .divider {
@@ -1050,10 +1121,83 @@ button.tag {
   height: 100%;
   border-radius: calc(var(--cw, 60px) * 0.09);
   border: calc(var(--cw, 60px) * 0.06) solid var(--card-bg);
-  background:
+  background: var(
+    --back,
     radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.18) 0 18%, transparent 19%),
-    repeating-linear-gradient(45deg, var(--back-1) 0 5px, var(--back-2) 5px 10px);
+    repeating-linear-gradient(45deg, var(--back-1) 0 5px, var(--back-2) 5px 10px)
+  );
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* The chosen back (`data-back` on the root) for every card; a `back-*` class
+   for the previews in the settings, which show each back whatever the choice.
+   The image backs have no dark variant, so the dark theme dims them. */
+:root {
+  --back-dim: transparent;
+}
+
+[data-theme='dark'] {
+  --back-dim: rgba(0, 0, 0, 0.2);
+}
+
+.card-back.back-classic {
+  --back: initial;
+}
+
+:root[data-back='latrappe'],
+.card-back.back-latrappe {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/latrappe.svg') center / cover;
+}
+
+:root[data-back='chimay'],
+.card-back.back-chimay {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/chimay.svg') center / cover;
+}
+
+:root[data-back='leeuw'],
+.card-back.back-leeuw {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/leeuw.svg') center / cover;
+}
+
+:root[data-back='koe'],
+.card-back.back-koe {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/koe.svg') center / cover;
+}
+
+:root[data-back='cafe'],
+.card-back.back-cafe {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/cafe.svg') center / cover;
+}
+
+:root[data-back='stefmarijn'],
+.card-back.back-stefmarijn {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/stefmarijn.svg') center / cover;
+}
+
+.back-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.back-picker button {
+  --cw: 30px;
+  width: var(--cw);
+  height: calc(var(--cw) * 1.4);
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.back-picker .card-back {
+  display: block;
+}
+
+.back-picker button.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ---------- Table ---------- */
@@ -1085,7 +1229,7 @@ button.tag {
   user-select: none;
 }
 
-/* The green felt: seats on fixed grid slots — panels can never push a seat away. */
+/* The felt (or wood, by `data-table`): seats on fixed grid slots — panels can never push a seat away. */
 .felt {
   --cw: var(--card);
   flex: 1;
@@ -1100,12 +1244,18 @@ button.tag {
     '. me .';
   gap: 6px;
   margin: 10px 10px 0;
-  padding: 12px 12px calc(var(--card) * 0.5);
+  padding: 5px 5px calc(var(--card) * 0.5 - 7px);
+  /* The rim is a real border and the surface stops inside it (padding-box),
+     with the rim colour under both: at the rounded corners the edge pixels
+     can only mix dark rim colours, so no felt or wood shows past the rim. */
+  border: 7px solid var(--felt-edge);
   border-radius: 32px;
-  background: radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%);
+  background:
+    var(--felt-grain),
+    radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 55%, var(--felt-3) 100%) padding-box,
+    var(--felt-edge);
   box-shadow:
-    inset 0 0 0 7px var(--felt-edge),
-    inset 0 0 0 9px rgba(0, 0, 0, 0.25),
+    inset 0 0 0 2px rgba(0, 0, 0, 0.25),
     inset 0 0 80px rgba(0, 0, 0, 0.35),
     var(--shadow);
   transition: background 0.3s;
@@ -1241,6 +1391,10 @@ button.tag {
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+}
+
+.fab-row.pair {
+  flex-wrap: nowrap;
 }
 
 .fab {
@@ -2921,6 +3075,52 @@ button.tag {
   padding-left: 20px;
 }
 
+.modal.confirm {
+  width: min(380px, 100%);
+  padding: 22px 22px 18px;
+  margin: auto;
+  animation: confirm-in 160ms ease-out;
+}
+
+.modal.confirm::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.modal.confirm h2 {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+}
+
+.modal.confirm p {
+  margin: 0 0 20px;
+  line-height: 1.45;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn.danger {
+  background: var(--danger);
+  color: var(--danger-contrast);
+  border-color: transparent;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 88%, white);
+}
+
+@keyframes confirm-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+}
+
 /* ---------- Animations ---------- */
 
 @keyframes spin {
@@ -2952,6 +3152,10 @@ button.tag {
 
   .confetti {
     display: none;
+  }
+
+  .modal.confirm {
+    animation: none;
   }
 
   .stack-part,
@@ -3061,7 +3265,7 @@ button.tag {
   .felt {
     grid-template-columns: 62px minmax(0, 1fr) 62px;
     margin: 6px 6px 0;
-    padding: 8px;
+    padding: 1px;
     border-radius: 20px;
   }
 
@@ -3106,6 +3310,7 @@ button.tag {
   .seat-p1 .np-name,
   .seat-p3 .np-name {
     max-width: 52px;
+    text-align: center;
   }
 
   /* Long table-talk lines must wrap. */
@@ -3154,6 +3359,13 @@ button.tag {
   .boomke-wrap {
     bottom: 10px;
     right: 8px;
+  }
+
+  /* One row: a second row lifts the result card into the scored boomke. */
+  .fab-row.pair .fab {
+    min-width: 0;
+    padding-inline: 14px;
+    font-size: 0.9rem;
   }
 
   .boomke {
