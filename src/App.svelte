@@ -61,6 +61,12 @@
   /** The open "end the paused game?" question: for a room or solo, and its answer. */
   let endAsk = $state<{ solo: boolean; answer: (ok: boolean) => void } | null>(null)
   const askEnd = (solo: boolean) => new Promise<boolean>((answer) => (endAsk = { solo, answer }))
+  function answerEnd(ok: boolean) {
+    // Take the answer before the reset: the dialog's props read endAsk live.
+    const ask = endAsk
+    endAsk = null
+    ask?.answer(ok)
+  }
 
   let authed = false
 
@@ -563,11 +569,10 @@
 
 {#if showRules}<RulesDialog onclose={() => (showRules = false)} />{/if}
 {#if endAsk}
-  {@const ask = endAsk}
   <ConfirmDialog
     title={$t.endGameAsk}
-    text={ask.solo ? $t.endGameNote : $t.endGameNoteRoom}
+    text={endAsk.solo ? $t.endGameNote : $t.endGameNoteRoom}
     confirmLabel={$t.endGame}
-    onanswer={(ok) => ((endAsk = null), ask.answer(ok))}
+    onanswer={answerEnd}
   />
 {/if}
