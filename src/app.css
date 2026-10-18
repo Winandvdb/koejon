@@ -425,7 +425,15 @@ input[type='checkbox'] {
   flex-direction: column;
   gap: 8px;
   min-width: 220px;
+  /* The gear button is the containing block, so without a width the popover
+     shrinks to min-width and its controls wrap. */
+  width: max-content;
+  max-width: 380px;
   font-size: 0.9rem;
+}
+
+.settings-pop .segmented button {
+  white-space: nowrap;
 }
 
 .settings-pop label {
