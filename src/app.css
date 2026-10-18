@@ -1169,6 +1169,11 @@ button.tag {
   --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/cafe.svg') center / cover;
 }
 
+:root[data-back='stefmarijn'],
+.card-back.back-stefmarijn {
+  --back: linear-gradient(var(--back-dim), var(--back-dim)), url('./assets/backs/stefmarijn.svg') center / cover;
+}
+
 .back-picker {
   display: flex;
   flex-wrap: wrap;

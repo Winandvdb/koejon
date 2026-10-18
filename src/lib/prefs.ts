@@ -62,9 +62,9 @@ export const tableStyle = persisted<TableStyle>(
 )
 
 /** The look of a face-down card. `app.css` draws each back. */
-export type CardBack = 'classic' | 'latrappe' | 'chimay' | 'leeuw' | 'koe' | 'cafe'
+export type CardBack = 'classic' | 'latrappe' | 'chimay' | 'leeuw' | 'koe' | 'cafe' | 'stefmarijn'
 
-export const CARD_BACKS: CardBack[] = ['classic', 'latrappe', 'chimay', 'leeuw', 'koe', 'cafe']
+export const CARD_BACKS: CardBack[] = ['classic', 'latrappe', 'chimay', 'leeuw', 'koe', 'cafe', 'stefmarijn']
 export const CARD_BACK_LABEL = {
   classic: 'backClassic',
   latrappe: 'backLatrappe',
@@ -72,6 +72,7 @@ export const CARD_BACK_LABEL = {
   leeuw: 'backLeeuw',
   koe: 'backKoe',
   cafe: 'backCafe',
+  stefmarijn: 'backStefMarijn',
 } as const
 
 export const cardBack = persisted<CardBack>(
