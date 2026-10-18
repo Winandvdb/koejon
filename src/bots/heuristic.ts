@@ -207,6 +207,8 @@ interface HandRead {
   suitSeen: Record<Suit, number>
   /** Suits whose ace fell this hand ('full' memory only, else empty). */
   acesGone: Set<Suit>
+  /** Cards the partner signalled to hold, still unplayed and not ours (no memory: empty). */
+  signals: Card[]
 }
 
 /**
@@ -221,6 +223,7 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
   const voids = new Set<string>()
   const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
   const acesGone = new Set<Suit>()
+  const signals: Card[] = []
   if (memory !== 'none') {
     const playedThisHand = s.tricksPlayed * 4 + s.trick.length
     const played: TrickCard[] = []
@@ -263,6 +266,22 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
         }
       }
     }
+    // The partner's discard of a side suit on a trick we won says: I hold the
+    // highest card left in that suit (after an ace: maybe the king). It means
+    // nothing once that card fell or when it is ours. One card per signal, so
+    // also the side ranks that fell before it count here.
+    const partner = partnerOf(s.seat)
+    const fellBy = (n: number, c: Card) => played.slice(0, n).some((tc) => tc.card.s === c.s && tc.card.r === c.r)
+    for (let t = 0; t + 4 <= played.length - s.trick.length; t += 4) {
+      const w = played.slice(t, t + 4)
+      const i = w.findIndex((tc) => tc.seat === partner)
+      if (i < 0 || w[trickWinnerIndex(w, trump)].seat !== s.seat) continue
+      const suit = w[i].card.s
+      if (suit === trump || suit === w[0].card.s) continue
+      const r = [...RANKS].reverse().find((r) => !fellBy(t + i + 1, { s: suit, r }))
+      if (r && !fellBy(played.length, { s: suit, r }) && !s.hand.some((c) => c.s === suit && c.r === r))
+        signals.push({ s: suit, r })
+    }
   }
   const mine = s.hand.filter((c) => c.s === trump)
   let bossOut: Rank | null = null
@@ -273,7 +292,7 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
       break
     }
   }
-  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone }
+  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone, signals }
 }
 
 /** Highest trump of `cards` that still tops everything left outside our hand. */
@@ -349,11 +368,16 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   const beforeAces =
     oppMayTrump && aces.length && aces.length === plain.length && trumps.length ? lowest(trumps) : null
   const acesWait = 'the ace waits: an opponent may trump it'
+  // A low card in a suit the partner signalled reaches the partner's top card.
+  const toSignal = plain.filter((c) => read.signals.some((g) => g.s === c.s))
+  const signalLead = toSignal.length ? lowest(toSignal) : null
+  const signalWhy = `low card to the partner's signal in ${signalLead?.s}, opponents hold no trump`
   // Protect a live sweep: lead the surest winner first. Trump is always
   // allowed, so a side ace is sure only once no opponent may hold trump.
   if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
     if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
     if (aces.length && !oppMayTrump) return because(why, 'sweep: safe ace, opponents hold no trump', aces[0])
+    if (signalLead && !oppMayTrump) return because(why, `sweep: ${signalWhy}`, signalLead)
     if (aces.length && !tactics) return because(why, 'sweep: beginner cashes an ace', aces[0])
     if (beforeAces) return because(why, `sweep: only aces left: low trump, ${acesWait}`, beforeAces)
     // From here on any ace waits.
@@ -398,6 +422,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   if (!oppMayTrump) {
     const unfollowed = plain.filter((c) => read.suitSeen[c.s] > 0 && outside(c.s) === 0)
     if (unfollowed.length) return because(why, 'suit nobody else holds', highest(unfollowed))
+    if (signalLead) return because(why, signalWhy, signalLead)
   }
   // Otherwise a low card from a suit nobody is known void in. An ace goes
   // only when nothing else may.
@@ -424,7 +449,14 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   return because(why, 'low lead', lowest(leads))
 }
 
-function followCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicOptions, why: string[]): Card {
+function followCard(
+  s: Observation,
+  legal: Card[],
+  read: HandRead,
+  opt: HeuristicOptions,
+  tactics: boolean,
+  why: string[],
+): Card {
   const seat = s.seat
   const trump = s.trump!
   const myTeam = teamOf(seat)
@@ -479,6 +511,19 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
         return because(why, 'overtake partner, opponent to play: follow suit, cheap points', cheap.length ? highestPoint(cheap) : lowest(follow))
       }
       return because(why, 'forced to overtake partner', cheapest(legal, trump))
+    }
+    // A discard tells the partner: I hold the highest card left in this suit.
+    // Throw a low card under that top card, never one of a suit without it.
+    if (tactics && !legal.some((c) => c.s === s.trick[0].card.s)) {
+      const has = (suit: Suit, r: Rank) => s.hand.some((c) => c.s === suit && c.r === r)
+      const holdsTop = (suit: Suit) => has(suit, 'A') || (read.acesGone.has(suit) && has(suit, 'K'))
+      const signal = safe.filter(
+        (c) => c.s !== trump && holdsTop(c.s) && s.hand.filter((h) => h.s === c.s).length >= 2,
+      )
+      if (signal.length) {
+        const low = cheapest(signal, trump)
+        return because(why, `signal: low card under the top of ${low.s}`, low)
+      }
     }
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
     if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
@@ -555,7 +600,7 @@ function choosePlayCard(
   if (legal.length === 1) return because(why, 'only legal card', legal[0])
   const read = readHand(s, profile.memory)
   const smart =
-    s.trick.length === 0 ? leadCard(s, legal, read, profile.tactics, why) : followCard(s, legal, read, opt, why)
+    s.trick.length === 0 ? leadCard(s, legal, read, profile.tactics, why) : followCard(s, legal, read, opt, profile.tactics, why)
   // Imperfect on purpose: sometimes fall back to a lazy card.
   if (rand() < profile.skill) return smart
   // The smart rule did not decide, so its reason stays out of the trace.
