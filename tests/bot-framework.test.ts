@@ -3,7 +3,7 @@ import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
-import { botAction, BOT_LEVELS, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import { botAction, BOT_LEVELS, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
@@ -129,6 +129,9 @@ describe('createAlgorithm', () => {
     expect(() => createAlgorithm({ id: 'heuristic:hard', contsetMin: 3 })).toThrow(/unknown heuristic option/)
     expect(() => createAlgorithm({ id: 'heuristic:hard', toString: 3 } as never)).toThrow(/unknown heuristic option/)
     expect(() => createAlgorithm({ id: 'heuristic:hard', clearBid: '3' })).toThrow(/clearBid must be a number/)
+    for (const skill of [-0.1, 1.5, '1', NaN, null])
+      expect(() => createAlgorithm({ id: 'heuristic:hard', skill })).toThrow(/skill must be a number in \[0, 1\]/)
+    for (const skill of [0, 1]) expect(createAlgorithm({ id: 'heuristic:hard', skill }).id).toBe('heuristic:hard')
     expect(() => createAlgorithm({ name: 'heuristic:hard' } as never)).toThrow(/needs a string id/)
     expect(() => registerAlgorithm('heuristic', () => first)).toThrow(/already registered/)
   })
@@ -139,7 +142,7 @@ describe('createAlgorithm', () => {
     const s = playingState({ phase: 'BIDDING_R1', hands, turned: { first: C('H', 'Q'), second: C('S', '9'), secondUp: false }, trump: null, bidder: null })
     const obs = observe(s, 1)
     expect(createAlgorithm('heuristic:normal').decide(obs, () => 0.99)).toEqual({ type: 'bid', seat: 1, play: false })
-    expect(createAlgorithm({ id: 'heuristic:normal', bidThreshold1: 5 }).decide(obs, () => 0.99)).toEqual({
+    expect(createAlgorithm({ id: 'heuristic:normal', bidThreshold1: 4 }).decide(obs, () => 0.99)).toEqual({
       type: 'bid',
       seat: 1,
       play: true,
@@ -223,6 +226,43 @@ describe('heuristic trace', () => {
     const tl = trace()
     expect(createBot('heuristic:hard').decide(s, 2, () => 0.99, tl)).toEqual({ type: 'play', seat: 2, card: C('S', '9') })
     expect(tl.notes).toEqual(['lazy dump'])
+
+    // With skill 1 the same draw keeps the smart card.
+    const ts = trace()
+    expect(createBot({ id: 'heuristic:hard', skill: 1 }).decide(s, 2, () => 0.99, ts)).toEqual({ type: 'play', seat: 2, card: C('H', '9') })
+    expect(ts.notes).toEqual(['contest: 4 points in the trick'])
+
+    // The hard level's anchor draws first: the draw that dumps for heuristic:hard keeps its smart card.
+    const draws = [0.99]
+    const rand = seededRandom(1)
+    const th = trace()
+    createBot(LEVEL_CONFIGS.hard).decide(s, 2, () => draws.shift() ?? rand(), th)
+    expect(th.notes.find((n) => n.startsWith('anchor '))).toMatch(/^anchor heuristic:hard 9H: /)
+  })
+
+  it('the skill option changes only the lazy dumps and draws the same random numbers', () => {
+    const plain = createBot('heuristic:hard')
+    const skilled = createBot({ id: 'heuristic:hard', skill: 1 })
+    const profile = createBot({ id: 'heuristic:hard', skill: BOT_PROFILES.hard.skill })
+    let dumps = 0
+    for (const seed of [1, 2, 3])
+      decisions(seed, 'hard').forEach(({ s, seat }, i) => {
+        const run = (bot: typeof plain) => {
+          const rand = seededRandom(seed * 1000 + i)
+          const tr = trace()
+          const a = bot.decide(s, seat, rand, tr)
+          return { a, notes: tr.notes, next: rand() }
+        }
+        const p = run(plain)
+        const k = run(skilled)
+        // Without skill it plays as the level's profile.
+        expect(run(profile)).toEqual(p)
+        expect(k.next, 'same random stream').toBe(p.next)
+        expect(k.notes).not.toContain('lazy dump')
+        if (p.notes.includes('lazy dump')) dumps++
+        else expect(k).toEqual(p)
+      })
+    expect(dumps).toBeGreaterThan(0)
   })
 })
 

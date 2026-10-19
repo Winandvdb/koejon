@@ -73,6 +73,31 @@ const kjnKey = (code: string) => `koejon-kjn-${code}`
 const finalKey = (code: string) => `koejon-kjn-final-${code}`
 /** Every per-room key: destroyRoom removes them all. */
 const ROOM_KEYS = [engineKey, seqKey, quotesKey, seatsKey, kjnKey, finalKey]
+/** The seats with a hand doc to delete. */
+const humanUids = (seats: (SeatInfo | null)[]) => seats.flatMap((s) => (s && !s.bot ? [s.uid] : []))
+
+function removeRoomKeys(storage: KeyValueStore, code: string): void {
+  try {
+    for (const key of ROOM_KEYS) storage.removeItem(key(code))
+  } catch {
+    // Storage blocked: nothing to clean up.
+  }
+}
+
+/** Delete a room that no host runs now (a paused match ended from Home):
+ *  what `destroyRoom` does, without loading the engine or starting the bots. */
+export async function discardRoom(code: string, link: HostLink, storage: KeyValueStore = safeStorage): Promise<void> {
+  try {
+    const room = await link.load()
+    // The saved seats, as `load` prefers them: the P2P room doc can trail them.
+    const saved = readJson<(SeatInfo | null)[] | null>(storage, seatsKey(code), null)
+    if (room) await link.destroy(humanUids(saved ?? room.seats))
+    removeRoomKeys(storage, code)
+  } finally {
+    link.dispose()
+  }
+}
+
 /** Finished records not uploaded yet, from any room: a new match never drops one. */
 const PENDING_KEY = 'koejon-games-pending'
 const PENDING_MAX = 20
@@ -162,8 +187,9 @@ export class HostGame {
   static async attach(code: string, uid: string, link: HostLink, opts?: HostOptions): Promise<HostGame> {
     const h = new HostGame(code, uid, link, opts)
     await h.lockTab()
+    let docInLobby: boolean
     try {
-      await h.load()
+      docInLobby = await h.load()
     } catch (e) {
       // The link stays usable: the caller may retry attach on it.
       h.releaseLock?.()
@@ -180,8 +206,9 @@ export class HostGame {
       h.armHurry()
     }, h.heartbeatMs)
     // After a reload: one publish gives this tab and every guest the current
-    // state (own hand included) without waiting for the next move.
-    if (h.state.phase !== 'LOBBY') h.enqueue(() => h.commit())
+    // state (own hand included) without waiting for the next move. A room doc
+    // that missed the move back to the lobby gets it too, or nobody can join.
+    if (h.state.phase !== 'LOBBY' || !docInLobby) h.enqueue(() => h.commit())
     h.scheduleBots()
     // Records left by an offline match or an earlier session.
     globalThis.addEventListener?.('online', h.onOnline)
@@ -189,7 +216,8 @@ export class HostGame {
     return h
   }
 
-  private async load(): Promise<void> {
+  /** True when the room doc shows the lobby. */
+  private async load(): Promise<boolean> {
     const room = await this.link.load()
     if (!room) throw new Error('room-not-found')
     if (room.hostUid !== this.uid) throw new Error('not-host')
@@ -216,6 +244,7 @@ export class HostGame {
     // After a reload the last event shows again: its linger starts anew.
     this.lastEvent = JSON.stringify(this.state.log[this.state.log.length - 1] ?? null)
     this.eventAt = Date.now()
+    return inLobby
   }
 
   /** One host tab per room: a second one would answer the same guests. */
@@ -363,6 +392,22 @@ export class HostGame {
     })
   }
 
+  /** After GAME_OVER: back to the lobby with the same seats, so the table can
+   *  reseat or take new players without a new room. The record is already out. */
+  toLobby(): void {
+    this.enqueue(async () => {
+      if (this.state.phase !== 'GAME_OVER') return
+      // A player who left keeps a claim on their seat only while a match runs:
+      // in the lobby a leave clears the seat.
+      this.seats = this.seats.map((s) => (s?.bot && !s.uid.startsWith(BOT_UID_PREFIX) ? null : s))
+      this.state = createMatch((this.rand() * 2 ** 31) | 0)
+      this.quoteBook.reset()
+      this.quoteLog = []
+      this.finalKjn = null
+      await this.commit()
+    })
+  }
+
   /** A fresh match, started into the dealer draw. Each team's drawing player
    *  is a human seat when the team has one. */
   private async beginMatch(seed: number): Promise<void> {
@@ -406,12 +451,8 @@ export class HostGame {
   async destroyRoom(): Promise<void> {
     this.dispose()
     await this.busy.catch(() => {})
-    await this.link.destroy(this.seats.flatMap((s) => (s && !s.bot ? [s.uid] : [])))
-    try {
-      for (const key of ROOM_KEYS) this.storage.removeItem(key(this.code))
-    } catch {
-      // Storage blocked: nothing to clean up.
-    }
+    await this.link.destroy(humanUids(this.seats))
+    removeRoomKeys(this.storage, this.code)
   }
 
   // ---- intents from players ----

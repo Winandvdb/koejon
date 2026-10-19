@@ -2,6 +2,7 @@ import {
   RANK_ORDER,
   RANK_POINTS,
   RANKS,
+  sameCard,
   SUITS,
   teamOf,
   trickPoints,
@@ -9,7 +10,7 @@ import {
 } from '../engine'
 import type { Action, Card, Rank, Suit, TrickCard } from '../engine'
 import type { Algorithm, BotTrace } from './algorithm'
-import { troefkeHand, troefkeLead } from './conventions'
+import { troefkeHand, troefkeIgnored, troefkeLead } from './conventions'
 import type { Observation } from './observation'
 
 const partnerOf = (seat: number) => (seat + 2) % 4
@@ -53,6 +54,14 @@ export interface HeuristicOptions {
   clearBid: number
   /** A bid with one trump (K or A) asks at least this rating. */
   loneTrumpMin: number
+  /**
+   * The dealer keeps the turned trump card: a turned ace raises the bid
+   * threshold by `turnedOpponent` when the dealer is an opponent, and lowers
+   * it by `turnedPartner` when the dealer is the partner. A lower card counts
+   * by its points, so a 9 or 10 counts nothing.
+   */
+  turnedOpponent: number
+  turnedPartner: number
   /** Knijpen: minimum rating for a squeeze bid, and odds of going anyway. */
   knijpMin: number
   knijpChance: number
@@ -72,15 +81,19 @@ export interface HeuristicOptions {
 
 /**
  * Tuned with `npm run tune` (SPSA, seed 1, 150 generations, 400 seeds; #93),
- * except the values marked as set by hand (`fixed` in `PARAMS`).
+ * except the values marked as set by hand (`fixed` in `PARAMS`). The bid
+ * thresholds and the turned card constants were tuned again together, with
+ * the other constants fixed (#170).
  */
 export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
   bidThreshold1: 14.5,
-  bidThreshold2: 11.5,
-  bidThreshold4: 10.5,
+  bidThreshold2: 11,
+  bidThreshold4: 11.5,
   betterSuit: 5.5,
   clearBid: 7.5,
   loneTrumpMin: 14.5,
+  turnedOpponent: 2.5,
+  turnedPartner: 3,
   knijpMin: 1.5,
   knijpChance: 0.79,
   troefkeChance: 0.73,
@@ -110,6 +123,9 @@ const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
     betterSuit: 2,
     clearBid: 3,
     loneTrumpMin: 13,
+    // Beginners do not read the dealer's turned card.
+    turnedOpponent: 0,
+    turnedPartner: 0,
     knijpMin: 4,
     knijpChance: 0.85,
     troefkeChance: 0.9,
@@ -207,6 +223,10 @@ interface HandRead {
   suitSeen: Record<Suit, number>
   /** Suits whose ace fell this hand ('full' memory only, else empty). */
   acesGone: Set<Suit>
+  /** The trump void in `voids` that only an ignored troefke shows, not a card; null if none. */
+  troefkeVoid: string | null
+  /** Cards the partner signalled to hold, still unplayed and not ours (no memory: empty). */
+  signals: Card[]
 }
 
 /**
@@ -215,12 +235,14 @@ interface HandRead {
  * how many of a suit fell, and which aces), so the bot still misjudges some
  * tricks — like a human does.
  */
-function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
+export function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
   const trump = s.trump!
   const trumpsGone = new Set<Rank>()
   const voids = new Set<string>()
   const suitSeen: Record<Suit, number> = { S: 0, H: 0, D: 0, C: 0 }
   const acesGone = new Set<Suit>()
+  let troefkeVoid: string | null = null
+  const signals: Card[] = []
   if (memory !== 'none') {
     const playedThisHand = s.tricksPlayed * 4 + s.trick.length
     const played: TrickCard[] = []
@@ -263,6 +285,32 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
         }
       }
     }
+    const ignored = troefkeIgnored(s)
+    if (ignored !== null && ignored !== s.seat && !voids.has(`${ignored}:${trump}`)) {
+      troefkeVoid = `${ignored}:${trump}`
+      voids.add(troefkeVoid)
+    }
+    // The partner's discard of a side suit on a trick we won and played before
+    // it, a card without points or an ace, says: I hold the highest card
+    // left in that suit, the ace or after it the king. A card with points is a
+    // vet, not a signal. It ends once that card fell, the partner showed out of
+    // the suit, or when the card is ours.
+    const partner = partnerOf(s.seat)
+    const fellBy = (n: number, c: Card) => played.slice(0, n).some((tc) => sameCard(tc.card, c))
+    for (let t = 0; t + 4 <= played.length - s.trick.length; t += 4) {
+      const w = played.slice(t, t + 4)
+      const i = w.findIndex((tc) => tc.seat === partner)
+      const me = w.findIndex((tc) => tc.seat === s.seat)
+      if (i < me || w[trickWinnerIndex(w, trump)].seat !== s.seat) continue
+      const suit = w[i].card.s
+      if (suit === trump || suit === w[0].card.s) continue
+      if (RANK_POINTS[w[i].card.r] > 0 && w[i].card.r !== 'A') continue
+      const r = (['A', 'K'] as const).find((r) => !fellBy(t + i + 1, { s: suit, r }))
+      if (!r) continue
+      const top = { s: suit, r }
+      if (!fellBy(played.length, top) && !voids.has(`${partner}:${suit}`) && !s.hand.some((c) => sameCard(c, top)))
+        signals.push(top)
+    }
   }
   const mine = s.hand.filter((c) => c.s === trump)
   let bossOut: Rank | null = null
@@ -273,7 +321,7 @@ function readHand(s: Observation, memory: BotProfile['memory']): HandRead {
       break
     }
   }
-  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone }
+  return { trumpsGone, trumpsOut: 6 - trumpsGone.size - mine.length, bossOut, voids, suitSeen, acesGone, troefkeVoid, signals }
 }
 
 /** Highest trump of `cards` that still tops everything left outside our hand. */
@@ -349,11 +397,16 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   const beforeAces =
     oppMayTrump && aces.length && aces.length === plain.length && trumps.length ? lowest(trumps) : null
   const acesWait = 'the ace waits: an opponent may trump it'
+  // A low card in a suit the partner signalled reaches the partner's top card.
+  const toSignal = plain.filter((c) => read.signals.some((g) => g.s === c.s))
+  const signalLead = toSignal.length ? lowest(toSignal) : null
+  const signalWhy = `low card to the partner's signal in ${signalLead?.s}, opponents hold no trump`
   // Protect a live sweep: lead the surest winner first. Trump is always
   // allowed, so a side ace is sure only once no opponent may hold trump.
   if (s.tricksPlayed > 0 && s.tricksWon[myTeam] === s.tricksPlayed) {
     if (boss && leadsBoss) return because(why, 'sweep: boss trump', boss)
     if (aces.length && !oppMayTrump) return because(why, 'sweep: safe ace, opponents hold no trump', aces[0])
+    if (signalLead && !oppMayTrump) return because(why, `sweep: ${signalWhy}`, signalLead)
     if (aces.length && !tactics) return because(why, 'sweep: beginner cashes an ace', aces[0])
     if (beforeAces) return because(why, `sweep: only aces left: low trump, ${acesWait}`, beforeAces)
     // From here on any ace waits.
@@ -386,9 +439,9 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
     (nextOut === undefined || RANK_ORDER[top.r] > RANK_ORDER[nextOut])
   )
     return because(why, 'low trump to draw the trump ace', lowest(trumps))
-  // A short defender with side aces pulls with a low trump, so the bidders'
-  // trumps fall before the aces go.
-  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length)
+  // A short defender with two side aces pulls with a low trump, so the bidders'
+  // trumps fall before the aces go. With one ace the pull gains nothing (#195).
+  if (shortDefender && oppMayTrump && lowTrumps.length && aces.length >= 2)
     return because(why, 'defender pull: low trump, keeps the boss', lowest(lowTrumps))
   // Trump is always allowed, also on a suit an opponent can follow: cash an
   // ace only once no opponent may hold trump.
@@ -398,6 +451,7 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   if (!oppMayTrump) {
     const unfollowed = plain.filter((c) => read.suitSeen[c.s] > 0 && outside(c.s) === 0)
     if (unfollowed.length) return because(why, 'suit nobody else holds', highest(unfollowed))
+    if (signalLead) return because(why, signalWhy, signalLead)
   }
   // Otherwise a low card from a suit nobody is known void in. An ace goes
   // only when nothing else may.
@@ -424,7 +478,14 @@ function leadCard(s: Observation, legal: Card[], read: HandRead, tactics: boolea
   return because(why, 'low lead', lowest(leads))
 }
 
-function followCard(s: Observation, legal: Card[], read: HandRead, opt: HeuristicOptions, why: string[]): Card {
+function followCard(
+  s: Observation,
+  legal: Card[],
+  read: HandRead,
+  opt: HeuristicOptions,
+  tactics: boolean,
+  why: string[],
+): Card {
   const seat = s.seat
   const trump = s.trump!
   const myTeam = teamOf(seat)
@@ -480,8 +541,19 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       }
       return because(why, 'forced to overtake partner', cheapest(legal, trump))
     }
+    // A discard without points tells the partner: I hold the highest card left
+    // in this suit. It replaces only a card without points, so the vet stays.
+    let signal: Card | null = null
+    if (tactics && !legal.some((c) => c.s === s.trick[0].card.s)) {
+      const has = (suit: Suit, r: Rank) => s.hand.some((c) => c.s === suit && c.r === r)
+      const holdsTop = (suit: Suit) => has(suit, 'A') || (read.acesGone.has(suit) && has(suit, 'K'))
+      const low = safe.filter((c) => c.s !== trump && RANK_POINTS[c.r] === 0 && holdsTop(c.s))
+      if (low.length) signal = lowest(low)
+    }
+    const quiet = (reason: string) =>
+      signal ? because(why, `signal: low card under the top of ${signal.s}`, signal) : because(why, reason, lowest(safe))
     const pts = safe.filter((c) => RANK_POINTS[c.r] > 0)
-    if (pts.length === 0) return because(why, 'partner wins: no points to feed', lowest(safe))
+    if (pts.length === 0) return quiet('partner wins: no points to feed')
     const partnerSafe =
       oppToAct.length === 0 ||
       (pc.s === trump &&
@@ -494,7 +566,8 @@ function followCard(s: Observation, legal: Card[], read: HandRead, opt: Heuristi
       return because(why, 'partner safe: feed points', highestPoint(nonAce.length ? nonAce : pts))
     }
     const cheap = pts.filter((c) => RANK_POINTS[c.r] <= opt.vetMaxRisk)
-    return because(why, 'partner not safe: feed cheap points', cheap.length ? highestPoint(cheap) : lowest(safe))
+    if (cheap.length) return because(why, 'partner not safe: feed cheap points', highestPoint(cheap))
+    return quiet('partner not safe: feed cheap points')
   }
 
   // Opponent winning: fight for rich tricks, duck the rest.
@@ -554,8 +627,15 @@ function choosePlayCard(
   const legal = s.legal.flatMap((a) => (a.type === 'play' ? [a.card] : []))
   if (legal.length === 1) return because(why, 'only legal card', legal[0])
   const read = readHand(s, profile.memory)
-  const smart =
-    s.trick.length === 0 ? leadCard(s, legal, read, profile.tactics, why) : followCard(s, legal, read, opt, why)
+  const pick = (r: HandRead, w: string[]) =>
+    s.trick.length === 0 ? leadCard(s, legal, r, profile.tactics, w) : followCard(s, legal, r, opt, profile.tactics, w)
+  const smart = pick(read, why)
+  if (read.troefkeVoid) {
+    const voids = new Set(read.voids)
+    voids.delete(read.troefkeVoid)
+    if (!sameCard(pick({ ...read, voids, troefkeVoid: null }, []), smart))
+      why.push('ignored troefke: the partner of the bidder has no trump')
+  }
   // Imperfect on purpose: sometimes fall back to a lazy card.
   if (rand() < profile.skill) return smart
   // The smart rule did not decide, so its reason stays out of the trace.
@@ -601,8 +681,12 @@ function decide(
       // A hand worth all remaining lines deserves a looser bid.
       const stakes = r1 ? s.multiplier : 2
       const decisive = s.lines[myTeam] <= stakes || (!r1 && oppLines <= 2)
+      const shown = r1 ? s.turned!.first : s.turned!.second!
+      const turned =
+        (s.dealer === partnerOf(seat) ? -opt.turnedPartner : opt.turnedOpponent) *
+        (RANK_POINTS[shown.r] / RANK_POINTS.A)
       const threshold =
-        stakes >= 4 ? opt.bidThreshold4 : stakes >= 2 ? opt.bidThreshold2 : opt.bidThreshold1
+        (stakes >= 4 ? opt.bidThreshold4 : stakes >= 2 ? opt.bidThreshold2 : opt.bidThreshold1) + turned
       // On the 1st card two low trumps are pulled at once: ask a K or A.
       const solid =
         !r1 || trumps.length !== 2 || trumps.some((c) => RANK_ORDER[c.r] >= RANK_ORDER['K'])
@@ -616,7 +700,8 @@ function decide(
           ((knijpen && (rating >= opt.knijpMin || rand() < opt.knijpChance)) ||
             (decisive && solid && rating >= threshold - 2)))
       why.push(
-        `bid: rating ${rating} vs threshold ${threshold}` +
+        `bid: rating ${rating} vs threshold ${Number(threshold.toFixed(2))}` +
+          (turned ? `, turned ${shown.r} ${turned > 0 ? '+' : ''}${Number(turned.toFixed(2))}` : '') +
           (waits ? ', waits for the 2nd card' : '') +
           (!solid ? ', two low trumps' : '') +
           (knijpen ? ', knijpen' : '') +
@@ -667,17 +752,23 @@ function decide(
  * The hand-written bot as algorithm `heuristic:<level>`. It decides every real
  * decision (bids, troefke, the dealer's choice, card play) from the
  * observation only. Options override the level's values (`LEVEL_OPTIONS`
- * over `HEURISTIC_DEFAULTS`).
+ * over `HEURISTIC_DEFAULTS`). Option `skill` overrides the profile's skill:
+ * an anchor with `skill: 1` never plays a lazy dump (#183). It is not a
+ * tuning constant, so it stays out of `HEURISTIC_DEFAULTS`.
  */
 export function createHeuristic(variant: string | undefined, options: Record<string, unknown>): Algorithm {
   if (!BOT_LEVELS.includes(variant as BotLevel)) throw new Error(`unknown heuristic level: ${variant}`)
-  for (const [k, v] of Object.entries(options)) {
+  const { skill, ...constants } = options
+  if (skill !== undefined && (typeof skill !== 'number' || !(skill >= 0 && skill <= 1)))
+    throw new Error('heuristic option skill must be a number in [0, 1]')
+  for (const [k, v] of Object.entries(constants)) {
     if (!Object.hasOwn(HEURISTIC_DEFAULTS, k)) throw new Error(`unknown heuristic option: ${k}`)
     // A string from a JSON file would turn the sums into string concatenation.
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`heuristic option ${k} must be a number`)
   }
-  const profile = BOT_PROFILES[variant as BotLevel]
-  const opt: HeuristicOptions = { ...levelOptions(variant as BotLevel), ...options }
+  const level = BOT_PROFILES[variant as BotLevel]
+  const profile: BotProfile = skill === undefined ? level : { ...level, skill }
+  const opt: HeuristicOptions = { ...levelOptions(variant as BotLevel), ...constants }
   return {
     id: `heuristic:${variant}`,
     supports: () => true,

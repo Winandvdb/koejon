@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toPublic } from '../src/engine'
+import { apply, createMatch, legalActions, toPublic } from '../src/engine'
 import type { BoomkeMark, HandResult, TrickCard } from '../src/engine'
 import { activeQuotes, hurryQuote, QUOTES, QUOTE_SEAT_GAP_MS, QuoteBook } from '../src/lib/quotes'
 import { C, playingState } from './helpers'
@@ -538,6 +538,266 @@ describe('table quotes', () => {
     const q = hurryQuote(0)
     expect(q!.seat).not.toBe(0)
     expect(QUOTES.hurry).toContain(q!.text)
+    expect(QUOTES.hurry).toContain('Wast weer audit opt werk vandaag?')
+  })
+
+  it('every candidate has a line, whatever the hash', () => {
+    const states = Array.from({ length: 64 }, (_, i) => i + 1).flatMap((hand) => [
+      // gouwe and trickLost
+      playingState({ handNumber: hand, tricksPlayed: 3, tricksWon: [1, 2], leader: 0, lastTrick: TRICK }),
+      // madeIt
+      playingState({ handNumber: hand, tricksPlayed: 6, tricksWon: [3, 3], leader: 0, points: [22, 18], lastTrick: TRICK }),
+      // revenge
+      playingState({
+        phase: 'SCORED',
+        handNumber: hand,
+        tricksPlayed: 6,
+        lastResult: RESULT(),
+        marks: [CROSSED(0, hand - 1)],
+      }),
+    ])
+    const keys = new Set<string>()
+    for (const s of states) {
+      for (const q of activeQuotes(toPublic(s))) {
+        expect(typeof q.text, q.key).toBe('string')
+        keys.add(q.key[0])
+      }
+    }
+    for (const k of ['g', 'x', 'u', 'r']) expect(keys).toContain(k)
+  })
+
+  it('someone wishes luck at the first drawn card, not always the same seat', () => {
+    const drawn = (seed: number) => {
+      const s = apply(createMatch(seed), { type: 'start', seat: 0 })
+      expect(activeQuotes(toPublic(s)).some((q) => q.key === 'b')).toBe(false)
+      return activeQuotes(toPublic(apply(s, legalActions(s, 0)[0]))).find((q) => q.key === 'b')!
+    }
+    const qs = Array.from({ length: 12 }, (_, i) => drawn(i + 1))
+    for (const q of qs) expect(q.text).toBe(QUOTES.start[0])
+    expect(new Set(qs.map((q) => q.seat)).size).toBeGreaterThan(1)
+  })
+
+  it('a round of passes draws a comment at the cut', () => {
+    const passed = toPublic(
+      playingState({
+        phase: 'CUTTING',
+        multiplier: 2,
+        log: [{ t: 'dealer-pass', seat: 0 }, { t: 'all-pass', n: 2 }],
+      }),
+    )
+    const ap = activeQuotes(passed).find((q) => q.key === 'ap1')
+    expect(ap).toBeDefined()
+    expect(QUOTES.allPass).toContain(ap!.text)
+
+    // A normal cut after a scored hand: no comment on passes.
+    const normal = toPublic(playingState({ phase: 'CUTTING', log: [{ t: 'score', team: 1, n: 1 }] }))
+    expect(activeQuotes(normal).some((q) => q.key.startsWith('ap'))).toBe(false)
+  })
+
+  it('small talk comes on some cuts, the same for the same state', () => {
+    const cuts = Array.from({ length: 40 }, (_, i) =>
+      toPublic(playingState({ phase: 'CUTTING', handNumber: i })),
+    )
+    const chat = cuts.map((pub) => activeQuotes(pub).find((q) => q.key.startsWith('c')))
+    const hits = chat.filter((q) => q !== undefined)
+    expect(hits.length).toBeGreaterThan(0)
+    expect(hits.length).toBeLessThan(cuts.length / 2)
+    for (const q of hits) expect(QUOTES.chat).toContain(q!.text)
+    // Not a fixed rhythm of every 4th cut.
+    const at = chat.flatMap((q, i) => (q ? [i] : []))
+    expect(new Set(at.map((i) => i % 4)).size).toBeGreaterThan(1)
+    // Deterministic: every client and every reload sees the same line.
+    expect(cuts.map((pub) => activeQuotes(pub).find((q) => q.key.startsWith('c')))).toEqual(chat)
+  })
+
+  it('a scored hand draws a boomke comment, but not at the end of the match', () => {
+    const scored = toPublic(
+      playingState({ phase: 'SCORED', tricksPlayed: 6, lastResult: RESULT() }),
+    )
+    const y = activeQuotes(scored).find((q) => q.key === 'y1')
+    expect(y).toBeDefined()
+    expect(QUOTES.scored).toContain(y!.text)
+
+    const over = toPublic(
+      playingState({ phase: 'GAME_OVER', tricksPlayed: 6, lastResult: RESULT(), winner: 1 }),
+    )
+    expect(activeQuotes(over).some((q) => q.key.startsWith('y'))).toBe(false)
+  })
+
+  it('a kapot or a narrow win draws praise', () => {
+    const kapot = activeQuotes(
+      toPublic(
+        playingState({
+          phase: 'SCORED',
+          tricksPlayed: 6,
+          lastResult: RESULT({ kapot: true, points: [0, 40], erased: 2 }),
+        }),
+      ),
+    )
+    const won = kapot.find((q) => q.key === 'iw1')
+    const lost = kapot.find((q) => q.key === 'il1')
+    expect(won!.seat % 2).toBe(1)
+    expect(won!.text).toBe(QUOTES.kapotWon[0])
+    expect(lost!.seat % 2).toBe(0)
+    expect(lost!.text).toBe(QUOTES.kapotLost[0])
+
+    const narrow = activeQuotes(
+      toPublic(
+        playingState({ phase: 'SCORED', tricksPlayed: 6, lastResult: RESULT({ points: [18, 22] }) }),
+      ),
+    )
+    const iz = narrow.find((q) => q.key === 'iz1')
+    expect(iz!.seat % 2).toBe(1)
+    expect(iz!.text).toBe(QUOTES.narrowWin[0])
+
+    // A plain win (10-30): no praise.
+    const plain = activeQuotes(
+      toPublic(playingState({ phase: 'SCORED', tricksPlayed: 6, lastResult: RESULT() })),
+    )
+    expect(plain.some((q) => q.key.startsWith('i'))).toBe(false)
+  })
+
+  it('the partner of a trumped side ace asks if they count trump', () => {
+    const pub = toPublic(
+      playingState({
+        trump: 'H',
+        tricksPlayed: 1,
+        tricksWon: [0, 1],
+        leader: 1,
+        lastTrick: [
+          { seat: 0, card: C('S', 'A') },
+          { seat: 1, card: C('H', '9') },
+          { seat: 2, card: C('S', '9') },
+          { seat: 3, card: C('S', '10') },
+        ],
+      }),
+    )
+    const t = activeQuotes(pub).find((q) => q.key === 't1-1')
+    expect(t).toBeDefined()
+    expect(t!.seat).toBe(2)
+    expect(QUOTES.countTrump).toContain(t!.text)
+
+    // The ace held: nothing to say.
+    expect(
+      activeQuotes(toPublic(playingState({ leader: 0, tricksPlayed: 1, lastTrick: TRICK }))).some((q) =>
+        q.key.startsWith('t'),
+      ),
+    ).toBe(false)
+  })
+
+  it('a player who trumps the partner’s trick hears about it', () => {
+    const bought = (last: TrickCard, winner: number) =>
+      activeQuotes(
+        toPublic(
+          playingState({
+            trump: 'H',
+            tricksPlayed: 1,
+            tricksWon: [winner % 2 === 0 ? 1 : 0, winner % 2],
+            leader: winner,
+            lastTrick: [{ seat: 0, card: C('S', '9') }, { seat: 1, card: C('S', 'K') }, { seat: 2, card: C('S', '10') }, last],
+          }),
+        ),
+      )
+    const j = bought({ seat: 3, card: C('H', '9') }, 3).find((q) => q.key === 'j1-1')
+    expect(j).toBeDefined()
+    expect(j!.seat).toBe(1)
+    expect(QUOTES.ownTrick).toContain(j!.text)
+
+    // Seat 3 follows suit and seat 1 keeps the trick: no complaint.
+    expect(bought({ seat: 3, card: C('S', 'Q') }, 1).some((q) => q.key.startsWith('j'))).toBe(false)
+
+    // A trump before the last card can keep the trick from the opponent after it.
+    const guarded = activeQuotes(
+      toPublic(
+        playingState({
+          trump: 'H',
+          tricksPlayed: 1,
+          tricksWon: [1, 0],
+          leader: 2,
+          lastTrick: [{ seat: 0, card: C('S', 'K') }, { seat: 1, card: C('S', '9') }, { seat: 2, card: C('H', '9') }, { seat: 3, card: C('S', '10') }],
+        }),
+      ),
+    )
+    expect(guarded.some((q) => q.key.startsWith('j'))).toBe(false)
+  })
+
+  it('"We gaan proberen" comes back only when it fired and the bidders won', () => {
+    const line = (hand: number) =>
+      activeQuotes(toPublic(playingState({ handNumber: hand, bidder: 1 })))[0].text
+    const hands = Array.from({ length: 20 }, (_, i) => i + 1)
+    const tried = hands.find((h) => line(h) === QUOTES.play[1])!
+    const other = hands.find((h) => line(h) !== QUOTES.play[1])!
+    const scored = (hand: number, winnerTeam: number) =>
+      toPublic(
+        playingState({
+          phase: 'SCORED',
+          handNumber: hand,
+          tricksPlayed: 6,
+          lastResult: RESULT({ playingTeam: 1, winnerTeam, points: winnerTeam ? [10, 30] : [30, 10] }),
+        }),
+      )
+
+    const z = activeQuotes(scored(tried, 1), new Set([`p${tried}`])).find((q) => q.key.startsWith('z'))
+    expect(z).toBeDefined()
+    expect(z!.seat % 2).toBe(0)
+    expect(z!.text).toBe(QUOTES.tried[0])
+    // Only a candidate, never fired: quiet.
+    expect(activeQuotes(scored(tried, 1)).some((q) => q.key.startsWith('z'))).toBe(false)
+    // Fired, but the bidders lost.
+    expect(activeQuotes(scored(tried, 0), new Set([`p${tried}`])).some((q) => q.key.startsWith('z'))).toBe(false)
+    // The bidder said the other line.
+    expect(activeQuotes(scored(other, 1), new Set([`p${other}`])).some((q) => q.key.startsWith('z'))).toBe(false)
+  })
+
+  it('a loser who played two aces says the cards were good', () => {
+    const pub = toPublic(
+      playingState({
+        phase: 'SCORED',
+        tricksPlayed: 6,
+        lastResult: RESULT(),
+        log: [
+          { t: 'card', seat: 2, card: C('H', 'A') },
+          { t: 'card', seat: 2, card: C('S', 'A') },
+          { t: 'deal', seat: 0 },
+          { t: 'card', seat: 0, card: C('H', 'A') },
+          { t: 'card', seat: 1, card: C('D', 'A') },
+          { t: 'card', seat: 0, card: C('S', 'A') },
+          { t: 'card', seat: 2, card: C('C', 'A') },
+        ],
+      }),
+    )
+    const g = activeQuotes(pub).filter((q) => q.key.startsWith('3'))
+    // Seat 2's earlier aces were in another hand.
+    expect(g).toEqual([{ key: '31', seat: 0, text: QUOTES.goodCards[0] }])
+  })
+
+  it('at the end of the match the losers congratulate and the winners stay sporting', () => {
+    const over = toPublic(
+      playingState({
+        phase: 'GAME_OVER',
+        tricksPlayed: 6,
+        tricksWon: [2, 4],
+        leader: 1,
+        lastTrick: TRICK,
+        lastResult: RESULT(),
+        winner: 1,
+      }),
+    )
+    const qs = activeQuotes(over)
+    // The last hand's lines would share the one roll at the end: left out.
+    expect(qs.map((q) => q.key).sort()).toEqual(['ml', 'mw'])
+    const congrats = qs.find((q) => q.key === 'ml')
+    expect(congrats!.seat % 2).toBe(0)
+    expect(QUOTES.matchLost).toContain(congrats!.text)
+    const sporting = qs.find((q) => q.key === 'mw')
+    expect(sporting!.seat % 2).toBe(1)
+    expect(QUOTES.matchWon).toContain(sporting!.text)
+
+    // A scored hand mid-match: no match-end lines.
+    const mid = toPublic(
+      playingState({ phase: 'SCORED', tricksPlayed: 6, leader: 1, lastTrick: TRICK, lastResult: RESULT() }),
+    )
+    expect(activeQuotes(mid).some((q) => q.key.startsWith('m'))).toBe(false)
   })
 })
 
@@ -617,6 +877,15 @@ describe('quote book', () => {
       }),
     )
     expect(book.pick(void0, 5_000, () => 0)!.seat).toBe(0)
+  })
+
+  it('remembers the keys that fired, also across a reload', () => {
+    const book = new QuoteBook()
+    book.pick(called, 1_000, () => 0)
+    expect(book.toJSON().fired).toEqual(['p1'])
+    expect(QuoteBook.fromJSON(book.toJSON()).toJSON().fired).toEqual(['p1'])
+    // A save from an older build has no `fired`.
+    expect(QuoteBook.fromJSON({ said: [], spokeAt: [0, 0, 0, 0], n: 3 }).toJSON().fired).toEqual([])
   })
 
   it('hurry lines may repeat — they never enter the once-per-match list', () => {
