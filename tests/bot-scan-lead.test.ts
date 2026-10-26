@@ -88,6 +88,26 @@ describe('bot seed scans: leads', () => {
     expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
   }, 120_000)
 
+  // Hard only: the other levels do not remember which side aces fell.
+  it('hard: no sweep lead of a king while its ace is out and another card may go (#194)', () => {
+    let found = 0
+    scanMatches('hard', SEEDS, (s, a, notes) => {
+      if (a.type !== 'play' || notes.includes('lazy dump') || s.trick.length > 0 || s.tricksPlayed === 0) return
+      if (!notes.at(-1)?.startsWith('sweep: highest card')) return
+      const trump = s.trump!
+      const hand = s.hands[a.seat]
+      const played = playedThisHand(s).map((p) => p.card)
+      const aceOut = (suit: string) => !played.concat(hand).some((c) => c.s === suit && c.r === 'A')
+      const feedsAce = (c: Card) => c.s !== trump && c.r === 'K' && aceOut(c.s)
+      const legal = legalActions(s, a.seat).flatMap((x) => (x.type === 'play' ? [x.card] : []))
+      // Another plain card that is no ace and feeds no ace may go instead.
+      if (!legal.some(feedsAce) || !legal.some((c) => c.s !== trump && c.r !== 'A' && !feedsAce(c))) return
+      found++
+      expect(feedsAce(a.card), `lead ${a.card.r}${a.card.s} (${notes.join('; ')}), seed scan at hard`).toBe(false)
+    })
+    expect(found).toBeGreaterThanOrEqual(MIN_FOUND)
+  }, 120_000)
+
   it('easy: a lead with a side ace in hand cashes an ace, unless it pulls with the boss trump', () => {
     let found = 0
     scanMatches('easy', SEEDS, (s, a, notes) => {
