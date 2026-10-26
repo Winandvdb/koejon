@@ -21,29 +21,28 @@
   } = $props()
 
   const linger = $derived(lingerTrick(pub))
-  const cards = $derived(shownTrick(pub))
+  const cards = $derived(shownTrick(pub) ?? [])
   /** Lingered cards fly out towards the seat that won the trick. */
   const exit = $derived(DIR[relSeat(pub.leader, my)])
 </script>
 
 <div class="trick-area">
   <!-- One keyed list across trick → linger: cards already on the felt
-       stay put, only the newly played card flies in. The first card of a
-       hand creates the {#if} block, so its intro must be global. -->
-  {#if cards}
-    {#each cards as tc, i ((linger ? pub.tricksPlayed - 1 : pub.tricksPlayed) + '-' + tc.seat)}
-      {@const from = DIR[relSeat(tc.seat, my)]}
-      <div
-        class="trick-card tp{relSeat(tc.seat, my)}"
-        class:done={linger !== null}
-        class:won={linger !== null && tc.seat === pub.leader}
-        style="rotate: {TILT[(i + cards[0].seat) % 4]}deg; z-index: {i + 1}"
-        in:fly|global={{ x: from.x * 0.8, y: from.y * 0.8, duration: animate ? 240 : 0 }}
-        out:fly={{ x: exit.x * 1.6, y: exit.y * 1.6, duration: animate ? 420 : 0 }}
-      >
-        <CardView card={tc.card} />
-      </div>
-    {/each}
-  {/if}
+       stay put, only the newly played card flies in. No {#if} around it:
+       local transitions do not run when their parent block is created or
+       destroyed, so the first card of a hand would not fly in. -->
+  {#each cards as tc, i ((linger ? pub.tricksPlayed - 1 : pub.tricksPlayed) + '-' + tc.seat)}
+    {@const from = DIR[relSeat(tc.seat, my)]}
+    <div
+      class="trick-card tp{relSeat(tc.seat, my)}"
+      class:done={linger !== null}
+      class:won={linger !== null && tc.seat === pub.leader}
+      style="rotate: {TILT[(i + cards[0].seat) % 4]}deg; z-index: {i + 1}"
+      in:fly={{ x: from.x * 0.8, y: from.y * 0.8, duration: animate ? 240 : 0 }}
+      out:fly={{ x: exit.x * 1.6, y: exit.y * 1.6, duration: animate ? 420 : 0 }}
+    >
+      <CardView card={tc.card} />
+    </div>
+  {/each}
   {@render children?.()}
 </div>
