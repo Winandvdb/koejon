@@ -10,8 +10,9 @@ dealer's choice of the `hard` level come from `heuristic:hard` (`LEVEL_CONFIGS` 
 Short answer: **yes, with a small abstract game.** The bidding game is short (at most 7
 decisions per deal, 2 actions each). The cost is not the CFR loop, it is the value of the
 leaves: each leaf is a played hand. We cache those values per bucket. Estimates on the
-development Mac (Apple M2 Pro, 10 cores): about 2 hours in total, of which about 1.7 hours is
-card play in the cache and about 17 minutes is the MCCFR loop. The table is about 0.3 MB.
+development Mac (Apple M2 Pro, 10 cores): about 3.4 hours in total (range 2.5 to 3.8), of which
+about 2.9 hours (range 2.2 to 3.2) is card play in the cache and about 27 minutes (range 18 to
+37) is the MCCFR loop. The table is about 0.36 MB.
 
 No code is written yet. This write-up is what the user must agree first (acceptance criterion
 1 of the issue). Section 7 lists the questions.
@@ -27,8 +28,8 @@ The engine knows these actions for bidding. The bots see the same list as `obs.l
 |---|---|---|---|---|
 | Bid, 1st turned card | `BIDDING_R1` | `(dealer + 1 + bidIndex) % 4`, `bidIndex` 0..2 | `{bid, play: true}`, `{bid, play: false}` | `legalActions` `engine.ts:195-199`, `pendingSeats` `engine.ts:123-125` |
 | Bid, 2nd turned card | `BIDDING_R2` | same, only if the 2nd card has another suit than the 1st | the same two bids | `engine.ts:195-199`, transition at `engine.ts:483-490` |
-| Dealer's choice | `DEALER_CHOICE` | the dealer | `{choose, suit}` per suit in `choiceSuits` (one suit if both turned cards share it, else two), and `{choose, suit: null}` (pass) | `engine.ts:200-205`, `choiceSuits` `engine.ts:165-169` |
-| Troefke ask | `PLAYING`, before the first lead | the bidder, while its partner has to lead | `{troefke}` next to the `{ack}`; asking is optional | `engine.ts:211-223`, applied at `engine.ts:523-528` |
+| Dealer's choice | `DEALER_CHOICE` | the dealer | `{choose, suit}` per suit in `choiceSuits` (one suit if both turned cards share it, else two), and `{choose, suit: null}` (pass) | `engine.ts:201-206`, `choiceSuits` `engine.ts:165-169` |
+| Troefke ask | `PLAYING`, before the first lead | the bidder, while its partner has to lead. The first leader is always position 0 (`engine.ts:309`), so only a bid by position 2 can ask | `{troefke}` next to the `{ack}`; asking is optional | `engine.ts:211-223`, applied at `engine.ts:523-528` |
 
 How the actions work:
 
@@ -90,16 +91,24 @@ cannot hold the turned card (it is in the dealer's hand).
 | Side aces `a` | 4 (0 to 3) | Aces win tricks without trump and are 4 points each. |
 | Side kings `k` | 3 (0, 1, 2 or more) | A king is 3 points, but a bare king is easy prey. |
 | Short side suits `s` | 3 (suits with 0 or 1 card: 0, 1, 2 or more) | A short suit lets the hand buy (trump) early. |
-| Alternative suit `alt`, round 1 only | 3 (weak, fair, strong: the best other suit by length and top card) | Passing in round 1 buys the second card. A hand that fits another suit waits (`heuristic.ts:694-697`). Without this feature the table cannot learn to wait. |
+| Alternative suit `alt`, round 1 only | 3 (weak, fair, strong). Take the best of the 3 other suits, each with `n` cards and "top" = it holds the A or K of that suit. Strong: `n` >= 4, or `n` = 3 with top. Fair: `n` = 3, or `n` = 2 with top. Weak: all else | Passing in round 1 buys the second card. A hand that fits another suit waits (`heuristic.ts:694-697`). Without this feature the table cannot learn to wait. |
 
-Not all combinations exist (for example `h` cannot exceed `t`). A count over 3 million random
-deals found, *measured*:
+Not all combinations exist (for example `h` cannot exceed `t`), and not every cell exists with
+every `T` (with the trump ace turned, `h` is at most 2). The cells come from an **exact
+enumeration**, *measured*: the 6 ranks of the turned card in one suit (the suits are
+symmetric) times all C(23,6) = 100,947 hands from the other 23 cards = 605,682 hands (the same
+as C(23,6) x 24 turned cards, divided by 4 suits). It runs in a few seconds.
 
-| Cell set | Cells |
+| Set | Count |
 |---|---|
-| Round 2 (no `alt`) | 260 |
-| Round 1 (with `alt`) | 462 |
-| Cells that hold 99% of the deals, round 1 / round 2 | 331 / 175 |
+| Cells, round 2 (no `alt`) | 260 |
+| Cells, round 1 (with `alt`) | 462 |
+| Feasible (cell, `T`) pairs, round 2 / round 1 | 910 / 1,617 (of 1,040 / 1,848) |
+| Pairs that hold 99% of the deals, round 2 / round 1 | 634 / 1,206 |
+
+The training script must repeat this enumeration (not sample), and take the cell list, the
+feasible pairs and the deal weights from it. A test checks the counts above and that the
+weights add up to 1. `cfr` reads the lists from the table header.
 
 ### 2.3 Turned card feature
 
@@ -108,7 +117,9 @@ deals found, *measured*:
 | Turned card `T` (the card of the round) | 4 (A, K, Q or J, 10 or 9) | The card sits in the dealer's hand. A high trump there is a threat when the dealer is an opponent (`p` 0 or 2) and a gain when the dealer is the partner (`p` 1). The heuristic does the same: `turned` in `heuristic.ts:685-688`. |
 
 The dealer's decision has the two turned cards `T1` and `T2` (4 buckets each) and a flag
-"same suit" (2). The dealer knows nothing else.
+"same suit" (2). The dealer knows nothing else. Of the 32 ordered pairs, 2 cannot occur with
+the same suit (two aces, two kings), so there are 16 pairs of different suits and 14 pairs of
+the same suit: 30 slots.
 
 ### 2.4 Game-state features
 
@@ -116,7 +127,7 @@ The dealer's decision has the two turned cards `T1` and `T2` (4 buckets each) an
 |---|---|---|
 | Round | 2 | The stake: level 1 is the multiplier, level 2 is always 2 lines. |
 | Position `p` | 3 | Who still has to speak, and if the turned card is the partner's. |
-| Multiplier `m` (round 1 only) | 2 (1, 2) | The level-1 stake. Round 2 and the dealer's choice always have stake 2. |
+| Multiplier `m` | 2 (1, 2) | The level-1 stake in round 1. It is also in the round 2 and dealer sets: an all pass can follow from every node, and option B values it as `W(m=2) - W(m)` (3.4). Under option A (Q1) the all pass is 0, `m` matters in round 1 only, and the round 2 and dealer sets halve. |
 | Own lines | 4 (1, 2, 3 to 4, 5 or more) | A win that crosses all lines ends the match; a loss gives the opponent a koei and its lines. Far from the end the exact count stops mattering. `heuristic.ts:681-683` uses the same thresholds (1 and 2). |
 | Opponent lines | 4 (1, 2, 3 to 4, 5 or more) | A loss that crosses all opponent lines ends the match (knijpen is pointless at 1 line, `heuristic.ts:679`). |
 
@@ -124,19 +135,24 @@ The dealer's decision has the two turned cards `T1` and `T2` (4 buckets each) an
 
 | Decision | Formula | Information sets |
 |---|---|---|
-| Round 1 bid | 3 positions x 2 multipliers x 462 cells x 4 `T` x 16 line pairs | 177,408 |
-| Round 2 bid | 3 positions x 260 cells x 4 `T` x 16 line pairs | 49,920 |
-| Dealer's choice | (4 x 4 `T1` `T2`) x 2 same-suit flag x 16 line pairs | 512 |
-| Troefke ask (if taken, Q3) | at most 260 cells x 2 levels, no lines | 520 |
-| **Total** | | **228,360** |
+| Round 1 bid | 3 positions x 2 multipliers x 1,617 (cell, `T`) pairs x 16 line pairs | 155,232 |
+| Round 2 bid | 3 positions x 2 multipliers x 910 pairs x 16 line pairs | 87,360 |
+| Dealer's choice | 30 (`T1`, `T2`, same suit) x 2 multipliers x 16 line pairs | 960 |
+| Troefke ask (if taken, Q3) | at most 170 cells x 2 levels, no lines. Only after a bid by position 2 | 340 |
+| **Total** | | **243,892** (243,552 without the troefke) |
 
-Expected: about 160,000 of these hold 99% of the visits (round 1: 331 x 4 x 16 x 6 = 126,912;
-round 2: 175 x 4 x 16 x 3 = 33,600; plus the small sets). The rest are rare. They get a
-back-off (section 5).
+The 170 cells are the cells with 3 or more trumps, or 2 trumps with an honour of the Q, K or A.
+`troefkeHand` needs a K or A for 2 trumps, so this is an upper bound.
+
+Expected: about 177,600 of these hold 99% of the visits (round 1: 1,206 x 16 x 6 = 115,776;
+round 2: 634 x 16 x 6 = 60,864; dealer: 960). The rest are rare. They get a back-off
+(section 5).
+
+Under option A the round 2 and dealer sets halve: 155,232 + 43,680 + 480 = 199,392.
 
 Why not more? Each factor of 2 doubles the sets, and the visits needed per set stay the same
 (section 4). Why not less? The 16 line pairs are the part to cut first if training is sparse:
-3 x 3 would give 9 pairs and 128,000 sets. Q6 asks.
+3 x 3 would give 9 pairs and about 137,000 sets. Q6 asks.
 
 ## 3. The value of a leaf (AC3)
 
@@ -157,9 +173,14 @@ The value of a contract depends on the whole deal, but not on the line counts (l
 as the cap at 0 and in the match outcome). So the cache stores the **distribution of the hand
 result**, not a number of lines:
 
-- The key is `(cell without alt, T, dealer is partner or opponent)`: 260 x 4 x 2 = 2,080 keys
-  for bids, and 48 keys for the dealer (16 `T1` `T2` pairs x 2 suit choices, plus 16 same-suit
-  pairs x 1).
+- The key is `(cell without alt, T, bidder position p)`: 910 feasible pairs x 3 positions =
+  2,730 keys for bids, and 46 keys for the dealer (16 `T1` `T2` pairs of different suits x 2
+  suit choices, plus 14 pairs of the same suit x 1).
+- The position is in the key because the three positions play different hands. Position 0
+  leads its own contract. `startPlaying` makes position 0 the first leader whoever bids
+  (`engine.ts:309`), so for position 2 the partner leads and a troefke is possible
+  (`engine.ts:216-217`), and for position 1 (the dealer's partner) an opponent leads. The
+  dealer's contract is led by an opponent too.
 - The round is not in the key: a level-1 and a level-2 contract on the same suit play the same
   hand. The stake is applied when the leaf is valued.
 - A sample draws a random deal that fits the key (the other 18 cards are dealt at random),
@@ -179,7 +200,7 @@ Reason: it plays the cards like the `hard` level at a third of the time. The mea
 |---|---|
 | `heuristic:hard` | 2.1 |
 | `pimc`, 1 world | 44 to 48 |
-| `pimc`, 3 worlds | 102 to 124 |
+| `pimc`, 3 worlds | 102 to 124 (middle 113) |
 | `pimc`, `HARD_PIMC` (10 worlds, anchor) | 309 to 315 |
 | `pimc`, 20 worlds (default) | 630 to 877 |
 | `solve` on one fully known world, the first lead of 6 cards | 15 |
@@ -192,10 +213,10 @@ other rows.
 
 | Keys | Samples each | Playouts | Standard error of the win chance |
 |---|---|---|---|
-| 1,400 bid keys that hold 99% of the deals (175 cells x 4 x 2) | 300 | 420,000 | 0.029 |
-| 680 rare bid keys | 50 | 34,000 | 0.07 |
-| 48 dealer keys | 300 | 14,400 | 0.029 |
-| **Total** | | **468,400** | |
+| 1,902 bid keys that hold 99% of the deals (634 pairs x 3 positions) | 300 | 570,600 | 0.029 |
+| 828 rare bid keys (276 pairs x 3) | 50 | 41,400 | 0.07 |
+| 46 dealer keys | 300 | 13,800 | 0.029 |
+| **Total** | | **625,800** | |
 
 The break-even win chance of a level-1 bid is 2/3 (`breakEven(1)` in `value.ts`), of a level-2
 bid 3/5. A standard error of 0.03 is enough to tell a clear bid from a clear pass, not a bid
@@ -233,6 +254,7 @@ Two options. Q1 asks.
 | Bias | Direction | Remedy |
 |---|---|---|
 | **Earlier passes are ignored.** The other three hands are random. In fact a player who passed holds less of the suit. | Position 1, 2 and round 2 value a bid wrong. The sign is not clear: weak defenders help the bidder, a weak partner hurts. | Store each playout with the cells of all four hands. Re-weigh the samples by the pass chances of the current table (importance weights, no new playouts). Do it after the first bench (Q4). |
+| **Round 2: the dealer also holds the first turned card `T1`.** `turned.first` is the dealer's 6th card (`engine.ts:284`), and it has the other suit in round 2. The cache sample deals the dealer's cards at random, with no `T1` bucket. | A strong `T1` (a side ace) gives the defenders a trick that the cache does not see. Round 2 bids look slightly too good, more so when the dealer is an opponent. | Named, not fixed in version 1. The stored playouts (Q4) hold the dealer's hand, so the samples can be re-weighed by `T1` later. |
 | **Fixed card play, self-play.** All four seats play `pimc` 3 worlds. A real opponent plays another way. | The bid values follow the strength of this algorithm. A weaker defender makes bids look better. | Bench against the `hard` level (section 6). |
 | **`pimc` itself.** Strategy fusion (it assumes it learns the hidden cards later). | Small (#87). | None. |
 | **Abstraction.** Cells average over hands that differ in play value. | The table cannot tell two hands in a cell apart. | Check the bid rates per cell (section 6). |
@@ -266,16 +288,29 @@ lines), and the same table plays every seat.
 
 ### 4.2 The iterations
 
-The unit is the visit of an information set. One iteration visits about 5 of them (a traverser
-walks up to 7 nodes, but most paths end at the first bid).
+The unit is the regret update of an information set. Bids are rare (7.9% per node in round 1
+and 19.7% in round 2 for `heuristic:hard`, `search-bots.md` section 4; we assume the table
+bids about as often), so a pass chain is long. The nodes on it per traversal:
+
+| Nodes | Arithmetic | Expected nodes |
+|---|---|---|
+| Round 1 | 1 + 0.921 + 0.921^2 | 2.77 |
+| Round 2 (reached when 3 pass, 0.921^3 = 0.781, and the 2nd card has another suit, 18/23) | 0.781 x 18/23 = 0.611 reaches it; 0.611 x (1 + 0.803 + 0.803^2) | 1.50 |
+| Dealer (after round 2, or after a same-suit 2nd card) | 0.611 x 0.803^3 + 0.781 x 5/23 | 0.49 |
+| **Total** | | **4.76** |
+
+One iteration makes 4 traversals (each position once). The traverser of a node updates its
+regrets there, so one iteration makes about 4.76 regret updates in total. It also adds to the
+strategy average at about 4 x 4.76 = 19 nodes. We count the regret updates, which is the
+cautious count.
 
 | Quantity | Value |
 |---|---|
-| Information sets with 99% of the visits | about 160,000 (section 2.5) |
+| Information sets with 99% of the visits | about 177,600 (section 2.5) |
 | Visits wanted per set (mean) | about 3,000 |
-| Visits needed | 160,000 x 3,000 = 4.8 x 10^8 |
-| Visits per iteration | about 5 |
-| **Iterations** | 4.8 x 10^8 / 5 = about **10^8** |
+| Visits needed | 177,600 x 3,000 = 5.3 x 10^8 |
+| Regret updates per iteration | about 4.76 |
+| **Iterations** | 5.3 x 10^8 / 4.76 = about **1.1 x 10^8** |
 
 Check on convergence: every 10^7 iterations write the largest change of the strategy over the
 sets with 1,000 visits or more. Stop when it falls under 0.01.
@@ -284,24 +319,31 @@ sets with 1,000 visits or more. Stop when it falls under 0.01.
 
 | Step | Arithmetic | Time on one thread | On the Mac |
 |---|---|---|---|
-| Card-play cache, bids and dealer | 468,400 playouts x 0.102 s (`pimc` 3 worlds, *measured*) = 47,800 s = 13.3 h | 13.3 h | 6,000 s = **1.7 h** with 8 of 10 cores (*estimate* for 6 fast and 4 slow cores) |
-| Card-play cache, troefke (only if Q3 says yes) | 130 cells x 2 branches x 200 samples = 52,000 playouts x 0.102 s = 5,300 s | 1.5 h | 11 min |
+| Card-play cache, bids and dealer | 625,800 playouts x 0.113 s (`pimc` 3 worlds, middle of the two *measured* runs) = 70,700 s = 19.6 h | 19.6 h | 70,700 s / 6.8 effective cores = 10,400 s = **2.9 h**. Range: 2.2 h (0.102 s, 8 cores) to 3.2 h (0.124 s, 6.8 cores) |
+| Card-play cache, troefke (only if Q3 says yes) | 170 cells x 2 branches x 200 samples = 68,000 playouts x 0.113 s = 7,700 s | 2.1 h | 19 min |
 | `W` table (3.5, option B) | 1,000 matches x 12 hands x 2.1 ms | 25 s | 25 s |
-| MCCFR loop | 10^8 iterations x 10 microseconds = 1,000 s | 17 min | 17 min (one thread, deterministic) |
-| **Total** | | | **about 2 h** (2.2 h with troefke) |
+| MCCFR loop | 1.1 x 10^8 iterations x 10 to 20 microseconds = 1,100 to 2,200 s | 18 to 37 min | 18 to 37 min (one thread, deterministic) |
+| **Total** | | | **about 3.4 h** (range 2.5 to 3.8 h; plus 19 min with the troefke) |
 
-The 10 microseconds per iteration is an *estimate*. Its main parts are *measured*: drawing a
-deal and computing one cell of one hand takes 0.97 microsecond (1 million deals, one thread).
-One iteration draws a deal and computes about 8 cells (4 hands, 1 or 2 suits), then makes about
-4 walks of a few nodes. With `HARD_PIMC` for the card play (309 ms) the cache costs 3 times
-more: about 5 h on the Mac.
+The 6.8 effective cores is an *estimate*: the M2 Pro has 6 fast and 4 slow cores, and a hot
+machine slows down. The first run of the measurement was slower than the second (124 against
+102 ms), so the machine is not steady.
+
+The 10 to 20 microseconds per iteration is an *estimate*, not measured. One part is
+*measured*: drawing a deal and computing one cell of one hand takes 0.97 microsecond (1
+million deals, one thread). One iteration draws a deal, computes about 8 cells (4 hands, 1 or 2
+suits) and walks about 19 nodes (4 traversals x 4.76), each with a table lookup, a leaf value
+from the 5 frequencies and a regret update. The training PR must measure it first with
+10^6 iterations, and rescale this table. With `HARD_PIMC` for the card play (309 ms) the cache
+costs 2.7 times more: 625,800 x 0.31 s / 6.8 = about 7.9 h on the Mac. Halving the samples per
+key halves the cache time.
 
 Determinism: the cache samples have a seed per `(key, sample number)`, so the order of the
 workers does not matter. The MCCFR loop is one thread with one seeded RNG. A fixed seed gives
 the same table.
 
 The cache is the expensive part and does not change when the MCCFR settings change. So it is
-saved as a file and the loop can run again in 17 minutes.
+saved as a file and the loop can run again in 18 to 37 minutes.
 
 ## 5. The table and the `cfr` algorithm (AC5)
 
@@ -309,24 +351,27 @@ saved as a file and the loop can run again in 17 minutes.
 
 | File | Content | Size (*estimate*) | Shipped |
 |---|---|---|---|
-| `src/bots/data/bid-strategy.json` | the strategy table | about 0.31 MB | yes, by dynamic import at the first use of `cfr` |
-| `scripts/data/bid-values.json` | the cache of section 3 (2,128 keys x 5 frequencies) | about 0.1 MB | no, only for the training script |
+| `src/bots/data/bid-strategy.json` | the strategy table | about 0.36 MB | yes, by dynamic import (5.2) |
+| `scripts/data/bid-values.json` | the cache of section 3 (2,776 keys x 5 frequencies) | about 0.1 MB | no, only for the training script |
 | `scripts/train-bidding.mjs` | cache, `W` table, MCCFR (`npm run train:bidding`) | | no |
 
 The strategy table is a JSON object:
 
 - A header with `version`, the training `seed`, the `iterations`, the bucket borders, the list
-  of the 462 cells (their text ids, in order) and the card-play algorithm of the cache.
-- Per context (round 1 by position and multiplier, round 2 by position, dealer, troefke) one
-  string of base64. It holds one byte per information set: the chance to go, times 255. The
-  dealer has two bytes per set: the chance of the first suit and of the second. The rest is
-  the pass.
+  of the 462 cells (their text ids, in order), the lists of the 1,617 and 910 feasible (cell,
+  `T`) pairs, and the card-play algorithm of the cache.
+- Per context (round 1 by position and multiplier, round 2 by position and multiplier, dealer
+  by multiplier, troefke) one string of base64. It holds one byte per information set: the
+  chance to go, times 255. The dealer has two bytes per set: the chance of the first suit and
+  of the second. The rest is the pass.
 
-Size: 228,360 sets x 1 byte = 228 KB, base64 about 304 KB. As a plain number array the same
-table is about 0.8 MB. Gzip should bring the base64 under 150 KB (*estimate*).
+Size: 155,232 + 87,360 + 960 x 2 + 340 = 244,852 bytes, base64 about 326 KB, plus a header of
+about 35 KB (the cell and pair lists): about 0.36 MB. As a plain number array the same table is
+about 0.85 MB. Gzip should bring the base64 under 150 KB (*estimate*).
 
-The table is dense (a slot per set of the feasible cells, not per combination of all
-features): 462 feasible cells against 5,184 combinations of the features.
+The table is dense over the feasible pairs (a slot per feasible (cell, `T`) pair, not per
+combination of all features): 1,617 pairs against 1,848 (462 x 4) and against 5,184 x 4
+combinations of the features.
 
 ### 5.2 How `cfr` looks it up
 
@@ -347,9 +392,20 @@ only from the seeded `rand`.
 - Back-off for a set with fewer than 50 visits: the table stores the strategy of the same
   cell, `T` and context with the most visited line pair. The table is total, so the lookup
   never misses.
-- Lazy load: the JSON is a dynamic `import()`, like Firebase, so that the start bundle does not
-  grow by 0.3 MB (see the rules for `firebase.ts` in `AGENTS.md`). The host loads it when a
-  bot with `cfr` is built.
+- Lazy load and the preload point. `Algorithm.decide` is synchronous, and `LEVEL_BOTS` builds
+  its bots at module load (`bot.ts:115-117`), so the factory cannot await a table. The design:
+  `cfr.ts` exports `loadBidTable()`, an async function that does the dynamic `import()` of the
+  JSON into a module variable (so the start bundle does not grow by 0.36 MB, like the rule for
+  `firebase.ts` in `AGENTS.md`). `createCfr` needs no table. `decide` throws "bid table not
+  loaded" when the variable is empty: no silent fallback. Who awaits `loadBidTable()` before
+  the first decision:
+  - The app: `App.svelte`, before it creates the `HostGame` (next to its other dynamic
+    imports). `host.ts` itself stays free of it.
+  - Bench, probe and `bot:trace`: `loadDecider` in `scripts/bot-spec.mjs` (used by
+    `bench-worker.mjs` and `bot-probe.mjs`) awaits it after `ssrLoadModule` when the checkout
+    exports it. A side with a git ref that has no `cfr` is not affected. `tune-worker.mjs` is
+    to check in the training PR.
+  - Tests: `await loadBidTable()` in `beforeAll`.
 
 ## 6. How to evaluate (AC6)
 
@@ -388,7 +444,7 @@ Add the results and the choices to `docs/bots/` when the algorithm exists (the r
 | Risk | What it does | What we do |
 |---|---|---|
 | **The abstraction is too coarse.** Two hands in one cell differ in play value. | The bids lose a few points to the heuristic, which sees the exact hand. | Bench 1. If it fails, split the cell that holds the most losses (e.g. side queens, the ace-less side suits), or add the heuristic `rateHand` score as a feature. |
-| **The abstraction is too fine.** 160,000 sets are visited too rarely. | Noisy strategy in the rarer cells. | Back-off to the most visited line pair. Cut the line pairs to 3 x 3. |
+| **The abstraction is too fine.** 177,600 sets are visited too rarely. | Noisy strategy in the rarer cells. | Back-off to the most visited line pair. Cut the line pairs to 3 x 3. |
 | **The valuation is biased** (3.6). | The table is optimal for the wrong game. | The importance weights of Q4. Bench 5 for the card-play algorithm. |
 | **Opponents in training are the table itself.** | A real player (a human or the heuristic) bids differently. A balanced strategy is not the best reply to them: it can win less than a tuned best reply. | Bench 4. If it fails, train with one seat set to the heuristic's bids for a second table. |
 | **A team game, not zero sum for two.** | No proof of a Nash value. The partners may not coordinate (a pass of the partner is not in the information set beyond the position). | The convergence check, and the bench as the only judge. |
@@ -401,19 +457,20 @@ Add the results and the choices to `docs/bots/` when the algorithm exists (the r
 | # | Question | Recommended |
 |---|---|---|
 | Q1 | Utility of a leaf: expected lines (A) or match chances `W` (B)? | **B.** One extra DP script. The line features need it to mean something. |
-| Q2 | Card play that values the cache: `pimc` 3 worlds (0.10 s), `HARD_PIMC` (0.31 s) or the solver on one world (15 ms, known to overbid, #86)? | **`pimc` 3 worlds.** 1.7 h on the Mac. Redo with `HARD_PIMC` only if bench 5 asks. |
-| Q3 | Does `cfr` take the troefke ask, or does `pimc` keep it (`pimc.ts:121`)? The issue lists it in scope. The ask is one seat with a fixed obeying partner, not a game, and `pimc` already samples the partner's lead. | **No in the first version.** `supports` covers `bid` and `choose`. The bot rule list is `cfr`, then `pimc`. Add the troefke cells later if a bench says so (+11 min of cache, +520 sets). |
-| Q4 | Weigh the samples by the earlier passes in version 1, or after the first bench? | **After the first bench.** Store each playout with the cells of all four hands (about 470,000 x 12 bytes = 5.6 MB, not committed), so the second pass costs no playouts. |
+| Q2 | Card play that values the cache: `pimc` 3 worlds (0.10 s), `HARD_PIMC` (0.31 s) or the solver on one world (15 ms, known to overbid, #86)? | **`pimc` 3 worlds.** About 2.9 h on the Mac (`HARD_PIMC`: 7.9 h). Redo with `HARD_PIMC` only if bench 5 asks. |
+| Q3 | Does `cfr` take the troefke ask, or does `pimc` keep it (`pimc.ts:121`)? The issue lists it in scope. The ask is one seat with a fixed obeying partner, not a game, and `pimc` already samples the partner's lead. | **No in the first version.** `supports` covers `bid` and `choose`. The bot rule list is `cfr`, then `pimc`. Add the troefke cells later if a bench says so (+19 min of cache, +340 sets, valid only after a bid by position 2). |
+| Q4 | Weigh the samples by the earlier passes in version 1, or after the first bench? | **After the first bench.** Store each playout with the cells of all four hands (about 626,000 x 12 bytes = 7.5 MB, not committed), so the second pass costs no playouts. The same records fix the `T1` bias of round 2 (3.6). |
 | Q5 | Value of the all pass: `W(m=2) - W(m)` (needs Q1 = B), or plain 0 as in the solver? | **`W` difference** under B, 0 under A. Test -0.1 and +0.1 lines as a check. |
-| Q6 | Size: 228,360 sets (4 x 4 line pairs, `alt` in round 1), or smaller (3 x 3 line pairs, 128,000 sets)? | **228,360.** Cut only if the convergence check fails at 10^8 iterations. |
-| Q7 | Table format: base64 bytes (0.31 MB) or a readable number array (0.8 MB)? Commit the cache (0.1 MB)? | **Base64 for the table, and commit both.** The header stays readable. A new table needs the 17 minute loop, not the 1.7 h cache. |
-| Q8 | Is a 2 hour run on the dev Mac acceptable, run by hand and never in CI? | **Yes.** Re-run only when the engine's scoring or the card-play algorithm changes. |
+| Q6 | Size: 243,892 sets (4 x 4 line pairs, `alt` in round 1, `m` everywhere), or smaller (3 x 3 line pairs, about 137,000 sets)? | **243,892.** Cut only if the convergence check fails at 1.1 x 10^8 iterations. |
+| Q7 | Table format: base64 bytes (0.36 MB) or a readable number array (0.85 MB)? Commit the cache (0.1 MB)? | **Base64 for the table, and commit both.** The header stays readable. A new table needs the 18 to 37 minute loop, not the 2.9 h cache. |
+| Q8 | Is a run of about 3.4 hours (2.5 to 3.8) on the dev Mac acceptable, run by hand and never in CI? | **Yes.** Re-run only when the engine's scoring or the card-play algorithm changes. |
 | Q9 | Accept that this issue alone may not make the `expert` level reach 60% against `hard`? | **Yes.** Count bench 2 as the measure of the bids, and judge the rest in #223. |
+| Q10 | Table load: `cfr` needs a preloaded table (`loadBidTable()`, 5.2), or a static JSON import (no preload, but +0.36 MB in the start bundle and the solo player downloads it)? | **Preload.** The start bundle stays small, and `decide` fails loudly if the call is missing. |
 
 ## 8. Plan after agreement
 
 1. `scripts/train-bidding.mjs`: the abstraction (cell function shared with `cfr` in
-   `src/bots/`), the cache, `W`, the MCCFR loop, a determinism test for a fixed seed.
+   `src/bots/`), the exact cell enumeration (with a test of the counts), the cache, `W`, the MCCFR loop, a determinism test for a fixed seed.
 2. `src/bots/cfr.ts` and its tests: `supports` is false for card play, only legal bids, the
    lookup and the back-off.
 3. Table and cache in the repo, bench 1 to 5, results in `docs/bots/`.
@@ -428,6 +485,7 @@ same Vite server that `scripts/bot-probe.mjs` uses.
   seats. The bot is a rule list: `pimc` with the named options, then `heuristic:hard`. One
   warm-up hand first. Two runs, on an Apple M2 Pro (10 cores), one thread.
 - `solve`: the same deals, `trickAcks` full, all six first leads at once.
-- Cells: 3 million random deals, the first card of a shuffled deck as the turned card, the
-  next six as the bidder's hand. Count the distinct cells of 2.2 and 2.3. The same script times
-  1 million deals at 0.97 microsecond per deal and cell.
+- Cells: exact enumeration of the 6 turned ranks of one suit times C(23,6) hands = 605,682
+  hands. Count the distinct cells and (cell, `T`) pairs of 2.2 and 2.3, and the pairs that hold
+  99% of the weight. A first version with 3 million random deals gave the same 260 and 462
+  cells. A second script times 1 million random deals at 0.97 microsecond per deal and cell.
