@@ -22,6 +22,11 @@ export interface AlphaMuValue {
   /** The vector of the front with the best sum: the value of the card. */
   best: number[]
   sum: number
+  /**
+   * False when `cut` stopped its search: it cannot beat the best card, and
+   * `sum` is only an upper bound (its pimc value, or its front when cut).
+   */
+  exact: boolean
 }
 
 /**
@@ -41,6 +46,14 @@ function prune(front: number[][], ws: number[]): number[][] {
       return !equal || j < i
     }),
   )
+}
+
+const sum = (v: number[]): number => v.reduce((a, b) => a + b, 0)
+
+/** `u` is at least `v` in every world of `ws`. */
+function covers(u: number[], v: number[], ws: number[]): boolean {
+  for (const w of ws) if (u[w] < v[w]) return false
+  return true
 }
 
 /**
@@ -72,9 +85,14 @@ function product(a: number[][], b: number[][], ws: number[], max: boolean): numb
  * After `M` own-team moves (the root card is the first) the solver values
  * each world. With `M = 1` this is PIMC.
  *
+ * With `cut`, a card stops as soon as its sum is surely below the best card's
+ * so far: first because its pimc sum (an upper bound) is, then while an
+ * opponent's cards make it worse. The cards are searched best pimc sum first.
+ * The best cards, and all cards they tie with, stay exact.
+ *
  * Pure: no randomness, and the worlds are only read.
  */
-export function alphamuValues(worlds: State[], seat: number, actions: Action[], M: number): AlphaMuValue[] {
+export function alphamuValues(worlds: State[], seat: number, actions: Action[], M: number, cut = false): AlphaMuValue[] {
   const n = worlds.length
   const team = teamOf(seat)
   const first = worlds[0]
@@ -122,7 +140,17 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
     return out
   }
 
-  function node(m: number, ws: number[]): number[][] {
+  /**
+   * The front of the position for the worlds `ws`, `m` own-team moves deep.
+   * `alpha`: the front the seat already has at the nearest node where it
+   * moves, over the same worlds. An opponent's combined front only gets
+   * worse with each card, so once it holds nothing better, the seat drops it anyway.
+   */
+  // With `cut`: the best root sum so far; set when a search stopped below it.
+  let bar = -Infinity
+  let stopped = false
+
+  function node(m: number, ws: number[], alpha: number[][] | null, root: boolean): number[][] {
     if (m === 0 || played === 6) return [leaf(ws)]
     const mover = turn
     const own = (mover & 1) === team
@@ -131,38 +159,65 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
     for (const mask of masks) union |= mask
     if (mover === seat) {
       // Its own hand is the same in every world: every card fits all of them.
-      const front: number[][] = []
-      for (let c = 0; c < 24; c++) if (union & (1 << c)) front.push(...withCard(c, ws, () => node(m - 1, ws)))
-      return prune(front, ws)
+      let front: number[][] = []
+      for (let c = 0; c < 24; c++) if (union & (1 << c)) front = prune([...front, ...withCard(c, ws, () => node(m - 1, ws, front, false))], ws)
+      return front
     }
     let acc: number[][] | null = null
     for (let c = 0; c < 24; c++) {
       if (!(union & (1 << c))) continue
       const sub = ws.filter((_, i) => masks[i] & (1 << c))
-      const front = withCard(c, sub, () => node(own ? m - 1 : m, sub))
-      if (sub.length < ws.length) {
+      const all = sub.length === ws.length
+      const front = withCard(c, sub, () => node(own ? m - 1 : m, sub, !own && all ? alpha : null, !own && all && root))
+      if (!all) {
         // A world without this card takes another one: neutral here.
         const skip = ws.filter((_, i) => !(masks[i] & (1 << c)))
         for (const v of front) for (const w of skip) v[w] = own ? -INF : INF
       }
       acc = acc ? product(acc, front, ws, own) : front
+      if (!own && alpha && acc.every((v) => alpha.some((u) => covers(u, v, ws)))) return acc
+      if (!own && root && Math.max(...acc.map(sum)) < bar) {
+        stopped = true
+        return acc
+      }
     }
     return acc!
   }
 
-  return actions.map((action) => {
-    if (action.type !== 'play' || action.seat !== first.turn) throw new Error(`alphamu: seat ${seat} cannot play ${action.type} now`)
-    const front = withCard(cardIndex(action.card), all, () => node(M - 1, all))
-    const sums = front.map((v) => v.reduce((a, b) => a + b, 0))
+  const value = (action: Action, front: number[][], exact: boolean): AlphaMuValue => {
+    const sums = front.map(sum)
     const i = sums.indexOf(Math.max(...sums))
-    return { action, front, best: front[i], sum: sums[i] }
+    return { action, front, best: front[i], sum: sums[i], exact }
+  }
+  const cards = actions.map((action) => {
+    if (action.type !== 'play' || action.seat !== first.turn) throw new Error(`alphamu: seat ${seat} cannot play ${action.type} now`)
+    return cardIndex(action.card)
   })
+  // M = 1 is pimc: the solver values each world right after the card.
+  const pimc = cards.map((c) => withCard(c, all, () => [leaf(all)]))
+  if (M === 1) return actions.map((a, i) => value(a, pimc[i], true))
+  const order = actions.map((_, i) => i)
+  if (cut) order.sort((i, j) => sum(pimc[j][0]) - sum(pimc[i][0]))
+  const out: AlphaMuValue[] = []
+  for (const i of order) {
+    if (cut && sum(pimc[i][0]) < bar) {
+      out[i] = value(actions[i], pimc[i], false)
+      continue
+    }
+    stopped = false
+    const front = withCard(cards[i], all, () => node(M - 1, all, null, cut))
+    out[i] = value(actions[i], front, !stopped)
+    if (!stopped) bar = Math.max(bar, out[i].sum)
+  }
+  return out
 }
 
 /**
  * Algorithm `alphamu`: αμ search (`alphamuValues`) over `worlds` sampled
  * worlds, as pimc samples them, up to `M` own-team moves deep; it plays the
- * card whose best vector has the best average, ties as pimc.
+ * card whose best vector has the best average, ties as pimc. A card that
+ * surely cannot win is cut short (`alphamuValues`): its trace note ends in
+ * `, cut` and its score is an upper bound.
  *
  * Card play only: `supports` is false for bids, the dealer's choice and the
  * troefke, so a bot with it needs rules after it for those (pimc, heuristic).
@@ -191,18 +246,18 @@ export function createAlphamu(variant: string | undefined, options: Record<strin
       }
       const weight = troefkeWeight(obs)
       const worlds = Array.from({ length: samples }, () => sampleWorld(obs, rand, weight))
-      const values = alphamuValues(worlds, obs.seat, candidates, M)
+      const values = alphamuValues(worlds, obs.seat, candidates, M, true)
       const order = values
         .map((_, i) => i)
         .sort((i, j) => values[j].sum - values[i].sum || cost(candidates[i], obs.trump) - cost(candidates[j], obs.trump) || i - j)
       if (trace) {
         for (const i of order) {
-          const { action, front, best, sum } = values[i]
+          const { action, front, best, sum, exact } = values[i]
           trace.candidates.push({
             action,
             score: sum / samples,
             visits: samples,
-            note: `front ${front.length}, min ${Math.min(...best)} max ${Math.max(...best)}`,
+            note: `front ${front.length}, min ${Math.min(...best)} max ${Math.max(...best)}${exact ? '' : ', cut'}`,
           })
         }
         trace.notes.push(`alphamu: M=${M}, ${samples} worlds, best average ${(values[order[0]].sum / samples).toFixed(2)}`)

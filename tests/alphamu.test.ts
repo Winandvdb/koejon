@@ -7,8 +7,10 @@ import type { AlgorithmSpec, BotTrace } from '../src/bots/algorithm'
 import { createBot } from '../src/bots/bot'
 import { observe } from '../src/bots/observation'
 import { solve } from '../src/bots/solver'
+import { sampleWorld } from '../src/bots/determinize'
+import { cost } from '../src/bots/pimc'
 import { seededRandom } from '../src/lib/seed'
-import { C, dealtState, playingState } from './helpers'
+import { C, dealtState, decisions, playingState } from './helpers'
 
 /** Seed's first deal (dealer 0): seat 3 bids on the 1st card, so seat 1, its partner, leads. */
 function troefkeState(seed: number): State {
@@ -114,30 +116,33 @@ describe('alphamu', () => {
 
   it('writes the mean of the best vector, the worlds and the front per card, the choice first', () => {
     const traces: { s: State; a: Action; trace: BotTrace }[] = []
-    play(3, 300, { id: 'alphamu', M: 2, worlds: 3 }, (s, a, trace) => {
+    play(3, 300, { id: 'alphamu', M: 3, worlds: 3 }, (s, a, trace) => {
       if (trace.algorithm === 'alphamu') traces.push({ s, a, trace })
     })
     expect(traces.length).toBeGreaterThan(20)
-    let wide = 0
+    let cut = 0
     for (const { s, a, trace } of traces) {
       expect(trace.candidates[0].action).toEqual(a)
       // After a troefke only the trumps are weighed.
       if (trace.notes.includes('troefke asked: lead a trump')) continue
-      expect(trace.notes.at(-1)).toMatch(/^alphamu: M=2, 3 worlds, best average -?\d+\.\d\d$/)
+      expect(trace.notes.at(-1)).toMatch(/^alphamu: M=3, 3 worlds, best average -?\d+\.\d\d$/)
       expect(trace.candidates.map((c) => c.action)).toEqual(expect.arrayContaining(legalActions(s, a.seat)))
       expect(trace.candidates).toHaveLength(legalActions(s, a.seat).length)
       expect(trace.candidates[0].score).toBe(Math.max(...trace.candidates.map((c) => c.score!)))
       for (const c of trace.candidates) {
         expect(c.visits).toBe(3)
-        const [, size, min, max] = /^front (\d+), min (-?\d+) max (-?\d+)$/.exec(c.note!)!.map(Number)
+        const [, size, min, max] = /^front (\d+), min (-?\d+) max (-?\d+)(?:, cut)?$/.exec(c.note!)!.map(Number)
         expect(size).toBeGreaterThanOrEqual(1)
-        if (size > 1) wide++
+        if (c.note!.endsWith(', cut')) {
+          // A card cut short surely loses: its score, an upper bound, is below the choice.
+          expect(c.score!).toBeLessThan(trace.candidates[0].score!)
+          cut++
+        }
         expect(min).toBeLessThanOrEqual(c.score!)
         expect(c.score!).toBeLessThanOrEqual(max)
       }
     }
-    // With M = 2 some cards keep more than one plan.
-    expect(wide).toBeGreaterThan(0)
+    expect(cut).toBeGreaterThan(0)
   }, 120_000)
 
   it('avoids strategy fusion: no lead that needs a guess pimc assumes it will make', () => {
@@ -171,4 +176,32 @@ describe('alphamu', () => {
       expect(values[1].front).toEqual([[1, -2], [-2, 1]])
     }
   })
+
+  it('cuts only cards that cannot win: the same choice and exact values for the rest', () => {
+    const choice = (values: { sum: number; action: Action }[], trump: State['trump']) =>
+      values.map((_, i) => i).sort((i, j) => values[j].sum - values[i].sum || cost(values[i].action, trump) - cost(values[j].action, trump) || i - j)[0]
+    let n = 0
+    let cut = 0
+    for (const seed of [1, 2]) {
+      for (const { s, seat } of decisions(seed, 'hard')) {
+        const obs = observe(s, seat)
+        if (obs.legal[0].type !== 'play' || s.tricksPlayed === 0) continue
+        const rand = seededRandom(n++)
+        const worlds = Array.from({ length: 4 }, () => sampleWorld(obs, rand))
+        const full = alphamuValues(worlds, seat, obs.legal, 3)
+        const fast = alphamuValues(worlds, seat, obs.legal, 3, true)
+        expect(choice(fast, s.trump)).toBe(choice(full, s.trump))
+        fast.forEach((v, i) => {
+          if (v.exact) expect(v.sum).toBe(full[i].sum)
+          else {
+            expect(v.sum).toBeGreaterThanOrEqual(full[i].sum)
+            expect(full[i].sum).toBeLessThan(full[choice(full, s.trump)].sum)
+            cut++
+          }
+        })
+      }
+    }
+    expect(n).toBeGreaterThan(100)
+    expect(cut).toBeGreaterThan(20)
+  }, 120_000)
 })
