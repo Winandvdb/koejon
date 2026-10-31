@@ -185,3 +185,19 @@ The `hard` level stays on `pimc` with `heuristic:hard` bids:
   engine state, not on the bitmask `Hand`.
 - `c` (0.7) and the MAST settings are not tuned.
 - No `ismcts` timing on a real phone.
+
+## Expert level baseline (#223)
+
+`expert` = pimc without anchor and margin, `heuristic:hard` for bids. Candidates: `samples` 20 / 40 / 80, `partnerSamples` 5.
+Opponent: the `hard` level bot (`pimc-hard` json: samples 10, partnerSamples 2, anchor `heuristic:hard` skill 1, margin 0.4).
+Timing: `--jobs 1 --matches 20` (40 games), measured under heavy load on the dev Mac (load average 10 to 18, other benches ran at the same time), so every time is inflated.
+
+| samples | win rate vs hard (20 matches, noise only) | bid/troefke avg ms | bid/troefke max ms | play avg ms | play max ms |
+|---|---|---|---|---|---|
+| 20 | 62.5% ± 15.0% | 62 | 4167 | 35 | 1992 |
+| 40 | 62.5% ± 15.0% | 150 | 10247 | 74 | 2457 |
+| 80 | 75.0% ± 13.4% | 254 | 15355 | 141 | 4123 |
+| hard (10/2, for reference) | | 14.5 | 1562 | 18.7 | 1026 |
+
+The 1000-match win rates are not in yet (see the task report); clean timings are to be re-measured on an idle Mac.
+The slowest decision is a bid/troefke decision (partner model with `partnerSamples`), above the 2.5 s limit even at 20 samples under load.

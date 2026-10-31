@@ -18,7 +18,7 @@ Before you say a change is done, run `npm test` and `npm run build`. Both must p
 | Command | What it does |
 |---|---|
 | `npm install` | Install dependencies (Node 20+). |
-| `npm test` | Unit tests, a 60-match simulation per `heuristic:<level>` and 3 matches of the `hard` level bot (vitest). |
+| `npm test` | Unit tests, a 60-match simulation per `heuristic:<level>` and 3 matches each of the `hard` and `expert` level bots (vitest). |
 | `npm run build` | `svelte-check` of `src/`, and of `tests/` + `scripts/` (`tsconfig.test.json`), then the production build. |
 | `npm run dev` | Dev server. Multiplayer needs `firebase emulators:start` in another shell; solo does not. |
 | `npm run e2e` | Optional: a full match against the Firestore emulator. |
@@ -40,7 +40,7 @@ Cards, seeded RNG, dealer draw, cut, deal, bidding, legal plays, tricks, scoring
 
 Algorithms get only an `Observation` (public state, own hand, legal actions), never the engine `State`. A bot only picks from `legalActions`.
 
-- `bot.ts` — a bot is data: `BotConfig = { name, rules: [{ when?: { phase }, use: spec }] }`; the first rule whose phase matches and whose algorithm `supports` the decision decides, and no match throws. `LEVEL_CONFIGS` gives the bot per level; `botAction` (used by the host) plays it. `hard` = `pimc` for cards and troefke + `heuristic:hard` for bids, with `HARD_PIMC` worlds per decision kept low so that a phone host decides within 2 s, and its cards anchored to `heuristic:hard` with `skill: 1` (no lazy dumps) and `HARD_ANCHOR_MARGIN` (more human-like play). **Rule:** tests of heuristic rules use `createBot('heuristic:<level>')`, not `botAction`.
+- `bot.ts` — a bot is data: `BotConfig = { name, rules: [{ when?: { phase }, use: spec }] }`; the first rule whose phase matches and whose algorithm `supports` the decision decides, and no match throws. `BotLevel = HeuristicLevel | 'expert'` and `BOT_LEVELS` (all four levels the UI offers). `LEVEL_CONFIGS` gives the bot per level; `botAction` (used by the host) plays it. `hard` = `pimc` for cards and troefke + `heuristic:hard` for bids, with `HARD_PIMC` worlds per decision kept low so that a phone host decides within 2 s, and its cards anchored to `heuristic:hard` with `skill: 1` (no lazy dumps) and `HARD_ANCHOR_MARGIN` (more human-like play). `expert` = the same rules with `EXPERT_PIMC` (more worlds, no anchor, no margin), within 2.5 s for the slowest decision on the dev Mac (#223). **Rule:** tests of heuristic rules use `createBot('heuristic:<level>')`, not `botAction`.
 - `algorithm.ts` — `Algorithm`, `BotTrace` and the registry (`createAlgorithm(spec)`). **Rule:** an algorithm builds the algorithms its options name through the registry, never by import.
 - `observation.ts` — `observe`, and `decisionPhase` (the one place that says which decisions are `bidding` or `play`).
 - `value.ts` — `handValue` (all search algorithms score hands with it) and `breakEven`.
@@ -50,7 +50,7 @@ Algorithms get only an `Observation` (public state, own hand, legal actions), ne
 - `mcts.ts` — algorithms `mcts` (determinized MCTS) and `ismcts` (SO-ISMCTS). They search every decision of the hand on `Hand`, a bitmask copy of the rules, because the engine's `apply` is far too slow for that. **Rule:** `tests/mcts.test.ts` compares `Hand` with the engine, so a rule change in `src/engine/` must show up in `Hand`.
 - `conventions.ts` — the troefke convention shared by all algorithms: `troefkeHand` (may ask), `troefkeLead` (obey), `troefkeIgnored` and `troefkeWeight` (read: the bidder's troefke hand, and no trump in a partner who ignored it). When to ask stays per algorithm. **Rule:** a convention, not an engine rule: the partner may ignore it.
 - `analysis.ts` — `rateDecision`: rates one decision of a replay, not a bot. Cards get the `pimc` value of every legal card; bids (go / pass, troefke, dealer's choice) get rollouts played by `heuristic:hard`. The loss maps to a class through `LOSS_LIMITS`. **Rule:** it reads only `observe(state, seat)`, and all randomness comes from its `seed`.
-- `heuristic.ts` — algorithm `heuristic:easy|normal|hard`. Constants in `HEURISTIC_DEFAULTS` (tuned with `npm run tune`, except the ones marked `fixed` in `PARAMS`); `LEVEL_OPTIONS` overrides them per level. Option `skill` overrides the level's share of smart cards; it is not a tuning constant, so it stays out of `HEURISTIC_DEFAULTS` and `PARAMS`.
+- `heuristic.ts` — algorithm `heuristic:easy|normal|hard` (`HeuristicLevel`, `HEURISTIC_LEVELS`; `heuristic:expert` does not exist). Constants in `HEURISTIC_DEFAULTS` (tuned with `npm run tune`, except the ones marked `fixed` in `PARAMS`); `LEVEL_OPTIONS` overrides them per level. Option `skill` overrides the level's share of smart cards; it is not a tuning constant, so it stays out of `HEURISTIC_DEFAULTS` and `PARAMS`.
 
 ### `src/lib/`
 

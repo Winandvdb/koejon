@@ -11,6 +11,7 @@ Agreed with the user. Each target holds with the ± margin of `npm run bench` (9
 |---|---|---|
 | `hard` level bot vs `heuristic:normal` | at least 75% | `npm run bench -- --level hard --b heuristic:normal --matches 200` |
 | `heuristic:normal` vs `heuristic:easy` | at least 75% | `npm run bench -- --a heuristic:normal --b heuristic:easy --matches 1000` |
+| `expert` level bot vs `hard` level bot (#223) | at least 60% | `npm run bench -- --a <expert json> --b <hard json> --matches 1000` (json files: `search-bots.md`, "Expert level baseline") |
 
 A bot change that moves a level must keep both targets.
 
