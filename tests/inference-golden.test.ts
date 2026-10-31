@@ -60,24 +60,30 @@ function fingerprint(spec: AlgorithmSpec, seed: number, steps: number): string {
 }
 
 const CASES: [string, AlgorithmSpec, number[], number, string][] = [
-  ['heuristic:hard', 'heuristic:hard', [1, 2, 3, 4, 5, 6, 7, 8], 3000, 
+  [
+    'heuristic:hard',
+    'heuristic:hard',
+    [1, 2, 3, 4, 5, 6, 7, 8],
+    3000,
     'cfcae100/798/292 dd59c117/719/278 9e3415b1/653/219 3cd2c87c/736/272 b4458f6f/727/276 db011db3/566/216 edeac84e/675/252 e9c430be/516/188',
   ],
-  ['heuristic:normal', 'heuristic:normal', [1, 2, 3, 4, 5, 6, 7, 8], 3000, 
+  [
+    'heuristic:normal',
+    'heuristic:normal',
+    [1, 2, 3, 4, 5, 6, 7, 8],
+    3000,
     '4541b7cc/653/240 958d21ba/545/203 c7d6bda6/743/273 f1616343/561/207 aed3dfba/685/246 1fb72733/745/279 bdf38612/373/136 d1d3f2c1/647/246',
   ],
-  ['heuristic:easy', 'heuristic:easy', [1, 2, 3, 4, 5, 6, 7, 8], 3000, 
+  [
+    'heuristic:easy',
+    'heuristic:easy',
+    [1, 2, 3, 4, 5, 6, 7, 8],
+    3000,
     'ec88b80a/663/298 6f6bd472/758/327 5e973868/554/257 307a32f9/484/205 e8f880a7/734/337 6309b672/650/293 169886b7/545/255 4d7d64ab/506/223',
   ],
-  ['pimc', { id: 'pimc', samples: 4, partnerSamples: 2 }, [5, 6], 250, 
-    '3db1ad4b/250/3436 4c206dd2/250/2777',
-  ],
-  ['mcts', { id: 'mcts', iterations: 60, worlds: 3 }, [5], 150, 
-    '137a6069/150/19472',
-  ],
-  ['ismcts', { id: 'ismcts', iterations: 60 }, [5], 150, 
-    '112ec942/150/53487',
-  ],
+  ['pimc', { id: 'pimc', samples: 4, partnerSamples: 2 }, [5, 6], 250, '3db1ad4b/250/3436 4c206dd2/250/2777'],
+  ['mcts', { id: 'mcts', iterations: 60, worlds: 3 }, [5], 150, '137a6069/150/19472'],
+  ['ismcts', { id: 'ismcts', iterations: 60 }, [5], 150, '112ec942/150/53487'],
 ]
 
 describe('without inference nothing changes (#90)', () => {
