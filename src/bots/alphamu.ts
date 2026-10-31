@@ -140,20 +140,24 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
     return out
   }
 
-  /**
-   * The front of the position for the worlds `ws`, `m` own-team moves deep.
-   * `alpha`: the front the seat already has at the nearest node where it
-   * moves, over the same worlds. An opponent's combined front only gets
-   * worse with each card, so once it holds nothing better, the seat drops it anyway.
-   */
   // With `cut`: the best root sum so far; set when a search stopped below it.
   let bar = -Infinity
   let stopped = false
 
+  /**
+   * The front of the position for the worlds `ws`, `m` own-team moves deep.
+   * `alpha`: the front the seat already has at the nearest node where it
+   * moves, over the same worlds. An opponent's combined front only gets
+   * worse with each card, so once it holds nothing better, the seat drops it
+   * anyway. `root`: an opponent's front here ends up as the root card's.
+   */
   function node(m: number, ws: number[], alpha: number[][] | null, root: boolean): number[][] {
     if (m === 0 || played === 6) return [leaf(ws)]
     const mover = turn
     const own = (mover & 1) === team
+    // The last own-team move is the partner's, with only opponents before it:
+    // every seat up to there picks per world, so the solver's value is the front.
+    if (m === 1 && mover !== seat && (own || (trick.length < 3 && ((mover + 1) & 3) !== seat))) return [leaf(ws)]
     const masks = ws.map((w) => legalCardMask(hands[w][mover], trick, trick.length, trump))
     let union = 0
     for (const mask of masks) union |= mask
