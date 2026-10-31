@@ -1,8 +1,10 @@
 import { RANKS, SUITS, teamOf } from '../engine'
 import type { Action, Card, Phase, State, Turned } from '../engine'
-import type { Algorithm, BotTrace } from './algorithm'
+import type { Algorithm, AlgorithmSpec, BotTrace } from './algorithm'
 import { troefkeHand, troefkeLead, troefkeWeight } from './conventions'
 import { sampleWorld } from './determinize'
+import { inferenceWeight, parseInference } from './inference'
+import type { Inference } from './inference'
 import type { Observation } from './observation'
 import { cardIndex, maskOf, POINTS_OF, RANK_OF, SUIT_MASK, SUIT_OF } from './solver'
 import { handValue } from './value'
@@ -416,6 +418,7 @@ interface Options {
   c: number
   worlds: number
   mast: boolean
+  inference?: Inference
 }
 
 /** The root's actions with their summed statistics, the choice first (most visits). */
@@ -507,10 +510,17 @@ function rootHand(obs: Observation, rand: () => number, weight: ((w: State) => n
   return h
 }
 
-function parseOptions(name: string, variant: string | undefined, options: Record<string, unknown>, keys: string[]): Options {
+function parseOptions(
+  name: string,
+  variant: string | undefined,
+  options: Record<string, unknown>,
+  keys: string[],
+  create: (spec: AlgorithmSpec) => Algorithm,
+): Options {
   if (variant !== undefined) throw new Error(`unknown ${name} variant: ${variant}`)
   for (const [k, v] of Object.entries(options)) {
     if (!keys.includes(k)) throw new Error(`unknown ${name} option: ${k}`)
+    if (k === 'inference') continue
     if (k === 'mast') {
       if (typeof v !== 'boolean') throw new Error(`${name} option mast must be true or false`)
     } else if (k === 'c') {
@@ -524,7 +534,17 @@ function parseOptions(name: string, variant: string | undefined, options: Record
     c: (options.c as number | undefined) ?? MCTS_C,
     worlds: (options.worlds as number | undefined) ?? MCTS_WORLDS,
     mast: (options.mast as boolean | undefined) ?? false,
+    inference: options.inference === undefined ? undefined : parseInference(name, options.inference, create),
   }
+}
+
+/** The weight of the sampled worlds: the troefke read, or with `inference` its model (a note in the trace). */
+function worldWeights(
+  obs: Observation,
+  opt: Options,
+): { weight: ((world: State) => number) | undefined; note: (trace?: BotTrace) => void } {
+  if (opt.inference) return inferenceWeight(obs, opt.inference)
+  return { weight: troefkeWeight(obs), note: () => {} }
 }
 
 /**
@@ -541,16 +561,23 @@ function parseOptions(name: string, variant: string | undefined, options: Record
  * obeys it and reads it (`troefkeLead`, `troefkeWeight`); in the tree and the
  * playouts the bidder's partner obeys it too.
  *
- * Options: `iterations`, `c` (UCB1 exploration), `worlds`, `mast`.
+ * Options: `iterations`, `c` (UCB1 exploration), `worlds`, `mast`, and
+ * `inference` (`{ model: <algorithm spec> }`): the worlds are weighted by how
+ * well the model explains the other seats' bids and troefke this hand
+ * (`inferenceWeight`), in place of the troefke read.
  */
-export function createMcts(variant: string | undefined, options: Record<string, unknown>): Algorithm {
-  const opt = parseOptions('mcts', variant, options, ['iterations', 'c', 'worlds', 'mast'])
+export function createMcts(
+  variant: string | undefined,
+  options: Record<string, unknown>,
+  create: (spec: AlgorithmSpec) => Algorithm,
+): Algorithm {
+  const opt = parseOptions('mcts', variant, options, ['iterations', 'c', 'worlds', 'mast', 'inference'], create)
   return {
     id: 'mcts',
     supports: () => true,
     decide: (obs, rand, trace) =>
       decideWith(obs, rand, opt, trace, (s) => {
-        const weight = troefkeWeight(obs)
+        const { weight, note } = worldWeights(obs, opt)
         const worlds = Math.min(opt.worlds, opt.iterations)
         const roots: Node[] = []
         for (let w = 0; w < worlds; w++) {
@@ -561,6 +588,7 @@ export function createMcts(variant: string | undefined, options: Record<string, 
           for (let i = 0; i < n; i++) iterate(root, copyHand(h), s)
           roots.push(root)
         }
+        note(trace)
         return { roots, note: `mcts: ${worlds} worlds, ${opt.iterations} iterations${opt.mast ? ', mast' : ''}` }
       }),
   }
@@ -574,18 +602,23 @@ export function createMcts(variant: string | undefined, options: Record<string, 
  * tree node holds a move for all the worlds the seat cannot tell apart.
  *
  * Bids, troefke, dealer's choice, cards, value, playouts and the troefke
- * convention as in `mcts`. Options: `iterations`, `c`, `mast`.
+ * convention as in `mcts`. Options: `iterations`, `c`, `mast`, `inference`.
  */
-export function createIsmcts(variant: string | undefined, options: Record<string, unknown>): Algorithm {
-  const opt = parseOptions('ismcts', variant, options, ['iterations', 'c', 'mast'])
+export function createIsmcts(
+  variant: string | undefined,
+  options: Record<string, unknown>,
+  create: (spec: AlgorithmSpec) => Algorithm,
+): Algorithm {
+  const opt = parseOptions('ismcts', variant, options, ['iterations', 'c', 'mast', 'inference'], create)
   return {
     id: 'ismcts',
     supports: () => true,
     decide: (obs, rand, trace) =>
       decideWith(obs, rand, opt, trace, (s) => {
-        const weight = troefkeWeight(obs)
+        const { weight, note } = worldWeights(obs, opt)
         const root = newNode()
         for (let i = 0; i < opt.iterations; i++) iterate(root, rootHand(obs, rand, weight), s)
+        note(trace)
         return { roots: [root], note: `ismcts: ${opt.iterations} iterations${opt.mast ? ', mast' : ''}` }
       }),
   }

@@ -1,8 +1,10 @@
 import { partnerOf, RANK_ORDER, RANK_POINTS, rngNext, sameCard } from '../engine'
-import type { Action, Suit } from '../engine'
+import type { Action, State, Suit } from '../engine'
 import type { Algorithm, AlgorithmSpec, BotTrace } from './algorithm'
 import { troefkeHand, troefkeLead, troefkeWeight } from './conventions'
 import { sampleWorld } from './determinize'
+import { inferenceWeight, parseInference } from './inference'
+import type { Inference } from './inference'
 import { decisionPhase, observe } from './observation'
 import type { Observation } from './observation'
 import { solve } from './solver'
@@ -82,7 +84,14 @@ const cardText = (a: Action): string => (a.type === 'play' ? `${a.card.r}${a.car
  * The card with the best average over `samples` worlds that fit what the seat
  * saw; with an `anchor`, its card unless the best one beats it by more than the margin.
  */
-function playCard(obs: Observation, rand: () => number, samples: number, trace?: BotTrace, anchor?: Anchor): Action {
+function playCard(
+  obs: Observation,
+  rand: () => number,
+  samples: number,
+  trace?: BotTrace,
+  anchor?: Anchor,
+  inference?: Inference,
+): Action {
   let candidates = obs.legal
   if (troefkeLead(obs)) {
     candidates = candidates.filter((a) => a.type === 'play' && a.card.s === obs.trump)
@@ -97,8 +106,8 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
   const index = card ? candidates.findIndex((a) => samePlay(a, card)) : -1
   const anchored = anchor && index >= 0 ? { id: anchor.algorithm.id, index, margin: anchor.margin } : undefined
   if (anchor && !anchored) trace?.notes.push(`anchor ${anchor.algorithm.id}: ${card ? `${cardText(card)} not a candidate` : 'no card'}, pimc decides`)
-  const weight = troefkeWeight(obs)
-  return best(
+  const { weight, note } = worldWeights(obs, inference)
+  const action = best(
     obs,
     candidates,
     samples,
@@ -106,6 +115,17 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
     trace,
     anchored,
   )
+  note(trace)
+  return action
+}
+
+/** The weight of the sampled worlds: the troefke read, or with `inference` its model. */
+function worldWeights(
+  obs: Observation,
+  inference: Inference | undefined,
+): { weight: ((world: State) => number) | undefined; note: (trace?: BotTrace) => void } {
+  if (inference) return inferenceWeight(obs, inference)
+  return { weight: troefkeWeight(obs), note: () => {} }
 }
 
 /**
@@ -118,7 +138,14 @@ function playCard(obs: Observation, rand: () => number, samples: number, trace?:
  *
  * It asks only with a troefke hand, so the other seats read it right.
  */
-function askTroefke(obs: Observation, rand: () => number, samples: number, partnerSamples: number, trace?: BotTrace): Action {
+function askTroefke(
+  obs: Observation,
+  rand: () => number,
+  samples: number,
+  partnerSamples: number,
+  trace?: BotTrace,
+  inference?: Inference,
+): Action {
   const candidates = obs.legal.filter((a) => a.type === 'ack' || a.type === 'troefke')
   const ack = candidates.find((a) => a.type === 'ack')!
   if (!troefkeHand(obs.hand, obs.trump!)) {
@@ -127,12 +154,14 @@ function askTroefke(obs: Observation, rand: () => number, samples: number, partn
     return ack
   }
   const partner = partnerOf(obs.seat)
-  return best(
+  // Without inference these worlds stay uniform: before the troefke there is nothing to read.
+  const weights = inference ? inferenceWeight(obs, inference) : undefined
+  const action = best(
     obs,
     candidates,
     samples,
     () => {
-      const world = sampleWorld(obs, rand)
+      const world = sampleWorld(obs, rand, weights?.weight)
       // Both choices get the same random numbers for the partner: the
       // difference between them is the troefke, not sampling noise.
       const seed = Math.floor(rand() * 0x100000000) | 0
@@ -149,6 +178,8 @@ function askTroefke(obs: Observation, rand: () => number, samples: number, partn
     },
     trace,
   )
+  weights?.note(trace)
+  return action
 }
 
 const samePlay = (a: Action, b: Action): boolean =>
@@ -179,7 +210,11 @@ const samePlay = (a: Action, b: Action): boolean =>
  * `margin` lines (default 0: the anchor wins the ties) better on the same
  * worlds. The anchor makes the card play more predictable: with few worlds
  * many choices are close to a coin flip (#178). It plays cards only: not the
- * troefke, and not the partner model inside it.
+ * troefke, and not the partner model inside it. `inference`
+ * (`{ model: <algorithm spec> }`, `parseInference`): the worlds are weighted
+ * by how well the model explains the other seats' bids and troefke this
+ * hand (`inferenceWeight`), in place of the troefke read; also in a troefke
+ * decision, but not in the partner model inside it.
  */
 export function createPimc(
   variant: string | undefined,
@@ -192,6 +227,7 @@ export function createPimc(
       if (typeof v !== 'string' && (typeof v !== 'object' || v === null)) throw new Error('pimc option anchor must be an algorithm spec')
       continue
     }
+    if (k === 'inference') continue
     if (k === 'margin') {
       if (typeof v !== 'number' || !(v >= 0)) throw new Error('pimc option margin must be a number >= 0')
       if (options.anchor === undefined) throw new Error('pimc option margin needs an anchor')
@@ -206,12 +242,13 @@ export function createPimc(
     options.anchor === undefined
       ? undefined
       : { algorithm: create(options.anchor as AlgorithmSpec), margin: (options.margin as number | undefined) ?? 0 }
+  const inference = options.inference === undefined ? undefined : parseInference('pimc', options.inference, create)
   return {
     id: 'pimc',
     supports: (obs) => decisionPhase(obs) === 'play' || obs.legal.some((a) => a.type === 'troefke'),
     decide(obs: Observation, rand: () => number, trace?: BotTrace): Action {
-      if (obs.legal.some((a) => a.type === 'troefke')) return askTroefke(obs, rand, samples, partnerSamples, trace)
-      return playCard(obs, rand, samples, trace, anchor)
+      if (obs.legal.some((a) => a.type === 'troefke')) return askTroefke(obs, rand, samples, partnerSamples, trace, inference)
+      return playCard(obs, rand, samples, trace, anchor, inference)
     },
   }
 }
