@@ -1,4 +1,5 @@
 import type { Action } from '../engine'
+import { createAlphamu } from './alphamu'
 import { createHeuristic } from './heuristic'
 import { createIsmcts, createMcts } from './mcts'
 import type { Observation } from './observation'
@@ -56,6 +57,7 @@ const ALGORITHMS = new Map<string, AlgorithmFactory>([
   ['pimc', createPimc],
   ['mcts', createMcts],
   ['ismcts', createIsmcts],
+  ['alphamu', createAlphamu],
 ])
 
 /** Add an algorithm under `name`. A name can be taken only once. */
