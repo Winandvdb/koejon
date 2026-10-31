@@ -199,5 +199,19 @@ Timing: `--jobs 1 --matches 20` (40 games), measured under heavy load on the dev
 | 80 | 75.0% ± 13.4% | 254 | 15355 | 141 | 4123 |
 | hard (10/2, for reference) | | 14.5 | 1562 | 18.7 | 1026 |
 
-The 1000-match win rates are not in yet; clean timings are to be re-measured on an idle Mac.
-The slowest decision is a bid/troefke decision (partner model with `partnerSamples`), above the 2.5 s limit even at 20 samples under load.
+Win rate against the `hard` level bot, seats swapped (each seed is played twice), run with `--jobs 3` under heavy and varying load (the Mac paused for hours, so the max times of these runs are not valid and are not given; the avg times are inflated):
+
+| samples | matches | win rate vs hard | avg ms bid/troefke | avg ms play |
+|---|---|---|---|---|
+| 20 (`partnerSamples` 5) | 1000 (2000 games) | 60.8% ± 2.1% | 96.7 | 51.3 |
+| 40 (`partnerSamples` 5) | 500 (1000 games) | 65.6% ± 2.9% | 393.3 | 230.1 |
+| 80 (`partnerSamples` 5) | not run | 75.0% ± 13.4% in the 20-match timing run (noise) | | |
+
+(`hard` in the same runs: 19.3 / 24.2 ms avg in the 20-sample run.)
+
+Choices:
+
+- 80 samples is rejected on time: the slowest decision was 15 s in the timing run, far over the 2.5 s limit, so its win rate was not benched at 1000 matches.
+- `EXPERT_PIMC` stays at 20 / 5 as a placeholder. Clean timings on an idle Mac and the final choice are for wave 2.
+- 60.8% ± 2.1% does not yet prove the 60% target (the lower bound is 58.7%). The 40-sample point is higher (65.6% ± 2.9%) but its slowest decision (10 s in the loaded timing run) is also over the limit.
+- The slowest decisions are bid/troefke decisions (partner model with `partnerSamples`).
