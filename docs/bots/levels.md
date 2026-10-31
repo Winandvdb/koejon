@@ -1,4 +1,4 @@
-# Bot levels: the gaps between easy, normal and hard
+# Bot levels: the gaps between easy, normal, hard and expert
 
 Issue: #161 (2026-10-11). Question: how much stronger must each level be than the level
 below it, and what makes `easy` a beginner?
@@ -11,9 +11,9 @@ Agreed with the user. Each target holds with the ± margin of `npm run bench` (9
 |---|---|---|
 | `hard` level bot vs `heuristic:normal` | at least 75% | `npm run bench -- --level hard --b heuristic:normal --matches 200` |
 | `heuristic:normal` vs `heuristic:easy` | at least 75% | `npm run bench -- --a heuristic:normal --b heuristic:easy --matches 1000` |
-| `expert` level bot vs `hard` level bot (#223) | at least 60% | `npm run bench -- --a <expert json> --b <hard json> --matches 1000` (json files: `search-bots.md`, "Expert level baseline") |
+| `expert` level bot vs `hard` level bot (#223) | at least 60% | `npm run bench -- --a '{"name":"pimc-expert","rules":[{"use":{"id":"pimc","samples":20,"partnerSamples":5}},{"use":"heuristic:hard"}]}' --b '{"name":"pimc-hard","rules":[{"use":{"id":"pimc","samples":10,"partnerSamples":2,"anchor":{"id":"heuristic:hard","skill":1},"margin":0.4}},{"use":"heuristic:hard"}]}' --matches 1000 --jobs 3` (`search-bots.md`, "Expert level baseline") |
 
-A bot change that moves a level must keep both targets.
+A bot change that moves a level must keep all three targets.
 
 ## What easy lacks
 

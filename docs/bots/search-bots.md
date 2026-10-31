@@ -199,5 +199,5 @@ Timing: `--jobs 1 --matches 20` (40 games), measured under heavy load on the dev
 | 80 | 75.0% ± 13.4% | 254 | 15355 | 141 | 4123 |
 | hard (10/2, for reference) | | 14.5 | 1562 | 18.7 | 1026 |
 
-The 1000-match win rates are not in yet (see the task report); clean timings are to be re-measured on an idle Mac.
+The 1000-match win rates are not in yet; clean timings are to be re-measured on an idle Mac.
 The slowest decision is a bid/troefke decision (partner model with `partnerSamples`), above the 2.5 s limit even at 20 samples under load.

@@ -3,7 +3,7 @@ import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
-import { botAction, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import { botAction, BOT_PROFILES, createBot, EXPERT_PIMC, LEVEL_CONFIGS } from '../src/bots/bot'
 import { HEURISTIC_LEVELS } from '../src/bots/heuristic'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
@@ -93,6 +93,25 @@ describe('the hard level bot', () => {
     // Its cards are anchored to the heuristic card, its troefke is not.
     expect(tr.notes.some((n) => n.startsWith('anchor heuristic:hard'))).toBe(a.type === 'play')
     // Two troefke searches: seconds on a loaded runner.
+  }, 60_000)
+})
+
+describe('the expert level bot', () => {
+  it('plays a card with pimc on EXPERT_PIMC worlds and no anchor, as botAction does', () => {
+    const hands = [
+      [C('C', 'J'), C('C', 'Q'), C('D', 'J'), C('D', 'Q'), C('S', 'J'), C('S', 'Q')],
+      [C('H', '9'), C('H', 'J'), C('H', 'K'), C('S', '9'), C('C', '9'), C('D', '9')],
+      [C('C', 'K'), C('C', 'A'), C('D', 'K'), C('D', 'A'), C('S', 'K'), C('S', 'A')],
+      [C('H', '10'), C('H', 'Q'), C('H', 'A'), C('S', '10'), C('C', '10'), C('D', '10')],
+    ]
+    const s = playingState({ bidder: 1, turn: 3, leader: 3, hands })
+    const tr = trace()
+    const a = createBot(LEVEL_CONFIGS.expert).decide(s, 3, seededRandom(1), tr)
+    expect(tr.algorithm).toBe('pimc')
+    expect(tr.notes).toContainEqual(expect.stringMatching(new RegExp(`^pimc: ${EXPERT_PIMC.samples} worlds`)))
+    expect(tr.notes.some((n) => n.startsWith('anchor'))).toBe(false)
+    expect(tr.candidates.some((c) => c.note?.includes('anchor'))).toBe(false)
+    expect(botAction(s, 3, seededRandom(1), 'expert')).toEqual(a)
   }, 60_000)
 })
 

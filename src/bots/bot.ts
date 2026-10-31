@@ -114,8 +114,9 @@ export const HARD_PIMC = {
 
 /**
  * The pimc options of the `expert` bot: no anchor and no margin, so it plays
- * the card pimc rates best, with more worlds than `hard`. Within 2.5 s for the
- * slowest decision on the dev Mac (a phone is about 2x slower) (#223).
+ * the card pimc rates best, with more worlds than `hard`. The target is 2.5 s
+ * for the slowest decision on the dev Mac (a phone is about 2x slower); these
+ * values are a placeholder until that is measured on an idle Mac (#223).
  */
 export const EXPERT_PIMC = {
   samples: 20,
