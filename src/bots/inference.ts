@@ -1,7 +1,7 @@
 import { clientState, leftOf, partnerOf } from '../engine'
 import type { Action, Card, Phase, State } from '../engine'
 import type { Algorithm, AlgorithmSpec, BotTrace } from './algorithm'
-import { troefkeIgnoredWeight, troefkeWeight } from './conventions'
+import { troefkeIgnoredWeight } from './conventions'
 import { playedCards } from './determinize'
 import { observe } from './observation'
 import type { Observation } from './observation'
@@ -39,10 +39,10 @@ const SIX: Card[] = Array.from({ length: 6 }, () => ({ s: 'S', r: '9' }) as Card
  *
  * The troefke counts as a decision once it is known: asked (the `troefke`
  * event), or not asked by a bidder that could ask it and already confirmed
- * (in the acks, or a card fell). With `troefke: false` the asked troefke is
- * left out, for a caller that reads it otherwise (`troefkeWeight`).
+ * (in the acks, or a card fell). The log keeps the last 60 events: all of
+ * this hand's, but the rebuilt views miss older ones.
  */
-export function pastDecisions(obs: Observation, troefke = true): PastDecision[] {
+export function pastDecisions(obs: Observation): PastDecision[] {
   let start = -1
   for (let i = obs.log.length - 1; i >= 0 && start < 0; i--) if (obs.log[i].t === 'deal') start = i
   if (start < 0 || !obs.turned) return []
@@ -113,7 +113,7 @@ export function pastDecisions(obs: Observation, troefke = true): PastDecision[] 
     } else if (e.t === 'dealer-pass') {
       add(e.seat!, { type: 'choose', seat: e.seat!, suit: null }, i)
     } else if (e.t === 'troefke') {
-      if (troefke) add(e.seat!, { type: 'troefke', seat: e.seat! }, i, playing())
+      add(e.seat!, { type: 'troefke', seat: e.seat! }, i, playing())
     }
   }
   const bidder = obs.bidder
@@ -149,8 +149,6 @@ export function worldWeight(world: State, history: PastDecision[], model: Algori
 /** Option `inference` of a search algorithm: the model whose policy weighs the worlds. */
 export interface Inference {
   model: Algorithm
-  /** TEMP bench switch (#90 AC7): 'combine' multiplies the full troefkeWeight. */
-  troefke?: 'replace' | 'combine'
 }
 
 /**
@@ -166,20 +164,22 @@ export function parseInference(
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     throw new Error(`${owner} option inference must be an object { model }`)
   for (const k of Object.keys(value)) {
-    if (k !== 'model' && k !== 'troefke') throw new Error(`unknown ${owner} inference option: ${k}`)
+    if (k !== 'model') throw new Error(`unknown ${owner} inference option: ${k}`)
   }
   const spec = (value as { model?: unknown }).model
   if (typeof spec !== 'string' && (typeof spec !== 'object' || spec === null))
     throw new Error(`${owner} option inference needs a model: an algorithm spec`)
   const model = create(spec as AlgorithmSpec)
   if (!model.policy) throw new Error(`${owner} inference model ${model.id} has no policy`)
-  return { model, troefke: (value as { troefke?: 'replace' | 'combine' }).troefke }
+  return { model }
 }
 
 /**
  * The world weight of one decision with `inference`: the model's weight of
  * the past bids and troefke, times the ignored-troefke half of
- * `troefkeWeight` (the model reads no card play). `note` puts one line in
+ * `troefkeWeight` (the model reads no card play). It replaces the bidder's
+ * half of `troefkeWeight`: the model reads the troefke itself, and
+ * multiplying both (count it twice) benched no better (#90). `note` puts one line in
  * the trace with the effective sample size of the weights computed so far,
  * (Σw)² / Σw².
  */
@@ -187,9 +187,8 @@ export function inferenceWeight(
   obs: Observation,
   inference: Inference,
 ): { weight: (world: State) => number; note: (trace?: BotTrace) => void } {
-  const combine = inference.troefke === 'combine'
-  const history = pastDecisions(obs, !combine)
-  const ignored = combine ? troefkeWeight(obs) : troefkeIgnoredWeight(obs)
+  const history = pastDecisions(obs)
+  const ignored = troefkeIgnoredWeight(obs)
   let n = 0
   let sum = 0
   let sum2 = 0
