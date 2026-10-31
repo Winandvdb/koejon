@@ -46,6 +46,7 @@ const dict = {
     lvlEasy: 'Makkelijk',
     lvlNormal: 'Normaal',
     lvlHard: 'Moeilijk',
+    lvlExpert: 'Expert',
     empty: 'leeg',
     drawForDealer: 'Trekken voor eerste deler',
     drawsNow: 'trekt een kaart…',
@@ -242,6 +243,7 @@ const dict = {
     lvlEasy: 'Easy',
     lvlNormal: 'Normal',
     lvlHard: 'Hard',
+    lvlExpert: 'Expert',
     empty: 'empty',
     drawForDealer: 'Draw for first dealer',
     drawsNow: 'draws a card…',
@@ -407,10 +409,11 @@ export type Dict = (typeof dict)['nl']
 export { lang }
 export const t = derived(lang, (l) => dict[l])
 
-export const levelNames = (d: Record<'lvlEasy' | 'lvlNormal' | 'lvlHard', string>): Record<BotLevel, string> => ({
+export const levelNames = (d: Record<'lvlEasy' | 'lvlNormal' | 'lvlHard' | 'lvlExpert', string>): Record<BotLevel, string> => ({
   easy: d.lvlEasy,
   normal: d.lvlNormal,
   hard: d.lvlHard,
+  expert: d.lvlExpert,
 })
 
 /** Locale for dates and numbers. */

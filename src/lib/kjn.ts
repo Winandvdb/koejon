@@ -11,7 +11,7 @@ export const KJN_FORMAT = 'KJN/1'
 /** Upper bound on the serialized text; the Firestore rules enforce the same. */
 export const KJN_MAX_CHARS = 100_000
 
-export const SEAT_KINDS = ['human', 'bot-easy', 'bot-normal', 'bot-hard', 'mixed'] as const
+export const SEAT_KINDS = ['human', 'bot-easy', 'bot-normal', 'bot-hard', 'bot-expert', 'mixed'] as const
 /** `mixed`: the seat switched between human and bot (or bot level) mid-match. */
 export type SeatKind = (typeof SEAT_KINDS)[number]
 

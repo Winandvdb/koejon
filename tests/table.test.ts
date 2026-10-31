@@ -67,7 +67,13 @@ describe('showConfetti', () => {
 describe('i18n helpers', () => {
   test('level names, locale and seat name fallback', () => {
     const nl = get(t)
-    expect(levelNames(nl).hard).toBe(nl.lvlHard)
+    expect(levelNames(nl)).toEqual({
+      easy: nl.lvlEasy,
+      normal: nl.lvlNormal,
+      hard: nl.lvlHard,
+      expert: 'Expert',
+    })
+    expect(get(t).lvlExpert).toBe('Expert')
     expect(localeOf('nl')).toBe('nl-BE')
     expect(localeOf('en')).toBe('en-GB')
     expect(seatName(nl, undefined, 1)).toBe(`${nl.player} 2`)

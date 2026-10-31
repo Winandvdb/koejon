@@ -83,6 +83,22 @@ describe('offline solo', () => {
     g.close()
   })
 
+  test('cycleBotLevel cycles through all four levels, expert included', async () => {
+    const g = await open(memoryStore(), true)
+    addSoloBots(g.host, 'normal')
+    await until(() => g.view()?.room?.seats.filter(Boolean).length === 4)
+    const seen: (string | undefined)[] = []
+    for (let i = 0; i < 4; i++) {
+      g.host.cycleBotLevel(1)
+      const want = ['hard', 'expert', 'easy', 'normal'][i]
+      await until(() => g.view()?.room?.seats[1]?.botLevel === want)
+      seen.push(g.view()?.room?.seats[1]?.botLevel)
+    }
+    expect(seen).toEqual(['hard', 'expert', 'easy', 'normal'])
+    await g.host.destroyRoom()
+    g.close()
+  })
+
   test('plays a full match, survives a reload mid-game', async () => {
     const storage = memoryStore()
     const first = await open(storage, true)

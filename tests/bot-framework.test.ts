@@ -3,7 +3,8 @@ import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
-import { botAction, BOT_LEVELS, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import { botAction, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import { HEURISTIC_LEVELS } from '../src/bots/heuristic'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
@@ -50,7 +51,7 @@ describe('observe', () => {
 })
 
 describe('heuristic reads only the observation', () => {
-  it.each(BOT_LEVELS)('%s decides the same when the hidden cards change', (level) => {
+  it.each(HEURISTIC_LEVELS)('%s decides the same when the hidden cards change', (level) => {
     // The heuristic of the level; tests/pimc.test.ts checks the pimc of the `hard` level bot.
     const bot = createBot(`heuristic:${level}`)
     let changed = 0

@@ -2,13 +2,17 @@ import { partnerOf } from '../engine'
 import type { Action, State } from '../engine'
 import { createAlgorithm } from './algorithm'
 import type { AlgorithmSpec, BotTrace } from './algorithm'
-import { BOT_LEVELS } from './heuristic'
-import type { BotLevel } from './heuristic'
+import { HEURISTIC_LEVELS } from './heuristic'
+import type { HeuristicLevel } from './heuristic'
 import { decisionPhase, observe } from './observation'
 import type { DecisionPhase, Observation } from './observation'
 
-export { BOT_LEVELS, BOT_PROFILES, TROEFKE_CHANCE } from './heuristic'
-export type { BotLevel, BotProfile } from './heuristic'
+export { BOT_PROFILES, TROEFKE_CHANCE } from './heuristic'
+export type { BotProfile } from './heuristic'
+
+/** The levels a player picks: the heuristic ones plus `expert`, which has no heuristic profile. */
+export type BotLevel = HeuristicLevel | 'expert'
+export const BOT_LEVELS: BotLevel[] = [...HEURISTIC_LEVELS, 'expert']
 
 /** One bot rule: when `when` matches and the algorithm supports the decision, it decides. */
 export interface BotRule {
@@ -108,11 +112,22 @@ export const HARD_PIMC = {
   margin: HARD_ANCHOR_MARGIN,
 }
 
+/**
+ * The pimc options of the `expert` bot: no anchor and no margin, so it plays
+ * the card pimc rates best, with more worlds than `hard`. Within 2.5 s for the
+ * slowest decision on the dev Mac (a phone is about 2x slower) (#223).
+ */
+export const EXPERT_PIMC = {
+  samples: 20,
+  partnerSamples: 5,
+}
+
 /** The bot of each level: `hard` plays its cards and the troefke with pimc and bids with `heuristic:hard`. */
 export const LEVEL_CONFIGS: Record<BotLevel, BotConfig | AlgorithmSpec> = {
   easy: 'heuristic:easy',
   normal: 'heuristic:normal',
   hard: { name: 'pimc-hard', rules: [{ use: { id: 'pimc', ...HARD_PIMC } }, { use: 'heuristic:hard' }] },
+  expert: { name: 'pimc-expert', rules: [{ use: { id: 'pimc', ...EXPERT_PIMC } }, { use: 'heuristic:hard' }] },
 }
 
 const LEVEL_BOTS = Object.fromEntries(

@@ -7,7 +7,8 @@ import {
   trickWinnerIndex,
 } from '../src/engine'
 import type { Action, State } from '../src/engine'
-import { botAction, BOT_LEVELS, createBot } from '../src/bots/bot'
+import { botAction, createBot } from '../src/bots/bot'
+import { HEURISTIC_LEVELS } from '../src/bots/heuristic'
 import { seededRandom } from '../src/lib/seed'
 
 const MATCHES = 60
@@ -68,7 +69,7 @@ function runMatch(seed: number, decide: Decide): { state: State; steps: number; 
 
 describe('bot-vs-bot simulation', () => {
   // The heuristic of every level: the `hard` level bot plays pimc, too slow for 60 matches (below).
-  it.each(BOT_LEVELS)(`terminates ${MATCHES} complete matches of heuristic:%s bots with all invariants`, (level) => {
+  it.each(HEURISTIC_LEVELS)(`terminates ${MATCHES} complete matches of heuristic:%s bots with all invariants`, (level) => {
     const bot = createBot(`heuristic:${level}`)
     let totalHands = 0
     const wins = [0, 0]
@@ -93,6 +94,16 @@ describe('bot-vs-bot simulation', () => {
       expect(state.winner).not.toBeNull()
     }
   }, 120_000)
+
+  it('terminates complete matches of the expert level bot (pimc card play, no anchor) against heuristic:hard with all invariants', () => {
+    const hard = createBot('heuristic:hard')
+    for (const seed of [1, 2, 3]) {
+      const { state } = runMatch(seed, (s, seat, rand) =>
+        seat % 2 === 0 ? botAction(s, seat, rand, 'expert') : hard.decide(s, seat, rand),
+      )
+      expect(state.winner).not.toBeNull()
+    }
+  }, 300_000)
 
   it.each(['mcts', 'ismcts'])('terminates complete matches of %s against heuristic:hard with all invariants', (id) => {
     // Bids and cards: the whole hand is in the tree.

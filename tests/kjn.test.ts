@@ -170,6 +170,16 @@ describe('KJN/1 format', () => {
     expect(() => parseKjn(SAMPLE.replace('[Turned "SA SK"]', '[Turned "SK SA"]'))).toThrow(/turned/)
   })
 
+  it('parses and replays a record with an expert seat', () => {
+    const { rec } = runMatch(5)
+    const text = serializeKjn({ ...rec, seats: ['human', 'bot-expert', 'bot-hard', 'bot-expert'] })
+    expect(text).toContain('[Seats "human bot-expert bot-hard bot-expert"]')
+    const parsed = parseKjn(text)
+    expect(parsed.seats).toEqual(['human', 'bot-expert', 'bot-hard', 'bot-expert'])
+    expect(serializeKjn(parsed)).toBe(text)
+    expect(replayKjn(parsed).phase).toBe('GAME_OVER')
+  })
+
   it('makes a games document only for a finished match, without identifiers', () => {
     const { rec } = runMatch(3)
     const doc = gameDoc(rec)!
@@ -362,6 +372,19 @@ describe('host game records', () => {
     await until(() => g.view()?.room?.pub?.phase === 'GAME_OVER')
     await until(() => tries === 1 && storage.getItem(PENDING) === null)
     g.close()
+  }, 60_000)
+
+  test('an expert bot seat is recorded as bot-expert', async () => {
+    const storage = memoryStore()
+    const g = await open(storage, true, collect([], []))
+    await g.join()
+    g.host.addBot(2, 'expert')
+    g.host.addBot(3)
+    g.host.startGame()
+    await until(() => storage.getItem(`koejon-kjn-${SOLO_CODE}`) !== null)
+    const seats = JSON.parse(storage.getItem(`koejon-kjn-${SOLO_CODE}`)!).seats
+    g.close()
+    expect(seats).toEqual(['human', 'human', 'bot-expert', 'bot-normal'])
   }, 60_000)
 
   test('a seat that leaves and comes back within a hand is recorded as mixed', async () => {

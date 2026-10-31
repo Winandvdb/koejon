@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { BOT_LEVELS, BOT_PROFILES, createBot } from '../src/bots/bot'
-import type { BotLevel } from '../src/bots/bot'
+import { BOT_PROFILES, createBot } from '../src/bots/bot'
+import { HEURISTIC_LEVELS } from '../src/bots/heuristic'
+import type { HeuristicLevel } from '../src/bots/heuristic'
 import { createAlgorithm } from '../src/bots/algorithm'
 import type { BotTrace } from '../src/bots/algorithm'
 import { observe } from '../src/bots/observation'
@@ -13,8 +14,8 @@ const smart = () => 0 // rand < any threshold → deterministic smart path
 const never = () => 0.99 // rand > all thresholds
 
 // These are rules of the heuristic: the `hard` level bot plays its cards with pimc.
-const HEURISTIC = Object.fromEntries(BOT_LEVELS.map((l) => [l, createBot(`heuristic:${l}`)]))
-const botAction = (s: State, seat: number, rand: () => number = Math.random, level: BotLevel = 'normal') =>
+const HEURISTIC = Object.fromEntries(HEURISTIC_LEVELS.map((l) => [l, createBot(`heuristic:${l}`)]))
+const botAction = (s: State, seat: number, rand: () => number = Math.random, level: HeuristicLevel = 'normal') =>
   HEURISTIC[level].decide(s, seat, rand)
 
 /** BIDDING_R1 with seat 1 to speak; `hand` is seat 1's cards. */
@@ -122,7 +123,7 @@ describe('bot bidding', () => {
     const ace = { first: C('H', 'A'), second: C('S', '9'), secondUp: false }
     const byOpponent = bidState(hand, { dealer: 0, bidIndex: 0, turned: ace })
     const byPartner = bidState(hand, { dealer: 3, bidIndex: 1, turned: ace })
-    const bid = (s: State, options: Record<string, number>, level: BotLevel = 'hard') => {
+    const bid = (s: State, options: Record<string, number>, level: HeuristicLevel = 'hard') => {
       const trace: BotTrace = { candidates: [], notes: [] }
       const a = createBot({ id: `heuristic:${level}`, ...options }).decide(s, 1, never, trace)
       return { a, notes: trace.notes.join('\n') }
@@ -547,7 +548,7 @@ describe('bot card play', () => {
 describe('bot leads', () => {
   const LEVELS = ['easy', 'normal', 'hard'] as const
   // Easy plays no lead tactics: see the tests of easy below.
-  const TACTICS = BOT_LEVELS.filter((l) => BOT_PROFILES[l].tactics)
+  const TACTICS = HEURISTIC_LEVELS.filter((l) => BOT_PROFILES[l].tactics)
 
   /** PLAYING, seat 1 leads. `bidder` 1 = seat 1 bids, 3 = partner bids, 0 = defending. */
   function leadState(hand: Card[], bidder: number, over: Partial<State> = {}): State {

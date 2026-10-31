@@ -18,8 +18,8 @@ const oppSeatsOf = (seat: number) => [(seat + 1) % 4, (seat + 3) % 4]
 
 // ---- Tunables --------------------------------------------------------------
 
-export type BotLevel = 'easy' | 'normal' | 'hard'
-export const BOT_LEVELS: BotLevel[] = ['easy', 'normal', 'hard']
+export type HeuristicLevel = 'easy' | 'normal' | 'hard'
+export const HEURISTIC_LEVELS: HeuristicLevel[] = ['easy', 'normal', 'hard']
 
 export interface BotProfile {
   /** Share of card decisions that use the smart rule; the rest are lazy. */
@@ -32,7 +32,7 @@ export interface BotProfile {
   tactics: boolean
 }
 
-export const BOT_PROFILES: Record<BotLevel, BotProfile> = {
+export const BOT_PROFILES: Record<HeuristicLevel, BotProfile> = {
   easy: { skill: 0.55, lazy: 'random', memory: 'none', tactics: false },
   normal: { skill: 0.8, lazy: 'dump', memory: 'trumps', tactics: true },
   hard: { skill: 0.95, lazy: 'dump', memory: 'full', tactics: true },
@@ -115,7 +115,7 @@ export const HEURISTIC_DEFAULTS: Readonly<HeuristicOptions> = {
  * before the tuning: the tuned ones make every level stronger, and a beginner
  * bot that bids fast is fine.
  */
-const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
+const LEVEL_OPTIONS: Record<HeuristicLevel, Partial<HeuristicOptions>> = {
   easy: {
     bidThreshold1: 11,
     bidThreshold2: 8,
@@ -143,7 +143,7 @@ const LEVEL_OPTIONS: Record<BotLevel, Partial<HeuristicOptions>> = {
 }
 
 /** The options a level plays without spec options. */
-export function levelOptions(level: BotLevel): HeuristicOptions {
+export function levelOptions(level: HeuristicLevel): HeuristicOptions {
   return { ...HEURISTIC_DEFAULTS, ...LEVEL_OPTIONS[level] }
 }
 
@@ -757,7 +757,7 @@ function decide(
  * tuning constant, so it stays out of `HEURISTIC_DEFAULTS`.
  */
 export function createHeuristic(variant: string | undefined, options: Record<string, unknown>): Algorithm {
-  if (!BOT_LEVELS.includes(variant as BotLevel)) throw new Error(`unknown heuristic level: ${variant}`)
+  if (!HEURISTIC_LEVELS.includes(variant as HeuristicLevel)) throw new Error(`unknown heuristic level: ${variant}`)
   const { skill, ...constants } = options
   if (skill !== undefined && (typeof skill !== 'number' || !(skill >= 0 && skill <= 1)))
     throw new Error('heuristic option skill must be a number in [0, 1]')
@@ -766,9 +766,9 @@ export function createHeuristic(variant: string | undefined, options: Record<str
     // A string from a JSON file would turn the sums into string concatenation.
     if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`heuristic option ${k} must be a number`)
   }
-  const level = BOT_PROFILES[variant as BotLevel]
+  const level = BOT_PROFILES[variant as HeuristicLevel]
   const profile: BotProfile = skill === undefined ? level : { ...level, skill }
-  const opt: HeuristicOptions = { ...levelOptions(variant as BotLevel), ...constants }
+  const opt: HeuristicOptions = { ...levelOptions(variant as HeuristicLevel), ...constants }
   return {
     id: `heuristic:${variant}`,
     supports: () => true,
