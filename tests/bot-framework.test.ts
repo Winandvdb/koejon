@@ -4,6 +4,7 @@ import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
 import { botAction, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import type { BotConfig } from '../src/bots/bot'
 import { HEURISTIC_LEVELS } from '../src/bots/heuristic'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
@@ -110,6 +111,11 @@ describe('the expert level bot', () => {
     { what: 'the troefke', s: playingState({ bidder: 1, turn: 3, leader: 3, trickAcks: [3], hands }), seat: 1, algorithm: 'pimc' },
     { what: 'a bid', s: dealtState(5, 0), seat: 1, algorithm: 'heuristic:hard' },
   ]
+
+  it('plays cards and the troefke with pimc on 40 worlds, 1 partner world and inference', () => {
+    const config = LEVEL_CONFIGS.expert as BotConfig
+    expect(config.rules[0].use).toEqual({ id: 'pimc', samples: 40, partnerSamples: 1, inference: { model: 'heuristic:hard' } })
+  })
 
   it.each(cases)('decides $what with $algorithm, as botAction does for expert', ({ s, seat, algorithm }) => {
     const tr = trace()

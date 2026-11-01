@@ -117,8 +117,8 @@ export const HARD_PIMC = {
  * the card pimc rates best, on more worlds than `hard`, weighted by the bids
  * and troefke of the other seats (`inference`). One partner world keeps the
  * troefke fast. On the dev Mac most decisions stay under 1.9 s (about 3.7 s
- * on a phone, which is about 2x slower), but a rare card decision on an early
- * trick takes up to 4.4 s (about 9 s on a phone); the 2.5 s target is soft.
+ * on a phone, which is about 2x slower), but a rare card decision takes up
+ * to 4.4 s (about 9 s on a phone); the 2.5 s target is soft.
  * 65.4% against `hard` (#223, docs/bots/search-bots.md).
  */
 export const EXPERT_PIMC = {

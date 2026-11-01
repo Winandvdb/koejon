@@ -241,7 +241,7 @@ the max. A cache of the weight per world, or fewer weighted worlds, can bring it
 
 ## Expert level baseline (#223)
 
-**Final config** (`EXPERT_PIMC` in `src/bots/bot.ts`): `pimc` with `samples` 40, `partnerSamples` 1 and `inference: { model: 'heuristic:hard' }`, no anchor, no margin, and `heuristic:hard` for bids. Against the `hard` level: **65.4% ± 2.1%** (2000 games). Time on a quiet dev Mac: the slowest decision in the 40-game timing run is **1.9 s**, but a rare card decision on an early trick takes up to **4.4 s** (re-timed alone; about 9 s on a phone, which is about 2x slower, #172). The 2.5 s target is soft: a rare slow decision is accepted, and **a test on a real phone gives the final judgement** (the PR gets `needs manual check`). See "Final timing and choice" below.
+**Final config** (`EXPERT_PIMC` in `src/bots/bot.ts`): `pimc` with `samples` 40, `partnerSamples` 1 and `inference: { model: 'heuristic:hard' }`, no anchor, no margin, and `heuristic:hard` for bids. Against the `hard` level: **65.4% ± 2.1%** (2000 games). Time on a quiet dev Mac: the slowest decision in the 40-game timing run is **1.9 s**, but a rare card decision takes up to **4.4 s** (re-timed alone; about 9 s on a phone, which is about 2x slower, #172). The 2.5 s target is soft: a rare slow decision is accepted, and **a test on a real phone gives the final judgement** (the PR gets `needs manual check`). See "Final timing and choice" below.
 
 The first measurements (wave 1) follow. They ran under heavy load. `expert` = pimc without anchor and margin, `heuristic:hard` for bids. Candidates: `samples` 20 / 40 / 80, `partnerSamples` 5.
 Opponent: the `hard` level bot (`pimc-hard` json: samples 10, partnerSamples 2, anchor `heuristic:hard` skill 1, margin 0.4).
@@ -318,7 +318,7 @@ bot rose 1.2 to 2x, the expert's 2.6x. So the tail was searched and re-timed:
 1. Search: a scratch script played the same 1000 seeds as the bench (expert vs `hard` in both
    seatings, and expert self-play, as the bench does: 3000 games), 4 processes in parallel,
    and logged every expert decision over 1500 ms. Over 2500 ms (loaded): 46 decisions in
-   3000 games, 9 of them bid/troefke and 37 card decisions; out of about 540 000 expert decisions.
+   3000 games, 9 of them bid/troefke and 37 card decisions.
 2. Re-time: the 10 slowest decisions, each alone (one process, the match replayed to that
    step with the same random state), 3 times each, with a load average below 4 at the start.
 
