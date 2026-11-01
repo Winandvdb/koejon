@@ -214,7 +214,10 @@ Choices:
   opponents before it, every seat picks per world, so one solver value is the front; and a
   card that surely cannot win (its pimc sum, an upper bound, or its front while an opponent
   plays, is already below the best card) stops. Its trace note ends in `, cut` and its
-  score is an upper bound. A test checks that the cuts never change the choice.
+  score is an upper bound. A test checks that the cuts never change the choice. The
+  paper's cut on the front the seat already has (an opponent node stops once all its
+  vectors are dominated) was built and then removed: it gave about 3% on the first trick,
+  and no test position could reach it, so a broken version passed every test.
 
 Because of choice A and the first shortcut, `M = 2` differs from `pimc` only where the root
 seat moves again before the partner: it plays 3rd or 4th to the trick, and it or the

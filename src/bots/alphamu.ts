@@ -50,12 +50,6 @@ function prune(front: number[][], ws: number[]): number[][] {
 
 const sum = (v: number[]): number => v.reduce((a, b) => a + b, 0)
 
-/** `u` is at least `v` in every world of `ws`. */
-function covers(u: number[], v: number[], ws: number[]): boolean {
-  for (const w of ws) if (u[w] < v[w]) return false
-  return true
-}
-
 /**
  * Every pair of plans of `a` and `b`, combined world by world: where the
  * seat to move sees the deal, it takes the better (`max`) or worse value per world.
@@ -146,12 +140,11 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
 
   /**
    * The front of the position for the worlds `ws`, `m` own-team moves deep.
-   * `alpha`: the front the seat already has at the nearest node where it
-   * moves, over the same worlds. An opponent's combined front only gets
-   * worse with each card, so once it holds nothing better, the seat drops it
-   * anyway. `root`: an opponent's front here ends up as the root card's.
+   * `root`: an opponent's front here ends up as the root card's. (A cut on
+   * the front the seat already has, as in the paper, was removed: it gave
+   * about 3% and no test position could reach it.)
    */
-  function node(m: number, ws: number[], alpha: number[][] | null, root: boolean): number[][] {
+  function node(m: number, ws: number[], root: boolean): number[][] {
     if (m === 0 || played === 6) return [leaf(ws)]
     const mover = turn
     const own = (mover & 1) === team
@@ -164,7 +157,7 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
     if (mover === seat) {
       // Its own hand is the same in every world: every card fits all of them.
       let front: number[][] = []
-      for (let c = 0; c < 24; c++) if (union & (1 << c)) front = prune([...front, ...withCard(c, ws, () => node(m - 1, ws, front, false))], ws)
+      for (let c = 0; c < 24; c++) if (union & (1 << c)) front = prune([...front, ...withCard(c, ws, () => node(m - 1, ws, false))], ws)
       return front
     }
     let acc: number[][] | null = null
@@ -172,14 +165,13 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
       if (!(union & (1 << c))) continue
       const sub = ws.filter((_, i) => masks[i] & (1 << c))
       const all = sub.length === ws.length
-      const front = withCard(c, sub, () => node(own ? m - 1 : m, sub, !own && all ? alpha : null, !own && all && root))
+      const front = withCard(c, sub, () => node(own ? m - 1 : m, sub, !own && all && root))
       if (!all) {
         // A world without this card takes another one: neutral here.
         const skip = ws.filter((_, i) => !(masks[i] & (1 << c)))
         for (const v of front) for (const w of skip) v[w] = own ? -INF : INF
       }
       acc = acc ? product(acc, front, ws, own) : front
-      if (!own && alpha && acc.every((v) => alpha.some((u) => covers(u, v, ws)))) return acc
       if (!own && root && Math.max(...acc.map(sum)) < bar) {
         stopped = true
         return acc
@@ -209,7 +201,7 @@ export function alphamuValues(worlds: State[], seat: number, actions: Action[], 
       continue
     }
     stopped = false
-    const front = withCard(cards[i], all, () => node(M - 1, all, null, cut))
+    const front = withCard(cards[i], all, () => node(M - 1, all, cut))
     out[i] = value(actions[i], front, !stopped)
     if (!stopped) bar = Math.max(bar, out[i].sum)
   }
