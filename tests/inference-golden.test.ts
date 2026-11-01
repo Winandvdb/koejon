@@ -82,6 +82,14 @@ const CASES: [string, AlgorithmSpec, number[], number, string][] = [
     'ec88b80a/663/298 6f6bd472/758/327 5e973868/554/257 307a32f9/484/205 e8f880a7/734/337 6309b672/650/293 169886b7/545/255 4d7d64ab/506/223',
   ],
   ['pimc', { id: 'pimc', samples: 4, partnerSamples: 2 }, [5, 6], 250, '3db1ad4b/250/3436 4c206dd2/250/2777'],
+  // The hard level's card play (LEVEL_CONFIGS.hard): pimc anchored to heuristic:hard.
+  [
+    'hard level pimc',
+    { id: 'pimc', samples: 10, partnerSamples: 2, anchor: { id: 'heuristic:hard', skill: 1 }, margin: 0.4 },
+    [5, 6],
+    250,
+    'f93a0482/250/6944 c90484fb/250/6191',
+  ],
   ['mcts', { id: 'mcts', iterations: 60, worlds: 3 }, [5], 150, '137a6069/150/19472'],
   ['ismcts', { id: 'ismcts', iterations: 60 }, [5], 150, '112ec942/150/53487'],
 ]
