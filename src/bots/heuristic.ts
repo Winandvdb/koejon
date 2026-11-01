@@ -149,6 +149,67 @@ export function levelOptions(level: HeuristicLevel): HeuristicOptions {
 
 export const TROEFKE_CHANCE = HEURISTIC_DEFAULTS.troefkeChance
 
+// ---- Chance ------------------------------------------------------------------
+
+/**
+ * The random choices of a decision. `decide` draws them from `rand`, one
+ * number each, as before; `policy` follows every branch with its chance. So
+ * both run the same rules.
+ */
+interface Dice {
+  /** True with chance `p`. */
+  chance(p: number): boolean
+  /** One of 0..n-1, each with chance 1/n. */
+  index(n: number): number
+}
+
+const randDice = (rand: () => number): Dice => ({
+  chance: (p) => rand() < p,
+  index: (n) => Math.floor(rand() * n),
+})
+
+/**
+ * Every outcome of `run` with its chance: it runs once per branch of its
+ * dice. A sure chance (0 or 1) does not branch.
+ */
+function outcomes<T>(run: (dice: Dice) => T): { value: T; p: number }[] {
+  const out: { value: T; p: number }[] = []
+  const todo: number[][] = [[]]
+  while (todo.length > 0) {
+    const path = todo.pop()!
+    const taken: number[] = []
+    let p = 1
+    // The next branch: forced by `path`, else the first one, the others queued.
+    const branch = (n: number): number => {
+      if (taken.length < path.length) return taken[taken.push(path[taken.length]) - 1]
+      for (let k = 1; k < n; k++) todo.push([...taken, k])
+      taken.push(0)
+      return 0
+    }
+    const value = run({
+      chance(q) {
+        if (q >= 1) return true
+        if (q <= 0) return false
+        const k = branch(2)
+        p *= k === 0 ? q : 1 - q
+        return k === 0
+      },
+      index(n) {
+        p /= n
+        return branch(n)
+      },
+    })
+    out.push({ value, p })
+  }
+  return out
+}
+
+const sameAction = (a: Action, b: Action): boolean =>
+  a.type === b.type &&
+  (a.type !== 'play' || (b.type === 'play' && sameCard(a.card, b.card))) &&
+  (a.type !== 'bid' || (b.type === 'bid' && a.play === b.play)) &&
+  (a.type !== 'choose' || (b.type === 'choose' && a.suit === b.suit))
+
 // ---- Small helpers -----------------------------------------------------------
 
 /** Note why a card was picked, for the trace. */
@@ -362,8 +423,8 @@ function rateHand(hand: Card[], trump: Suit): number {
 // Moved to the shared conventions; still exported here for older imports.
 export { troefkeHand }
 
-function wantsTroefke(s: Observation, rand: () => number, opt: HeuristicOptions): boolean {
-  return troefkeHand(s.hand, s.trump!) && rand() < opt.troefkeChance
+function wantsTroefke(s: Observation, dice: Dice, opt: HeuristicOptions): boolean {
+  return troefkeHand(s.hand, s.trump!) && dice.chance(opt.troefkeChance)
 }
 
 // ---- Card play -----------------------------------------------------------------
@@ -619,7 +680,7 @@ function followCard(
 
 function choosePlayCard(
   s: Observation,
-  rand: () => number,
+  dice: Dice,
   profile: BotProfile,
   opt: HeuristicOptions,
   why: string[],
@@ -637,11 +698,11 @@ function choosePlayCard(
       why.push('ignored troefke: the partner of the bidder has no trump')
   }
   // Imperfect on purpose: sometimes fall back to a lazy card.
-  if (rand() < profile.skill) return smart
+  if (dice.chance(profile.skill)) return smart
   // The smart rule did not decide, so its reason stays out of the trace.
   why.length = 0
   why.push('lazy dump')
-  if (profile.lazy === 'random') return because(why, 'random card', legal[Math.floor(rand() * legal.length)])
+  if (profile.lazy === 'random') return because(why, 'random card', legal[dice.index(legal.length)])
   return dump(s.trick, s.seat, legal, s.trump!)
 }
 
@@ -649,7 +710,7 @@ function choosePlayCard(
 
 function decide(
   s: Observation,
-  rand: () => number,
+  dice: Dice,
   profile: BotProfile,
   opt: HeuristicOptions,
   why: string[],
@@ -659,7 +720,7 @@ function decide(
   switch (first.type) {
     case 'ack': {
       const t = s.legal.find((a) => a.type === 'troefke')
-      if (t && profile.tactics && wantsTroefke(s, rand, opt)) return because(why, 'troefke: strong trumps', t)
+      if (t && profile.tactics && wantsTroefke(s, dice, opt)) return because(why, 'troefke: strong trumps', t)
       return because(why, 'no troefke', first)
     }
     case 'bid': {
@@ -697,7 +758,7 @@ function decide(
       const play =
         (solid && !waits && rating >= threshold) ||
         (profile.tactics &&
-          ((knijpen && (rating >= opt.knijpMin || rand() < opt.knijpChance)) ||
+          ((knijpen && (rating >= opt.knijpMin || dice.chance(opt.knijpChance))) ||
             (decisive && solid && rating >= threshold - 2)))
       why.push(
         `bid: rating ${rating} vs threshold ${Number(threshold.toFixed(2))}` +
@@ -724,7 +785,7 @@ function decide(
         return because(why, 'choose: no tactics, random', {
           type: 'choose',
           seat,
-          suit: rand() < 0.7 ? suits[Math.floor(rand() * suits.length)] : null,
+          suit: dice.chance(0.7) ? suits[dice.index(suits.length)] : null,
         })
       }
       let p: number
@@ -737,10 +798,10 @@ function decide(
         const top = Math.max(...suits.map(rankOf))
         p = top >= RANK_ORDER['A'] ? opt.dealerAce : top >= RANK_ORDER['K'] ? opt.dealerKing : opt.dealerWeak
       }
-      return because(why, `choose: go with chance ${p}`, { type: 'choose', seat, suit: rand() < p ? best : null })
+      return because(why, `choose: go with chance ${p}`, { type: 'choose', seat, suit: dice.chance(p) ? best : null })
     }
     case 'play':
-      return { type: 'play', seat, card: choosePlayCard(s, rand, profile, opt, why) }
+      return { type: 'play', seat, card: choosePlayCard(s, dice, profile, opt, why) }
     default:
       throw new Error(`heuristic cannot decide ${first.type}`)
   }
@@ -774,9 +835,16 @@ export function createHeuristic(variant: string | undefined, options: Record<str
     supports: () => true,
     decide(obs: Observation, rand: () => number, trace?: BotTrace): Action {
       const why: string[] = []
-      const a = decide(obs, rand, profile, opt, why)
+      const a = decide(obs, randDice(rand), profile, opt, why)
       trace?.notes.push(...why)
       return a
+    },
+    policy(obs: Observation) {
+      const all = outcomes((dice) => decide(obs, dice, profile, opt, []))
+      return obs.legal.map((action) => ({
+        action,
+        p: all.reduce((sum, o) => (sameAction(o.value, action) ? sum + o.p : sum), 0),
+      }))
     },
   }
 }
