@@ -241,7 +241,7 @@ the max. A cache of the weight per world, or fewer weighted worlds, can bring it
 
 ## Expert level baseline (#223)
 
-**Final config** (`EXPERT_PIMC` in `src/bots/bot.ts`): `pimc` with `samples` 40, `partnerSamples` 1 and `inference: { model: 'heuristic:hard' }`, no anchor, no margin, and `heuristic:hard` for bids. Against the `hard` level: **65.4% ± 2.1%** (2000 games). Slowest decision on a quiet dev Mac: **1.9 s** (target 2.5 s), so about 3.7 s on a phone (a phone is about 2x slower, #172). See "Final timing and choice" below.
+**Final config** (`EXPERT_PIMC` in `src/bots/bot.ts`): `pimc` with `samples` 40, `partnerSamples` 1 and `inference: { model: 'heuristic:hard' }`, no anchor, no margin, and `heuristic:hard` for bids. Against the `hard` level: **65.4% ± 2.1%** (2000 games). Time on a quiet dev Mac: the slowest decision in the 40-game timing run is **1.9 s**, but a rare card decision on an early trick takes up to **4.4 s** (re-timed alone; about 9 s on a phone, which is about 2x slower, #172). The 2.5 s target is soft: a rare slow decision is accepted, and **a test on a real phone gives the final judgement** (the PR gets `needs manual check`). See "Final timing and choice" below.
 
 The first measurements (wave 1) follow. They ran under heavy load. `expert` = pimc without anchor and margin, `heuristic:hard` for bids. Candidates: `samples` 20 / 40 / 80, `partnerSamples` 5.
 Opponent: the `hard` level bot (`pimc-hard` json: samples 10, partnerSamples 2, anchor `heuristic:hard` skill 1, margin 0.4).
@@ -304,10 +304,46 @@ one bench at a time:
 | 20 / 2, inference | 3.77 / 6.84 | 61.8% ± 2.1% (1235/2000) | 59.7%: fails the 60% target |
 | **40 / 1, inference** | 3.08 / 8.10 | **65.4% ± 2.1% (1308/2000)** | **63.3%: meets it** |
 
-The max times of these runs (2.5 s and 4.9 s) come from 3 parallel jobs with the load going
-up to 8 from other work on the Mac. They are not valid timings; the table above is.
+Max time per decision kind in these runs (3 parallel jobs; the times include the self-play
+matches of the bench):
+
+| Config | bid/troefke max ms | play max ms |
+|---|---|---|
+| 20 / 2, inference | 2485 | 2444 |
+| 40 / 1, inference | 2527 | 4853 |
+
+The 40-game timing run above misses the tail of 40 / 1: in these runs the max of the `hard`
+bot rose 1.2 to 2x, the expert's 2.6x. So the tail was searched and re-timed:
+
+1. Search: a scratch script played the same 1000 seeds as the bench (expert vs `hard` in both
+   seatings, and expert self-play, as the bench does: 3000 games), 4 processes in parallel,
+   and logged every expert decision over 1500 ms. Over 2500 ms (loaded): 46 decisions in
+   3000 games, 9 of them bid/troefke and 37 card decisions; out of about 540 000 expert decisions.
+2. Re-time: the 10 slowest decisions, each alone (one process, the match replayed to that
+   step with the same random state), 3 times each, with a load average below 4 at the start.
+
+| Seed, match, step | Kind | Loaded ms | Quiet ms (3 runs) |
+|---|---|---|---|
+| 543, self-play, 475 | card | 5533 | 4388 / 4307 / 4295 |
+| 671, expert first, 68 | card | 4301 | 3709 / 3716 / 3721 |
+| 804, self-play, 267 | troefke | 3912 | 1445 / 1451 / 1455 |
+| 780, self-play, 500 | card | 3582 | 1135 / 1148 / 1149 |
+| 795, expert first, 434 | troefke | 3500 | 1439 / 1433 / 1417 |
+| 493, expert second, 521 | card | 3411 | 2665 / 2702 / 2650 |
+| 475, expert second, 67 | troefke | 3321 | 1599 / 1599 / 1566 |
+| 545, expert first, 277 | card | 3295 | 2839 / 2850 / 2804 |
+| 718, expert second, 371 | card | 3265 | 633 / 617 / 634 |
+| 431, self-play, 488 | card | 3231 | 1529 / 1524 / 1478 |
+
+The quiet max is **4.4 s** on the Mac (about 9 s on a phone). 4 of the 10 stay over 2.5 s,
+all card decisions; the 3 re-timed troefke decisions stay under 1.6 s. So a decision over 2.5 s occurs at most
+46 times in 3000 games (an upper bound: loaded times), and at least 4 times. Cause: the
+double-dummy solver (`solve`), about 95% of the time in a CPU profile of the 4.4 s decision,
+on 40 worlds with many cards left. Sampling (`sampleWorld`) and the inference weights take
+less than 5%: rejection sampling is not the cause.
 
 Choice: `EXPERT_PIMC` = 40 / 1 with inference. 20 samples with inference was preferred, but
-20 / 2 fails the target by 0.3 points. 40 / 1 gives 4 points more for a slowest decision of
-1.9 s on the Mac (about 3.7 s on a phone). Its average card decision is about 2x that of
-20 samples (66 against 34 ms).
+20 / 2 fails the target by 0.3 points. 40 / 1 gives 4 points more. Its average card decision is
+about 2x that of 20 samples (66 against 34 ms), and a rare card decision takes up to 4.4 s on
+the Mac (about 9 s on a phone). The user accepts a rare slow decision (a human also thinks
+longer on a hard play); a test on a real phone decides.
