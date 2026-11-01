@@ -241,7 +241,9 @@ the max. A cache of the weight per world, or fewer weighted worlds, can bring it
 
 ## Expert level baseline (#223)
 
-`expert` = pimc without anchor and margin, `heuristic:hard` for bids. Candidates: `samples` 20 / 40 / 80, `partnerSamples` 5.
+**Final config** (`EXPERT_PIMC` in `src/bots/bot.ts`): `pimc` with `samples` 40, `partnerSamples` 1 and `inference: { model: 'heuristic:hard' }`, no anchor, no margin, and `heuristic:hard` for bids. Against the `hard` level: **65.4% ± 2.1%** (2000 games). Slowest decision on a quiet dev Mac: **1.9 s** (target 2.5 s), so about 3.7 s on a phone (a phone is about 2x slower, #172). See "Final timing and choice" below.
+
+The first measurements (wave 1) follow. They ran under heavy load. `expert` = pimc without anchor and margin, `heuristic:hard` for bids. Candidates: `samples` 20 / 40 / 80, `partnerSamples` 5.
 Opponent: the `hard` level bot (`pimc-hard` json: samples 10, partnerSamples 2, anchor `heuristic:hard` skill 1, margin 0.4).
 Timing: `--jobs 1 --matches 20` (40 games), measured under heavy load on the dev Mac (load average 10 to 18, other benches ran at the same time), so every time is inflated.
 
@@ -265,6 +267,47 @@ Win rate against the `hard` level bot, seats swapped (each seed is played twice)
 Choices:
 
 - 80 samples is rejected on time: the slowest decision was 15 s in the timing run, far over the 2.5 s limit, so its win rate was not benched at 1000 matches.
-- `EXPERT_PIMC` stays at 20 / 5 as a placeholder. Clean timings on an idle Mac and the final choice are for wave 2.
+- Wave 1 kept `EXPERT_PIMC` at 20 / 5 as a placeholder. Wave 2 below replaces it.
 - 60.8% ± 2.1% does not yet prove the 60% target (the lower bound is 58.7%). The 40-sample point is higher (65.6% ± 2.9%) but its slowest decision (10 s in the loaded timing run) is also over the limit.
 - The slowest decisions are bid/troefke decisions (partner model with `partnerSamples`).
+
+### Final timing and choice (wave 2)
+
+After the merge of #90 (`inference`). Each candidate against the `hard` level bot (`pimc-hard`
+json above), `npm run bench -- --a <cfg> --b <hard> --matches 20 --jobs 1` (40 games, both bots
+timed in the same run). A run started only when the 1-minute load average was below 4; other
+agents used the Mac during some runs, so the load after the run is also given. Times are per
+real decision; bid/troefke = the `bidding` count of the bench (the troefke by pimc, bids by
+`heuristic:hard`). The win rates of 40 games are noise only.
+
+| Config (`samples` / `partnerSamples`, inference) | Load before / after | bid/troefke avg / max ms | play avg / max ms | Win rate (40 games) |
+|---|---|---|---|---|
+| 20 / 1, inference | 3.75 / 12.90 | 15.4 / 1362 | 36.3 / 1235 | 67.5% ± 14.5% |
+| 20 / 1 | 3.45 / 4.97 | 13.6 / 1049 | 34.5 / 1499 | 57.5% ± 15.3% |
+| 20 / 2, inference | 3.85 / 3.06 | 28.0 / 1903 | 34.2 / 1039 | 65.0% ± 14.8% |
+| 20 / 2 | 3.06 / 5.16 | 22.9 / 1771 | 33.0 / 1404 | 60.0% ± 15.2% |
+| 20 / 3, inference | 3.30 / 6.80 | 40.0 / 2382 | 34.0 / 1169 | 67.5% ± 14.5% |
+| 20 / 3 | 2.13 / 2.41 | 35.4 / 2378 | 33.0 / 1391 | 62.5% ± 15.0% |
+| 30 / 1, inference | 2.41 / 2.13 | 22.6 / 1520 | 49.6 / 1718 | 62.5% ± 15.0% |
+| 40 / 1, inference | 2.13 / 7.58 | 27.7 / 1813 | 65.6 / 1865 | 62.5% ± 15.0% |
+| `hard` (10 / 2, anchor; from the same runs) | | 12.8 to 15.1 / 1421 to 1528 | 16.8 to 18.0 / 552 to 785 | |
+
+All candidates stay under 2500 ms for every decision kind. `partnerSamples` drives the
+troefke cost: 1 → 2 → 3 partner worlds gives a max of about 1.4 → 1.9 → 2.4 s at 20 samples.
+More `samples` drive the card time.
+
+Full benches against the `hard` level, `--matches 1000 --jobs 3` (2000 games, sides swapped),
+one bench at a time:
+
+| Config | Load before / after | Win rate | Lower bound |
+|---|---|---|---|
+| 20 / 2, inference | 3.77 / 6.84 | 61.8% ± 2.1% (1235/2000) | 59.7%: fails the 60% target |
+| **40 / 1, inference** | 3.08 / 8.10 | **65.4% ± 2.1% (1308/2000)** | **63.3%: meets it** |
+
+The max times of these runs (2.5 s and 4.9 s) come from 3 parallel jobs with the load going
+up to 8 from other work on the Mac. They are not valid timings; the table above is.
+
+Choice: `EXPERT_PIMC` = 40 / 1 with inference. 20 samples with inference was preferred, but
+20 / 2 fails the target by 0.3 points. 40 / 1 gives 4 points more for a slowest decision of
+1.9 s on the Mac (about 3.7 s on a phone). Its average card decision is about 2x that of
+20 samples (66 against 34 ms).

@@ -97,7 +97,7 @@ describe('the hard level bot', () => {
 })
 
 describe('the expert level bot', () => {
-  it('plays a card with pimc on EXPERT_PIMC worlds and no anchor, as botAction does', () => {
+  it('plays a card with pimc on EXPERT_PIMC worlds, with inference and no anchor, as botAction does', () => {
     const hands = [
       [C('C', 'J'), C('C', 'Q'), C('D', 'J'), C('D', 'Q'), C('S', 'J'), C('S', 'Q')],
       [C('H', '9'), C('H', 'J'), C('H', 'K'), C('S', '9'), C('C', '9'), C('D', '9')],
@@ -109,6 +109,8 @@ describe('the expert level bot', () => {
     const a = createBot(LEVEL_CONFIGS.expert).decide(s, 3, seededRandom(1), tr)
     expect(tr.algorithm).toBe('pimc')
     expect(tr.notes).toContainEqual(expect.stringMatching(new RegExp(`^pimc: ${EXPERT_PIMC.samples} worlds`)))
+    expect(EXPERT_PIMC).toEqual({ samples: 40, partnerSamples: 1, inference: { model: 'heuristic:hard' } })
+    expect(tr.notes).toContainEqual(expect.stringMatching(/^inference heuristic:hard: /))
     expect(tr.notes.some((n) => n.startsWith('anchor'))).toBe(false)
     expect(tr.candidates.some((c) => c.note?.includes('anchor'))).toBe(false)
     expect(botAction(s, 3, seededRandom(1), 'expert')).toEqual(a)

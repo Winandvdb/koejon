@@ -11,7 +11,7 @@ Agreed with the user. Each target holds with the ± margin of `npm run bench` (9
 |---|---|---|
 | `hard` level bot vs `heuristic:normal` | at least 75% | `npm run bench -- --level hard --b heuristic:normal --matches 200` |
 | `heuristic:normal` vs `heuristic:easy` | at least 75% | `npm run bench -- --a heuristic:normal --b heuristic:easy --matches 1000` |
-| `expert` level bot vs `hard` level bot (#223) | at least 60% | `npm run bench -- --a '{"name":"pimc-expert","rules":[{"use":{"id":"pimc","samples":20,"partnerSamples":5}},{"use":"heuristic:hard"}]}' --b '{"name":"pimc-hard","rules":[{"use":{"id":"pimc","samples":10,"partnerSamples":2,"anchor":{"id":"heuristic:hard","skill":1},"margin":0.4}},{"use":"heuristic:hard"}]}' --matches 1000 --jobs 3` (`search-bots.md`, "Expert level baseline") |
+| `expert` level bot vs `hard` level bot (#223) | at least 60% | `npm run bench -- --a '{"name":"pimc-expert","rules":[{"use":{"id":"pimc","samples":40,"partnerSamples":1,"inference":{"model":"heuristic:hard"}}},{"use":"heuristic:hard"}]}' --b '{"name":"pimc-hard","rules":[{"use":{"id":"pimc","samples":10,"partnerSamples":2,"anchor":{"id":"heuristic:hard","skill":1},"margin":0.4}},{"use":"heuristic:hard"}]}' --matches 1000 --jobs 3` (`search-bots.md`, "Expert level baseline"). Result: 65.4% ± 2.1% (2000 games); slowest decision 1.9 s on the dev Mac, about 3.7 s on a phone |
 
 A bot change that moves a level must keep all three targets.
 
