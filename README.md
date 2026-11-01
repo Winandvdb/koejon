@@ -190,7 +190,7 @@ Header:
 |---|---|
 | `Format` | `KJN/1` |
 | `App` | Build (short commit) that recorded the match |
-| `Seats` | Four of `human`, `bot-easy`, `bot-normal`, `bot-hard`, `mixed` (switched mid-match), seat 0 first |
+| `Seats` | Four of `human`, `bot-easy`, `bot-normal`, `bot-hard`, `bot-expert`, `mixed` (switched mid-match), seat 0 first |
 | `Winner` | Winning team. Only in a finished match |
 | `Lines` | Lines left per team at the end, `"team0 team1"`. With `Winner` |
 

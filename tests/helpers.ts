@@ -1,7 +1,8 @@
 import { apply, createMatch, legalActions, pendingSeats, RANK_ORDER, rngShuffle } from '../src/engine'
 import type { Action, Card, State, Suit, TrickCard } from '../src/engine'
 import { botAction, createBot } from '../src/bots/bot'
-import type { Bot, BotLevel } from '../src/bots/bot'
+import type { Bot } from '../src/bots/bot'
+import type { HeuristicLevel } from '../src/bots/heuristic'
 import type { BotTrace } from '../src/bots/algorithm'
 import { newKjn, recordAction, serializeKjn } from '../src/lib/kjn'
 import type { KeyValueStore } from '../src/lib/storage'
@@ -29,7 +30,7 @@ export function finishedMatch(seed: number): { final: State; kjn: string } {
  * finds situations that are rare in a hand-played game, in the real game flow.
  */
 export function scanMatches(
-  level: BotLevel,
+  level: HeuristicLevel,
   seeds: number,
   visit: (s: State, a: Action, notes: string[], trace: BotTrace) => void,
   bot: Bot = createBot(`heuristic:${level}`),
@@ -84,7 +85,7 @@ export function oppMayTrump(s: State, seat: number): boolean {
 }
 
 /** Real decisions of a `heuristic:<level>` match: more than one legal action, not a lift or the first dealer. */
-export function decisions(seed: number, level: BotLevel): { s: State; seat: number }[] {
+export function decisions(seed: number, level: HeuristicLevel): { s: State; seat: number }[] {
   const bot = createBot(`heuristic:${level}`)
   const out: { s: State; seat: number }[] = []
   let s = createMatch(seed)

@@ -185,3 +185,165 @@ The `hard` level stays on `pimc` with `heuristic:hard` bids:
   engine state, not on the bitmask `Hand`.
 - `c` (0.7) and the MAST settings are not tuned.
 - No `ismcts` timing on a real phone.
+
+## 8. Inference (#90)
+
+Option `inference: { model: <algorithm spec> }` on `pimc`, `mcts` and `ismcts`
+(`src/bots/inference.ts`). Each sampled world gets a weight: the product of the chances
+that the model (`policy`) gives to the bids and troefke choices that the other seats made
+this hand, each from that seat's own view then, with the hand it holds in that world. The
+product has a floor of 0.05. `sampleWorld` keeps a world with a chance equal to its weight
+(rejection sampling). The model reads no card play yet. A dealer's bid or choice is left
+out: the dealer decides without seeing its hand, so the chance is the same in every world.
+The trace gets one note with the effective sample size, (Σw)² / Σw², of the weights
+computed for the decision.
+
+The model is `heuristic:hard`. Its `policy` comes from the same code as its `decide`: each
+random choice (`knijpChance`, `troefkeChance`, the dealer's choice, the lazy card) is a
+branch with its chance. A bench of `heuristic:hard` against `origin/develop@heuristic:hard`
+(200 matches per side, 400 played) gave exactly 50.0%, with the same decision counts.
+
+### Benches
+
+All with `heuristic:hard` bids, `--jobs 3`, while two other benches ran on the same Mac.
+The match count is the count that the bench prints (each seed played twice, sides swapped).
+
+| Bench | Matches | Win rate of the first bot |
+|---|---|---|
+| `pimc` 20 + inference, model replaces the bidder's troefke read (REPLACE) vs `pimc` 20 | 1000 | 51.1% ± 3.1% |
+| `pimc` 20 + inference, multiplied with all of `troefkeWeight` (COMBINE) vs `pimc` 20 | 1000 | 50.7% ± 3.1% |
+| `pimc` 20 + inference (REPLACE) vs the `hard` level (`pimc` 10, partner 2, anchor, margin 0.4) | 2000 | 62.6% ± 2.1% |
+| `ismcts` 1000 + inference vs `ismcts` 1000 (cards only) | 1000 | 51.8% ± 3.1% |
+
+REPLACE and COMBINE are equal within the noise. The code uses REPLACE: the model reads the
+troefke itself (also a troefke not asked), and only the half of `troefkeWeight` that reads
+an ignored troefke stays, because the model reads no card play. Against today's `pimc` the
+gain is small (about +1 point, not significant). Most of the 62.6% against the `hard` level
+comes from 20 worlds without the anchor, not from the inference: no bench of plain
+`pimc` 20 against the `hard` level was run here.
+
+### Time per decision
+
+`--jobs 1`, both bots in one run, so they are measured back to back. Measured under load
+(other benches on the Mac): the absolute times are too high, the ratio counts.
+
+| Run (load average before / after) | Decision | With inference avg / max | Without avg / max |
+|---|---|---|---|
+| `pimc` 20, 40 matches (3.0 / 5.6) | card | 33.7 / 1025 ms | 33.7 / 1112 ms |
+| | bidding (troefke by pimc, bids by heuristic) | 49.7 / 3557 ms | 60.3 / 4498 ms |
+| `ismcts` 1000, 20 matches (5.6 / 2.9) | card | 91.9 / 1536 ms | 39.7 / 494 ms |
+
+For `pimc` the inference costs no measurable time: 20 worlds, and a few rejected ones, each
+with a few calls of the heuristic's bid policy, are small next to the solver. The max over
+2.5 s is the troefke decision of `pimc` with 5 partner worlds, with and without inference.
+`ismcts` weighs a new world in every iteration: about 2.3 times the average time and 3 times
+the max. A cache of the weight per world, or fewer weighted worlds, can bring it down.
+
+## Expert level baseline (#223)
+
+**Final config** (`EXPERT_PIMC` in `src/bots/bot.ts`): `pimc` with `samples` 40, `partnerSamples` 1 and `inference: { model: 'heuristic:hard' }`, no anchor, no margin, and `heuristic:hard` for bids. Against the `hard` level: **65.4% ± 2.1%** (2000 games). Time on a quiet dev Mac: the slowest decision in the 40-game timing run is **1.9 s**, but a rare card decision takes up to **4.4 s** (re-timed alone; about 9 s on a phone, which is about 2x slower, #172). The 2.5 s target is soft: a rare slow decision is accepted, and **a test on a real phone gives the final judgement** (the PR gets `needs manual check`). See "Final timing and choice" below.
+
+The first measurements (wave 1) follow. They ran under heavy load. `expert` = pimc without anchor and margin, `heuristic:hard` for bids. Candidates: `samples` 20 / 40 / 80, `partnerSamples` 5.
+Opponent: the `hard` level bot (`pimc-hard` json: samples 10, partnerSamples 2, anchor `heuristic:hard` skill 1, margin 0.4).
+Timing: `--jobs 1 --matches 20` (40 games), measured under heavy load on the dev Mac (load average 10 to 18, other benches ran at the same time), so every time is inflated.
+
+| samples | win rate vs hard (20 matches, noise only) | bid/troefke avg ms | bid/troefke max ms | play avg ms | play max ms |
+|---|---|---|---|---|---|
+| 20 | 62.5% ± 15.0% | 62 | 4167 | 35 | 1992 |
+| 40 | 62.5% ± 15.0% | 150 | 10247 | 74 | 2457 |
+| 80 | 75.0% ± 13.4% | 254 | 15355 | 141 | 4123 |
+| hard (10/2, for reference) | | 14.5 | 1562 | 18.7 | 1026 |
+
+Win rate against the `hard` level bot, seats swapped (each seed is played twice), run with `--jobs 3` under heavy and varying load (the Mac paused for hours, so the max times of these runs are not valid and are not given; the avg times are inflated):
+
+| samples | matches | win rate vs hard | avg ms bid/troefke | avg ms play |
+|---|---|---|---|---|
+| 20 (`partnerSamples` 5) | 1000 (2000 games) | 60.8% ± 2.1% | 96.7 | 51.3 |
+| 40 (`partnerSamples` 5) | 500 (1000 games) | 65.6% ± 2.9% | 393.3 | 230.1 |
+| 80 (`partnerSamples` 5) | not run | 75.0% ± 13.4% in the 20-match timing run (noise) | | |
+
+(`hard` in the same runs: 19.3 / 24.2 ms avg in the 20-sample run.)
+
+Choices:
+
+- 80 samples is rejected on time: the slowest decision was 15 s in the timing run, far over the 2.5 s limit, so its win rate was not benched at 1000 matches.
+- Wave 1 kept `EXPERT_PIMC` at 20 / 5 as a placeholder. Wave 2 below replaces it.
+- 60.8% ± 2.1% does not yet prove the 60% target (the lower bound is 58.7%). The 40-sample point is higher (65.6% ± 2.9%) but its slowest decision (10 s in the loaded timing run) is also over the limit.
+- The slowest decisions are bid/troefke decisions (partner model with `partnerSamples`).
+
+### Final timing and choice (wave 2)
+
+After the merge of #90 (`inference`). Each candidate against the `hard` level bot (`pimc-hard`
+json above), `npm run bench -- --a <cfg> --b <hard> --matches 20 --jobs 1` (40 games, both bots
+timed in the same run). A run started only when the 1-minute load average was below 4; other
+agents used the Mac during some runs, so the load after the run is also given. Times are per
+real decision; bid/troefke = the `bidding` count of the bench (the troefke by pimc, bids by
+`heuristic:hard`). The win rates of 40 games are noise only.
+
+| Config (`samples` / `partnerSamples`, inference) | Load before / after | bid/troefke avg / max ms | play avg / max ms | Win rate (40 games) |
+|---|---|---|---|---|
+| 20 / 1, inference | 3.75 / 12.90 | 15.4 / 1362 | 36.3 / 1235 | 67.5% ± 14.5% |
+| 20 / 1 | 3.45 / 4.97 | 13.6 / 1049 | 34.5 / 1499 | 57.5% ± 15.3% |
+| 20 / 2, inference | 3.85 / 3.06 | 28.0 / 1903 | 34.2 / 1039 | 65.0% ± 14.8% |
+| 20 / 2 | 3.06 / 5.16 | 22.9 / 1771 | 33.0 / 1404 | 60.0% ± 15.2% |
+| 20 / 3, inference | 3.30 / 6.80 | 40.0 / 2382 | 34.0 / 1169 | 67.5% ± 14.5% |
+| 20 / 3 | 2.13 / 2.41 | 35.4 / 2378 | 33.0 / 1391 | 62.5% ± 15.0% |
+| 30 / 1, inference | 2.41 / 2.13 | 22.6 / 1520 | 49.6 / 1718 | 62.5% ± 15.0% |
+| 40 / 1, inference | 2.13 / 7.58 | 27.7 / 1813 | 65.6 / 1865 | 62.5% ± 15.0% |
+| `hard` (10 / 2, anchor; from the same runs) | | 12.8 to 15.1 / 1421 to 1528 | 16.8 to 18.0 / 552 to 785 | |
+
+All candidates stay under 2500 ms for every decision kind. `partnerSamples` drives the
+troefke cost: 1 → 2 → 3 partner worlds gives a max of about 1.4 → 1.9 → 2.4 s at 20 samples.
+More `samples` drive the card time.
+
+Full benches against the `hard` level, `--matches 1000 --jobs 3` (2000 games, sides swapped),
+one bench at a time:
+
+| Config | Load before / after | Win rate | Lower bound |
+|---|---|---|---|
+| 20 / 2, inference | 3.77 / 6.84 | 61.8% ± 2.1% (1235/2000) | 59.7%: fails the 60% target |
+| **40 / 1, inference** | 3.08 / 8.10 | **65.4% ± 2.1% (1308/2000)** | **63.3%: meets it** |
+
+Max time per decision kind in these runs (3 parallel jobs; the times include the self-play
+matches of the bench):
+
+| Config | bid/troefke max ms | play max ms |
+|---|---|---|
+| 20 / 2, inference | 2485 | 2444 |
+| 40 / 1, inference | 2527 | 4853 |
+
+The 40-game timing run above misses the tail of 40 / 1: in these runs the max of the `hard`
+bot rose 1.2 to 2x, the expert's 2.6x. So the tail was searched and re-timed:
+
+1. Search: a scratch script played the same 1000 seeds as the bench (expert vs `hard` in both
+   seatings, and expert self-play, as the bench does: 3000 games), 4 processes in parallel,
+   and logged every expert decision over 1500 ms. Over 2500 ms (loaded): 46 decisions in
+   3000 games, 9 of them bid/troefke and 37 card decisions.
+2. Re-time: the 10 slowest decisions, each alone (one process, the match replayed to that
+   step with the same random state), 3 times each, with a load average below 4 at the start.
+
+| Seed, match, step | Kind | Loaded ms | Quiet ms (3 runs) |
+|---|---|---|---|
+| 543, self-play, 475 | card | 5533 | 4388 / 4307 / 4295 |
+| 671, expert first, 68 | card | 4301 | 3709 / 3716 / 3721 |
+| 804, self-play, 267 | troefke | 3912 | 1445 / 1451 / 1455 |
+| 780, self-play, 500 | card | 3582 | 1135 / 1148 / 1149 |
+| 795, expert first, 434 | troefke | 3500 | 1439 / 1433 / 1417 |
+| 493, expert second, 521 | card | 3411 | 2665 / 2702 / 2650 |
+| 475, expert second, 67 | troefke | 3321 | 1599 / 1599 / 1566 |
+| 545, expert first, 277 | card | 3295 | 2839 / 2850 / 2804 |
+| 718, expert second, 371 | card | 3265 | 633 / 617 / 634 |
+| 431, self-play, 488 | card | 3231 | 1529 / 1524 / 1478 |
+
+The quiet max is **4.4 s** on the Mac (about 9 s on a phone). 4 of the 10 stay over 2.5 s,
+all card decisions; the 3 re-timed troefke decisions stay under 1.6 s. So a decision over 2.5 s occurs at most
+46 times in 3000 games (an upper bound: loaded times), and at least 4 times. Cause: the
+double-dummy solver (`solve`), about 95% of the time in a CPU profile of the 4.4 s decision,
+on 40 worlds with many cards left. Sampling (`sampleWorld`) and the inference weights take
+less than 5%: rejection sampling is not the cause.
+
+Choice: `EXPERT_PIMC` = 40 / 1 with inference. 20 samples with inference was preferred, but
+20 / 2 fails the target by 0.3 points. 40 / 1 gives 4 points more. Its average card decision is
+about 2x that of 20 samples (66 against 34 ms), and a rare card decision takes up to 4.4 s on
+the Mac (about 9 s on a phone). The user accepts a rare slow decision (a human also thinks
+longer on a hard play); a test on a real phone decides.

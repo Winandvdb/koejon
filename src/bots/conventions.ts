@@ -70,10 +70,16 @@ export function troefkeWeight(obs: Observation): ((world: State) => number) | un
     const own = played.flatMap((tc) => (tc.seat === bidder ? [tc.card] : []))
     parts.push((world) => (troefkeHand([...world.hands[bidder], ...own], trump) ? 1 : WEAK_TROEFKE))
   }
-  const ignored = troefkeIgnored(obs)
-  if (ignored !== null && ignored !== obs.seat) {
-    parts.push((world) => (world.hands[ignored].some((c) => c.s === trump) ? WEAK_TROEFKE : 1))
-  }
+  const ignoredPart = troefkeIgnoredWeight(obs)
+  if (ignoredPart) parts.push(ignoredPart)
   if (parts.length === 0) return undefined
   return (world) => parts.reduce((w, part) => w * part(world), 1)
+}
+
+/** The ignored-troefke half of `troefkeWeight` alone; undefined when no troefke was ignored. */
+export function troefkeIgnoredWeight(obs: Observation): ((world: State) => number) | undefined {
+  const ignored = troefkeIgnored(obs)
+  const trump = obs.trump
+  if (ignored === null || ignored === obs.seat || !trump) return undefined
+  return (world) => (world.hands[ignored].some((c) => c.s === trump) ? WEAK_TROEFKE : 1)
 }

@@ -3,7 +3,9 @@ import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
 import type { Action } from '../src/engine'
 import { createAlgorithm, registerAlgorithm } from '../src/bots/algorithm'
 import type { Algorithm, BotTrace } from '../src/bots/algorithm'
-import { botAction, BOT_LEVELS, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import { botAction, BOT_PROFILES, createBot, LEVEL_CONFIGS } from '../src/bots/bot'
+import type { BotConfig } from '../src/bots/bot'
+import { HEURISTIC_LEVELS } from '../src/bots/heuristic'
 import { decisionPhase, observe } from '../src/bots/observation'
 import { breakEven, handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
@@ -50,7 +52,7 @@ describe('observe', () => {
 })
 
 describe('heuristic reads only the observation', () => {
-  it.each(BOT_LEVELS)('%s decides the same when the hidden cards change', (level) => {
+  it.each(HEURISTIC_LEVELS)('%s decides the same when the hidden cards change', (level) => {
     // The heuristic of the level; tests/pimc.test.ts checks the pimc of the `hard` level bot.
     const bot = createBot(`heuristic:${level}`)
     let changed = 0
@@ -92,6 +94,39 @@ describe('the hard level bot', () => {
     // Its cards are anchored to the heuristic card, its troefke is not.
     expect(tr.notes.some((n) => n.startsWith('anchor heuristic:hard'))).toBe(a.type === 'play')
     // Two troefke searches: seconds on a loaded runner.
+  }, 60_000)
+})
+
+describe('the expert level bot', () => {
+  const expert = createBot(LEVEL_CONFIGS.expert)
+  // The positions of the hard level test: seat 1 bid with a troefke hand, partner 3 leads.
+  const hands = [
+    [C('C', 'J'), C('C', 'Q'), C('D', 'J'), C('D', 'Q'), C('S', 'J'), C('S', 'Q')],
+    [C('H', '9'), C('H', 'J'), C('H', 'K'), C('S', '9'), C('C', '9'), C('D', '9')],
+    [C('C', 'K'), C('C', 'A'), C('D', 'K'), C('D', 'A'), C('S', 'K'), C('S', 'A')],
+    [C('H', '10'), C('H', 'Q'), C('H', 'A'), C('S', '10'), C('C', '10'), C('D', '10')],
+  ]
+  const cases = [
+    { what: 'a card', s: playingState({ bidder: 1, turn: 3, leader: 3, hands }), seat: 3, algorithm: 'pimc' },
+    { what: 'the troefke', s: playingState({ bidder: 1, turn: 3, leader: 3, trickAcks: [3], hands }), seat: 1, algorithm: 'pimc' },
+    { what: 'a bid', s: dealtState(5, 0), seat: 1, algorithm: 'heuristic:hard' },
+  ]
+
+  it('plays cards and the troefke with pimc on 40 worlds, 1 partner world and inference', () => {
+    const config = LEVEL_CONFIGS.expert as BotConfig
+    expect(config.rules[0].use).toEqual({ id: 'pimc', samples: 40, partnerSamples: 1, inference: { model: 'heuristic:hard' } })
+  })
+
+  it.each(cases)('decides $what with $algorithm, as botAction does for expert', ({ s, seat, algorithm }) => {
+    const tr = trace()
+    const a = expert.decide(s, seat, seededRandom(1), tr)
+    expect(tr.algorithm).toBe(algorithm)
+    expect(botAction(s, seat, seededRandom(1), 'expert')).toEqual(a)
+    // pimc weighs its worlds with the heuristic's policy (inference) and has no anchor.
+    expect(tr.notes.some((n) => /^inference heuristic:hard: /.test(n))).toBe(algorithm === 'pimc')
+    expect(tr.notes.some((n) => n.startsWith('anchor'))).toBe(false)
+    expect(tr.candidates.some((c) => c.note?.includes('anchor'))).toBe(false)
+    if (a.type === 'play') expect(tr.notes).toContainEqual(expect.stringMatching(/^pimc: 40 worlds/))
   }, 60_000)
 })
 
