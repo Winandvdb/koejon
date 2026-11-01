@@ -217,9 +217,12 @@ Choices:
   score is an upper bound. A test checks that the cuts never change the choice.
 
 Because of choice A and the first shortcut, `M = 2` differs from `pimc` only where the root
-seat itself has the next own-team move (it plays 3rd or 4th to a trick and our team takes
-it). The strategy fusion test needs `M = 3`: the partner's forced card is the 2nd own-team
-move, the root seat's guess the 3rd.
+seat moves again before the partner: it plays 3rd or 4th to the trick, and it or the
+opponent on its right leads the next trick. One strategy fusion test shows `M = 2` there:
+the seat takes the trick with its ace and must then guess its lead. The other test needs
+`M = 3`: the partner's forced card is the 2nd own-team move, the root seat's guess the 3rd.
+`tests/alphamu.test.ts` also compares the fronts with a plain αμ on the engine (no
+shortcut, no cuts) for `M = 2` and 3.
 
 ### Time per decision
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apply, createMatch, legalActions, pendingSeats } from '../src/engine'
+import { apply, createMatch, legalActions, pendingSeats, teamOf } from '../src/engine'
 import type { Action, Card, State } from '../src/engine'
 import { createAlgorithm } from '../src/bots/algorithm'
 import { alphamuValues } from '../src/bots/alphamu'
@@ -9,8 +9,66 @@ import { observe } from '../src/bots/observation'
 import { solve } from '../src/bots/solver'
 import { sampleWorld } from '../src/bots/determinize'
 import { cost } from '../src/bots/pimc'
+import { handValue } from '../src/bots/value'
 import { seededRandom } from '../src/lib/seed'
 import { C, dealtState, decisions, playingState } from './helpers'
+
+/** All four seats confirm the trick that just fell: the next lead is legal. */
+function settle(s: State): State {
+  while (s.phase === 'PLAYING' && s.trickAcks.length < 4) {
+    s = apply(s, { type: 'ack', seat: [0, 1, 2, 3].find((x) => !s.trickAcks.includes(x))! })
+  }
+  return s
+}
+
+/**
+ * Plain αμ on the engine, choice A, as the reference: no shortcut, no cuts,
+ * every vector pair combined and pruned at the end. Per root card its front
+ * (one value per world, for the seat's team).
+ */
+function referenceAlphamu(worlds: State[], seat: number, M: number): Map<string, number[][]> {
+  const team = teamOf(seat)
+  const n = worlds.length
+  const before = worlds[0].lines
+  const pareto = (front: number[][], ws: number[]): number[][] => {
+    const unique = front.filter((v, i) => front.findIndex((u) => ws.every((w) => u[w] === v[w])) === i)
+    return unique.filter((v) => !unique.some((u) => u !== v && ws.every((w) => u[w] >= v[w])))
+  }
+  const leaf = (ss: (State | null)[], ws: number[]): number[] => {
+    const v = new Array<number>(n).fill(0)
+    for (const w of ws) {
+      const s = ss[w]!
+      v[w] = s.phase === 'PLAYING' ? solve(s, seat, [{ type: 'ack', seat }])[0].value : handValue({ lines: before }, s, team)
+    }
+    return v
+  }
+  function node(ss: (State | null)[], m: number): number[][] {
+    const ws = ss.flatMap((s, i) => (s ? [i] : []))
+    const s0 = ss[ws[0]]!
+    if (m === 0 || s0.phase !== 'PLAYING') return [leaf(ss, ws)]
+    const mover = s0.turn
+    const own = teamOf(mover) === team
+    const legal = new Map<string, Action>()
+    for (const w of ws) for (const a of legalActions(ss[w]!, mover)) if (a.type === 'play') legal.set(text(a), a)
+    const fronts: number[][][] = []
+    for (const a of legal.values()) {
+      const next = ss.map((s) => (s && legalActions(s, mover).some((b) => text(b) === text(a)) ? settle(apply(s, a)) : null))
+      const sub = next.flatMap((s, i) => (s ? [i] : []))
+      const front = node(next, own ? m - 1 : m)
+      for (const v of front) for (const w of ws) if (!sub.includes(w)) v[w] = own ? -Infinity : Infinity
+      fronts.push(front)
+    }
+    if (mover === seat) return pareto(fronts.flat(), ws)
+    let acc: number[][] = [new Array<number>(n).fill(own ? -Infinity : Infinity)]
+    for (const front of fronts) {
+      acc = acc.flatMap((x) => front.map((y) => x.map((_, w) => (own ? Math.max(x[w], y[w]) : Math.min(x[w], y[w])))))
+    }
+    return pareto(acc, ws)
+  }
+  const out = new Map<string, number[][]>()
+  for (const a of legalActions(worlds[0], seat)) out.set(text(a), node(worlds.map((s) => settle(apply(s, a))), M - 1))
+  return out
+}
 
 /** Seed's first deal (dealer 0): seat 3 bids on the 1st card, so seat 1, its partner, leads. */
 function troefkeState(seed: number): State {
@@ -176,6 +234,60 @@ describe('alphamu', () => {
       expect(values[1].front).toEqual([[1, -2], [-2, 1]])
     }
   })
+
+  it('avoids strategy fusion with M = 2 when the seat wins the trick and must guess its lead', () => {
+    // Trick 4, hearts trump, seat 2 (our partner) bid; we have 5 points, they have 12.
+    // Seat 1 led QS, seat 2 threw QC (no spades), seat 3 JS. Seat 0, 4th, holds KD 9H AS.
+    // Two worlds fit:
+    //   A: seat 1 10S JC, seat 2 QD AH, seat 3 AD 9C
+    //   B: seat 1 QD AH, seat 2 9C AD, seat 3 JC 10S
+    // AS takes the trick, and then seat 0 leads with KD 9H: KD wins the hand only
+    // in A, 9H only in B. pimc sees +1 in both. 9H now: +1 in A, a draw in B.
+    const base = {
+      trump: 'H' as const, bidder: 2, turn: 0, leader: 1, tricksPlayed: 3, tricksWon: [2, 1] as [number, number], points: [5, 12] as [number, number],
+      trick: [{ seat: 1, card: C('S', 'Q') }, { seat: 2, card: C('C', 'Q') }, { seat: 3, card: C('S', 'J') }],
+    }
+    const own = cards('KD 9H AS')
+    const worlds = [
+      playingState({ ...base, hands: [own, cards('10S JC'), cards('QD AH'), cards('AD 9C')] }),
+      playingState({ ...base, hands: [own, cards('QD AH'), cards('9C AD'), cards('JC 10S')] }),
+    ]
+    const legal = observe(worlds[0], 0).legal
+    expect(legal.map(text)).toEqual(['AS', '9H'])
+    // pimc: after AS each world knows its lead, so AS looks +1 everywhere.
+    const pimc = legal.map((a) => worlds.reduce((sum, w) => sum + solve(w, 0, [a])[0].value, 0))
+    expect(pimc).toEqual([2, 1])
+    // M = 2: the lead after AS is the seat's own 2nd move, one card for both worlds.
+    const values = alphamuValues(worlds, 0, legal, 2)
+    expect(values.map((v) => v.sum)).toEqual([-1, 1])
+    expect(values[0].front).toEqual([[-2, 1], [1, -2]])
+    expect(alphamuValues(worlds, 0, legal, 1).map((v) => v.sum)).toEqual(pimc)
+  })
+
+  it('matches a plain αμ on the engine: the same fronts and sums', () => {
+    const sorted = (front: number[][]) => front.map((v) => v.join(',')).sort()
+    let n = 0
+    let wide = 0
+    for (const seed of [1, 2, 3]) {
+      for (const { s, seat } of decisions(seed, 'hard')) {
+        const obs = observe(s, seat)
+        if (obs.legal[0].type !== 'play' || s.tricksPlayed < 3) continue
+        const rand = seededRandom(1000 + n++)
+        const worlds = Array.from({ length: 3 }, () => sampleWorld(obs, rand))
+        for (const M of [2, 3]) {
+          const reference = referenceAlphamu(worlds, seat, M)
+          for (const v of alphamuValues(worlds, seat, obs.legal, M)) {
+            const front = reference.get(text(v.action))!
+            expect(sorted(v.front)).toEqual(sorted(front))
+            expect(v.sum).toBe(Math.max(...front.map((x) => x.reduce((a, b) => a + b, 0))))
+            if (front.length > 1) wide++
+          }
+        }
+      }
+    }
+    expect(n).toBeGreaterThan(50)
+    expect(wide).toBeGreaterThan(0)
+  }, 120_000)
 
   it('cuts only cards that cannot win: the same choice and exact values for the rest', () => {
     const choice = (values: { sum: number; action: Action }[], trump: State['trump']) =>
