@@ -185,3 +185,56 @@ The `hard` level stays on `pimc` with `heuristic:hard` bids:
   engine state, not on the bitmask `Hand`.
 - `c` (0.7) and the MAST settings are not tuned.
 - No `ismcts` timing on a real phone.
+
+## 8. Inference (#90)
+
+Option `inference: { model: <algorithm spec> }` on `pimc`, `mcts` and `ismcts`
+(`src/bots/inference.ts`). Each sampled world gets a weight: the product of the chances
+that the model (`policy`) gives to the bids and troefke choices that the other seats made
+this hand, each from that seat's own view then, with the hand it holds in that world. The
+product has a floor of 0.05. `sampleWorld` keeps a world with a chance equal to its weight
+(rejection sampling). The model reads no card play yet. A dealer's bid or choice is left
+out: the dealer decides without seeing its hand, so the chance is the same in every world.
+The trace gets one note with the effective sample size, (Σw)² / Σw², of the weights
+computed for the decision.
+
+The model is `heuristic:hard`. Its `policy` comes from the same code as its `decide`: each
+random choice (`knijpChance`, `troefkeChance`, the dealer's choice, the lazy card) is a
+branch with its chance. A bench of `heuristic:hard` against `origin/develop@heuristic:hard`
+(200 matches per side, 400 played) gave exactly 50.0%, with the same decision counts.
+
+### Benches
+
+All with `heuristic:hard` bids, `--jobs 3`, while two other benches ran on the same Mac.
+The match count is the count that the bench prints (each seed played twice, sides swapped).
+
+| Bench | Matches | Win rate of the first bot |
+|---|---|---|
+| `pimc` 20 + inference, model replaces the bidder's troefke read (REPLACE) vs `pimc` 20 | 1000 | 51.1% ± 3.1% |
+| `pimc` 20 + inference, multiplied with all of `troefkeWeight` (COMBINE) vs `pimc` 20 | 1000 | 50.7% ± 3.1% |
+| `pimc` 20 + inference (REPLACE) vs the `hard` level (`pimc` 10, partner 2, anchor, margin 0.4) | 2000 | 62.6% ± 2.1% |
+| `ismcts` 1000 + inference vs `ismcts` 1000 (cards only) | 1000 | 51.8% ± 3.1% |
+
+REPLACE and COMBINE are equal within the noise. The code uses REPLACE: the model reads the
+troefke itself (also a troefke not asked), and only the half of `troefkeWeight` that reads
+an ignored troefke stays, because the model reads no card play. Against today's `pimc` the
+gain is small (about +1 point, not significant). Most of the 62.6% against the `hard` level
+comes from 20 worlds without the anchor, not from the inference: no bench of plain
+`pimc` 20 against the `hard` level was run here.
+
+### Time per decision
+
+`--jobs 1`, both bots in one run, so they are measured back to back. Measured under load
+(other benches on the Mac): the absolute times are too high, the ratio counts.
+
+| Run (load average before / after) | Decision | With inference avg / max | Without avg / max |
+|---|---|---|---|
+| `pimc` 20, 40 matches (3.0 / 5.6) | card | 33.7 / 1025 ms | 33.7 / 1112 ms |
+| | bidding (troefke by pimc, bids by heuristic) | 49.7 / 3557 ms | 60.3 / 4498 ms |
+| `ismcts` 1000, 20 matches (5.6 / 2.9) | card | 91.9 / 1536 ms | 39.7 / 494 ms |
+
+For `pimc` the inference costs no measurable time: 20 worlds, and a few rejected ones, each
+with a few calls of the heuristic's bid policy, are small next to the solver. The max over
+2.5 s is the troefke decision of `pimc` with 5 partner worlds, with and without inference.
+`ismcts` weighs a new world in every iteration: about 2.3 times the average time and 3 times
+the max. A cache of the weight per world, or fewer weighted worlds, can bring it down.

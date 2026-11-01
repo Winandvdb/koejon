@@ -32,6 +32,12 @@ export interface Algorithm {
   /** False when this algorithm cannot make this decision (for example card play only). */
   supports(obs: Observation): boolean
   decide(obs: Observation, rand: () => number, trace?: BotTrace): Action
+  /**
+   * The chance that `decide` takes each legal action of `obs`, in the order
+   * of `obs.legal`, summing to 1. Pure: no random numbers, no trace. An
+   * opponent model (the `model` of option `inference`) must have it.
+   */
+  policy?(obs: Observation): Array<{ action: Action; p: number }>
 }
 
 /**
