@@ -13,49 +13,58 @@ import { decisions } from './helpers'
 
 const sameAction = (a: Action, b: Action): boolean => JSON.stringify(a) === JSON.stringify(b)
 
-/** Bid, troefke and dealer's choice decisions of seeded heuristic matches. */
-function biddingObs(level: 'easy' | 'normal' | 'hard', seeds: number[]): Observation[] {
+/** Real decisions of seeded heuristic matches: card play, or bids, troefke and dealer's choice. */
+function decisionObs(level: 'easy' | 'normal' | 'hard', seeds: number[], cards: boolean): Observation[] {
   const out: Observation[] = []
   for (const seed of seeds) {
     for (const { s, seat } of decisions(seed, level)) {
       const obs = observe(s, seat)
-      if (['bid', 'ack', 'choose'].includes(obs.legal[0].type)) out.push(obs)
+      if ((obs.legal[0].type === 'play') === cards) out.push(obs)
     }
   }
   return out
 }
 
 describe('heuristic policy', () => {
-  for (const level of ['easy', 'hard'] as const) {
-    it(`${level}: gives each legal action a chance, summing to 1, as often as decide takes it`, () => {
-      const h = createAlgorithm(`heuristic:${level}`)
-      const all = biddingObs(level, [1, 2, 3, 4, 5, 6])
-      let mixed = 0
-      for (const obs of all) {
-        const policy = h.policy!(obs)
-        expect(policy.map((x) => x.action)).toEqual(obs.legal)
-        expect(policy.reduce((sum, x) => sum + x.p, 0)).toBeCloseTo(1, 12)
-        for (const x of policy) expect(x.p).toBeGreaterThanOrEqual(0)
-        const random = policy.some((x) => x.p > 0 && x.p < 1)
-        if (!random) {
-          // A sure action: decide takes it whatever the random numbers.
-          const sure = policy.find((x) => x.p === 1)!.action
-          for (const seed of [1, 2, 3]) expect(sameAction(h.decide(obs, seededRandom(seed)), sure)).toBe(true)
-          continue
+  const CASES = [
+    // Random bids are rare: many matches, every position.
+    { kind: 'bids', cards: false, seeds: [1, 2, 3, 4, 5, 6], maxMixed: Infinity },
+    // Nearly every card is random (the lazy dump): a few matches, 8 random positions.
+    { kind: 'cards', cards: true, seeds: [1], maxMixed: 8 },
+  ]
+  for (const level of ['easy', 'normal', 'hard'] as const) {
+    for (const { kind, cards, seeds, maxMixed } of CASES) {
+      it(`${level} ${kind}: gives each legal action a chance, summing to 1, as often as decide takes it`, () => {
+        const h = createAlgorithm(`heuristic:${level}`)
+        const all = decisionObs(level, seeds, cards)
+        let mixed = 0
+        for (const obs of all) {
+          const policy = h.policy!(obs)
+          expect(policy.map((x) => x.action)).toEqual(obs.legal)
+          expect(policy.reduce((sum, x) => sum + x.p, 0)).toBeCloseTo(1, 12)
+          for (const x of policy) expect(x.p).toBeGreaterThanOrEqual(0)
+          const random = policy.some((x) => x.p > 0 && x.p < 1)
+          if (!random) {
+            // A sure action: decide takes it whatever the random numbers.
+            const sure = policy.find((x) => x.p === 1)!.action
+            for (const seed of [1, 2, 3]) expect(sameAction(h.decide(obs, seededRandom(seed)), sure)).toBe(true)
+            continue
+          }
+          if (mixed >= maxMixed) continue
+          mixed++
+          const N = 4000
+          const counts = policy.map(() => 0)
+          const rand = seededRandom(mixed * 31 + 7)
+          for (let i = 0; i < N; i++) {
+            const a = h.decide(obs, rand)
+            counts[policy.findIndex((x) => sameAction(x.action, a))]++
+          }
+          // 4 standard deviations of a share of 4000 draws is at most 0.032.
+          policy.forEach((x, i) => expect(Math.abs(counts[i] / N - x.p)).toBeLessThan(0.035))
         }
-        mixed++
-        const N = 4000
-        const counts = policy.map(() => 0)
-        const rand = seededRandom(mixed * 31 + 7)
-        for (let i = 0; i < N; i++) {
-          const a = h.decide(obs, rand)
-          counts[policy.findIndex((x) => sameAction(x.action, a))]++
-        }
-        // 4 standard deviations of a share of 4000 draws is at most 0.032.
-        policy.forEach((x, i) => expect(Math.abs(counts[i] / N - x.p)).toBeLessThan(0.035))
-      }
-      expect(mixed).toBeGreaterThanOrEqual(5)
-    }, 60_000)
+        expect(mixed).toBeGreaterThanOrEqual(5)
+      }, 60_000)
+    }
   }
 })
 
