@@ -94,6 +94,17 @@ describe('bot-vs-bot simulation', () => {
     }
   }, 120_000)
 
+  it('terminates a complete match of alphamu card play against heuristic:hard with all invariants', () => {
+    // Cards only: pimc takes the troefke, heuristic:hard the bids.
+    const alphamu = createBot({
+      name: 'alphamu',
+      rules: [{ use: { id: 'alphamu', M: 2, worlds: 3 } }, { use: { id: 'pimc', samples: 3 } }, { use: 'heuristic:hard' }],
+    })
+    const hard = createBot('heuristic:hard')
+    const { state } = runMatch(1, (s, seat, rand) => (seat % 2 === 0 ? alphamu : hard).decide(s, seat, rand))
+    expect(state.winner).not.toBeNull()
+  }, 120_000)
+
   it.each(['mcts', 'ismcts'])('terminates complete matches of %s against heuristic:hard with all invariants', (id) => {
     // Bids and cards: the whole hand is in the tree.
     const search = createBot({ id, iterations: 20 })

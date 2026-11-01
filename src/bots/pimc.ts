@@ -16,7 +16,7 @@ export const PIMC_PARTNER_SAMPLES = 5
  * Between equal values: the cheaper card — a side card before a trump, then
  * fewer points, then lower — and no troefke over a troefke.
  */
-function cost(a: Action, trump: Suit | null): number {
+export function cost(a: Action, trump: Suit | null): number {
   if (a.type === 'troefke') return 1
   if (a.type !== 'play') return 0
   return (a.card.s === trump ? 100 : 0) + RANK_POINTS[a.card.r] * 10 + RANK_ORDER[a.card.r]

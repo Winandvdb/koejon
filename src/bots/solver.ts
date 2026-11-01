@@ -20,6 +20,26 @@ export const maskOf = (cards: Card[]): number => cards.reduce((m, c) => m | (1 <
 
 const INF = 1000
 
+/** Card `c` beats `best`, the card that wins the trick so far. */
+export function beatsCard(c: number, best: number, trump: number): boolean {
+  if (SUIT_OF[c] === trump) return SUIT_OF[best] !== trump || RANK_OF[c] > RANK_OF[best]
+  return SUIT_OF[best] !== trump && SUIT_OF[c] === SUIT_OF[best] && RANK_OF[c] > RANK_OF[best]
+}
+
+/** Cards of `hand` that may be played on the first `len` cards of `trick`, as `legalCards` in the engine. */
+export function legalCardMask(hand: number, trick: number[], len: number, trump: number): number {
+  if (len === 0) return hand
+  const led = SUIT_OF[trick[0]]
+  if (led === trump) return hand & SUIT_MASK[trump] || hand
+  const follow = hand & SUIT_MASK[led]
+  if (follow === 0) return hand
+  // No underbuy: a trump only counts when it beats the trumps already down.
+  let top = -1
+  for (let i = 1; i < len; i++) if (SUIT_OF[trick[i]] === trump && RANK_OF[trick[i]] > top) top = RANK_OF[trick[i]]
+  const over = ((hand & SUIT_MASK[trump]) >> (6 * trump)) >> (top + 1) << (top + 1)
+  return follow | (over << (6 * trump))
+}
+
 /** What decides the score of a hand once the cards are played. */
 interface Contract {
   trump: number
@@ -123,24 +143,8 @@ function createSearch(ct: Contract, team: number, pos: Position) {
     return [lo, hi]
   }
 
-  function beats(c: number, best: number): boolean {
-    if (SUIT_OF[c] === trump) return SUIT_OF[best] !== trump || RANK_OF[c] > RANK_OF[best]
-    return SUIT_OF[best] !== trump && SUIT_OF[c] === SUIT_OF[best] && RANK_OF[c] > RANK_OF[best]
-  }
-
-  /** Cards of `hand` that may be played now, as `legalCards` in the engine. */
-  function legalMask(hand: number): number {
-    if (trickLen === 0) return hand
-    const led = SUIT_OF[trick[0]]
-    if (led === trump) return hand & SUIT_MASK[trump] || hand
-    const follow = hand & SUIT_MASK[led]
-    if (follow === 0) return hand
-    // No underbuy: a trump only counts when it beats the trumps already down.
-    let top = -1
-    for (let i = 1; i < trickLen; i++) if (SUIT_OF[trick[i]] === trump && RANK_OF[trick[i]] > top) top = RANK_OF[trick[i]]
-    const over = ((hand & SUIT_MASK[trump]) >> (6 * trump)) >> (top + 1) << (top + 1)
-    return follow | (over << (6 * trump))
-  }
+  const beats = (c: number, best: number): boolean => beatsCard(c, best, trump)
+  const legalMask = (hand: number): number => legalCardMask(hand, trick, trickLen, trump)
 
   /** Moves worth trying first: win cheaply, feed a winning partner, otherwise duck low. */
   function ordered(mask: number, best: number): number[] {
@@ -187,7 +191,7 @@ function createSearch(ct: Contract, team: number, pos: Position) {
     let v: number
     if (trickLen < 4) {
       turn = (seat + 1) & 3
-      v = search(alpha, beta)
+      v = next(alpha, beta)
       turn = seat
       trickLen--
     } else {
@@ -208,7 +212,7 @@ function createSearch(ct: Contract, team: number, pos: Position) {
       played++
       trickLen = 0
       trickLeader = turn = winner
-      v = search(alpha, beta)
+      v = next(alpha, beta)
       trickLeader = leader
       turn = seat
       played--
@@ -221,6 +225,16 @@ function createSearch(ct: Contract, team: number, pos: Position) {
       trick[2] = c2
     }
     hands[seat] ^= 1 << c
+    return v
+  }
+
+  // A line of cards to play first (`line`): `next` plays them, then searches.
+  let path: number[] = []
+  let at = 0
+  function next(alpha: number, beta: number): number {
+    if (at === path.length) return search(alpha, beta)
+    const v = child(path[at++], alpha, beta)
+    at--
     return v
   }
 
@@ -280,13 +294,24 @@ function createSearch(ct: Contract, team: number, pos: Position) {
     value: () => search(-INF, INF),
     /** Value after the seat to move plays `card`. */
     after: (card: number) => child(card, -INF, INF),
+    /**
+     * Value after `cards` are played in turn from the start position; they
+     * must be legal. The cache stays, so many lines of one deal share it.
+     */
+    line(cards: number[]): number {
+      path = cards
+      at = 0
+      const v = next(-INF, INF)
+      path = []
+      return v
+    },
   }
 }
 
-type Search = ReturnType<typeof createSearch>
+export type Search = ReturnType<typeof createSearch>
 
 /** Search of the running hand in `s`, with the seat to move already known. */
-function playSearch(s: State, team: number): Search {
+export function playSearch(s: State, team: number): Search {
   const ct: Contract = {
     trump: SUITS.indexOf(s.trump!),
     level: s.level as 1 | 2,

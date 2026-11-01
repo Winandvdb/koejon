@@ -1,4 +1,4 @@
-# Search bots: pimc, mcts and ismcts
+# Search bots: pimc, mcts, ismcts and alphamu
 
 Issue: #87, PR #176 (2026-10-11). Question: are the pure MCTS bots (`mcts`, `ismcts` in
 `src/bots/mcts.ts`) a better base for the `hard` level than `pimc` (`src/bots/pimc.ts`)?
@@ -185,3 +185,105 @@ The `hard` level stays on `pimc` with `heuristic:hard` bids:
   engine state, not on the bitmask `Hand`.
 - `c` (0.7) and the MAST settings are not tuned.
 - No `ismcts` timing on a real phone.
+
+## 8. alphamu (#89)
+
+`alphamu` (`src/bots/alphamu.ts`) is αμ of Cazenave & Ventos. It samples worlds as `pimc`
+does, but it searches the lines of play of all worlds together. Per line it keeps a set of
+vectors, one value per world (lines, as `handValue`), and drops every vector that another
+one equals or beats in every world (the Pareto front). After `M` own-team moves (the root
+card is the first) the solver values each world. The card with the best mean of its best
+vector wins; ties as `pimc`. With `M = 1` it is `pimc` without anchor, card for card
+(`tests/alphamu.test.ts` checks this on two seeded matches).
+
+Choices:
+
+- **Partner: choice A.** In each world the partner plays the best card for that world, and
+  its cards count as own-team moves (they count toward `M`). The root seat plays the same
+  card in all worlds; an opponent plays the worst card for us per world. Choice B (the
+  partner plays one card for all worlds it cannot tell apart) is not built.
+- **Cards only.** `supports` is false for bids, the dealer's choice and the troefke. A bot
+  with `alphamu` needs rules after it: `{ "use": "pimc" }` for the troefke and
+  `heuristic:hard` for the bids. The bidding part of #89 is optional, and `pimc` already
+  showed that a double-dummy search bids far too often (section 4 and #86). A bid is a
+  decision before the first card: a search from there must play the whole hand, and the
+  first trick alone already costs the most time (below).
+- **Speed.** No engine `apply` in the search: bitmask hands, and the solver replays the line
+  from the root of each world (`playSearch(...).line`), so its cache serves all leaves of a
+  world. Two exact shortcuts: when the last own-team move is the partner's with only
+  opponents before it, every seat picks per world, so one solver value is the front; and a
+  card that surely cannot win (its pimc sum, an upper bound, or its front while an opponent
+  plays, is already below the best card) stops. Its trace note ends in `, cut` and its
+  score is an upper bound. A test checks that the cuts never change the choice. The
+  paper's cut on the front the seat already has (an opponent node stops once all its
+  vectors are dominated) was built and then removed: it gave about 3% on the first trick,
+  and no test position could reach it, so a broken version passed every test.
+
+Because of choice A and the first shortcut, `M = 2` differs from `pimc` only where the root
+seat moves again before the partner: it plays 3rd or 4th to the trick, and it or the
+opponent on its right leads the next trick. One strategy fusion test shows `M = 2` there:
+the seat takes the trick with its ace and must then guess its lead. The other test needs
+`M = 3`: the partner's forced card is the 2nd own-team move, the root seat's guess the 3rd.
+`tests/alphamu.test.ts` also compares the fronts with a plain αμ on the engine (no
+shortcut, no cuts) for `M = 2` and 3.
+
+### Time per decision
+
+Measured under load (other benches on the same Mac): seeds 1 to 3, seats 0 and 2 play cards
+with the bot (troefke `pimc`, bids `heuristic:hard`), seats 1 and 3 `heuristic:hard`. A
+config stops at the first decision over 2.5 s. Load average 8.6 to 10.1 during the run. ms
+per card decision, average / max, first trick and later tricks:
+
+| Bot | First trick | Later tricks |
+|---|---|---|
+| `pimc` 10 | 64.5 / 337 | 3.4 / 54 |
+| `alphamu` M=1, 10 worlds | 65.8 / 291 | 3.5 / 62 |
+| `alphamu` M=2, 10 worlds | 76.6 / 317 | 4.4 / 68 |
+| `alphamu` M=3, 10 worlds | 374.7 / 2058 | 15.3 / 349 |
+| `alphamu` M=4, 10 worlds | over 2.5 s (4839 after 5 decisions) | – |
+| `pimc` 20 | 154.6 / 768 | 5.5 / 57 |
+| `alphamu` M=1, 20 worlds | 153.8 / 679 | 6.0 / 65 |
+| `alphamu` M=2, 20 worlds | 178.4 / 564 | 6.9 / 83 |
+| `alphamu` M=3, 20 worlds | over 2.5 s (3391 after 60 decisions) | – |
+| `alphamu` M=3, 14 worlds | over 2.5 s (2753 after 38 decisions) | – |
+| `pimc` 40 | 286.7 / 1197 | 10.2 / 101 |
+| `pimc` 50 | 396.5 / 1788 | 14.3 / 223 |
+
+Full depth is far out of reach: every `M` above 2 multiplies the time of the first trick
+by about 5. `npm run bench -- --a <alphamu bot> --b <pimc bot> --matches 20 --jobs 1`, also
+under load (load average 7 to 16), all card decisions:
+
+| Bot | ms per card, avg / max | Other side | ms per card, avg / max | Win rate (40 matches) |
+|---|---|---|---|---|
+| `alphamu` M=3, 10 worlds | 90.4 / 6239 | `pimc` 50 | 91.3 / 2741 | 42.5% ± 15.3% |
+| `alphamu` M=2, 20 worlds | 44.3 / 2033 | `pimc` 24 | 42.7 / 1660 | 47.5% ± 15.5% |
+
+M=3 with 10 worlds goes over 2.5 s on some first-trick cards (6.2 s), so the best setting
+within 2.5 s is M=2 with 20 worlds, the default (`ALPHAMU_M`, `ALPHAMU_WORLDS`).
+
+### Strength
+
+`npm run bench`, `--jobs 3`, both sides `heuristic:hard` bids and `pimc` troefke (the hard
+level: its own pimc troefke). The Mac was under heavy load (load average 30 to 190) and
+slept for some hours during the first run, so its times are no use (its max is the sleep).
+
+`--matches` counts seeds; each seed is played twice with the sides swapped.
+
+| `alphamu` M=2, 20 worlds against | `--matches` | Win rate | ms per card, avg / max (alphamu / other) |
+|---|---|---|---|
+| `pimc` 24 (about equal time), cards with `{"when":{"phase":"play"}}` | 1000 | 49.1% ± 2.2% | 119.2 / – , 92.4 / – (sleep) |
+| the `hard` level (`pimc` 10, anchored, margin 0.4) | 500 | 63.1% ± 3.0% | 49.1 / 2367, 20.5 / 1535 |
+
+The second run had a load average of 7 to 27.
+
+### Conclusion
+
+- At equal time `alphamu` M=2 is as strong as `pimc` (49.1% ± 2.2%: no proven difference).
+  That fits: with choice A, M=2 differs from `pimc` only in a few positions.
+- Against the `hard` level it wins 63.1% ± 3.0%. Most of that likely comes from 20 worlds
+  instead of 10 and no anchor (the anchor costs strength on purpose, #178), not from αμ:
+  `pimc` with the same worlds plays as well.
+- The setting that would beat strategy fusion, M=3, goes over 2.5 s on some first-trick
+  cards (6.2 s under load), and its short bench (42.5% ± 15.3% against `pimc` 50) shows no
+  gain. Choice B (strict partner) and a time budget per decision (M=3 after the first
+  trick, M=2 on it) are the next steps for #223; both need new benches on a quiet Mac.
